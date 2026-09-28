@@ -59,3 +59,30 @@ class FakeChecker:
         if self.error:
             raise CheckerError("garbled reply")
         return Verdict(self.plan_verdict if kind == "plan" else self.verdict, self.findings)
+
+
+class FakeDrafter:
+    """Returns canned file text per doc ("intent", "spec", "plan"), read from the request's first line.
+
+    reads: paths it tries to read through the gate first. fail: docs it fails on.
+    """
+
+    def __init__(self, docs, reads=(), fail=(), cost=0.1):
+        self.docs, self.reads, self.fail, self.cost = dict(docs), list(reads), set(fail), cost
+        self.requests: list[str] = []
+        self.results: list[tuple[str, object]] = []  # (path, Permission)
+        self.caps: list[float] = []
+
+    def __call__(self, cap):  # the drafter factory: one drafter per call, with its cap
+        self.caps.append(cap)
+        return self
+
+    def run(self, goal, cwd, permission_fn, stage="build", env=None):
+        assert stage == "draft"
+        self.requests.append(goal)
+        doc = goal.split("docs/tasks/", 1)[1].split("/", 1)[1].split(".md", 1)[0]
+        for path in self.reads:
+            self.results.append((path, permission_fn("fs.read", path, [])))
+        if doc in self.fail:
+            return AgentResult("error", "stopped at the budget cap ($2.0)", self.cost)
+        return AgentResult("done", self.docs[doc], self.cost)

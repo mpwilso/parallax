@@ -1,7 +1,7 @@
 **Type:** FYI
 **Bottom line:** Eight milestones rebuild Parallax around intent, plan, build, check, and accept, core loop first.
-**Not looked at:** sandbox and budget behavior inside WSL2, verified live in M9.
-**Next:** You set up WSL2, then start M7 from a session in the distro.
+**Not looked at:** sandbox and budget behavior in WSL2, verified in M9.
+**Next:** M7 and M8 are built; M9 is next.
 
 ## Changed since last time
 

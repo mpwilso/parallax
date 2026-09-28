@@ -50,8 +50,15 @@ def _git(repo: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
+SLUG_SKIP = {"a", "an", "the", "is", "are", "was", "were", "be", "for", "to", "of", "in", "on", "and", "or",
+             "it", "its", "this", "that", "with", "should", "please", "we", "i", "my", "our"}
+
+
 def _slug(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:30] or "task"
+    """A few words of the goal for the branch name: 'the README install steps are wrong' -> readme-install-steps."""
+    words = re.findall(r"[a-z0-9]+", text.lower())
+    kept = [w for w in words if w not in SLUG_SKIP][:3] or words[:3]
+    return "-".join(kept)[:30].strip("-") or "task"
 
 
 def worktrees_home(root: Path) -> Path:
@@ -102,7 +109,8 @@ class Project:
         raise ParallaxError("not a parallax project here. run `parallax init` in your repo's folder")
 
     # tasks ---------------------------------------------------------------
-    def new_task(self, goal: str, actor: str = "human", *, plan: bool = False) -> dict:
+    def new_task(self, goal: str, actor: str = "human", *, plan: bool = False, intent: bool = False) -> dict:
+        """intent: the task follows the lifecycle (intent, plan, gates) instead of running from its goal."""
         refuse_inside_task(self.root)
         task_id = uuid.uuid4().hex[:6]
         branch = f"parallax/{task_id}-{_slug(goal)}"
@@ -111,7 +119,7 @@ class Project:
         _git(self.root, "worktree", "add", "-b", branch, str(worktree), base)
         self.ledger.append(
             "task.created", actor, goal,
-            task=task_id, branch=branch, worktree=str(worktree), base=base, plan=plan,
+            task=task_id, branch=branch, worktree=str(worktree), base=base, plan=plan, intent=intent,
         )
         return self.task(task_id)
 

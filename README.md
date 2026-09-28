@@ -108,15 +108,18 @@ Then in PowerShell run `wsl --terminate parallax`, wait 8 seconds, and open the 
 In the folder of a git repo you want agents to work on:
 
 ```bash
-parallax init                          # writes parallax.policy.toml and .parallax/
-parallax task new "fix typo in docs"   # a task in its own copy of the repo
-parallax run <task-id>                 # an agent does it, a second one checks it
-parallax inbox                         # anything waiting on you
-parallax approve <id> --reason "looked at it, fine"
-parallax task list                     # every task, its status, and what it cost
-parallax log                           # the ledger
-parallax verify                        # confirm the ledger hasn't been edited
+parallax init                                  # writes parallax.policy.toml and .parallax/
+parallax intent new "the install steps are wrong for WSL"
+                                               # a task, with its intent and plan drafted in docs/tasks/<id>/
+parallax approve <task-id>                     # approve intent and plan (a large task: intent first, then spec and plan)
+parallax reject <task-id> --reason "..."       # or reject, then edit the files or run parallax draft <task-id>
+parallax lint docs/tasks/<task-id>/plan.md     # check a file against the output shape
+parallax task list                             # every task, its status, and what it cost (estimated)
+parallax log                                   # the ledger
+parallax verify                                # confirm the ledger hasn't been edited
 ```
+
+Read the drafted files before approving, and edit them if needed: the approval records each file's hash and is signed with your approval key. The build from an approved plan lands in M9; until then, `parallax task new "..."` and `parallax run <task-id>` run a task straight from its goal. How the lifecycle, the output shape and the principles fit together is in [docs/parallax.md](docs/parallax.md).
 
 Worktrees live outside your repo, in `~/.local/share/parallax/worktrees/`.
 
@@ -153,7 +156,8 @@ Limits live in the policy file under `[limits]`: `max_parallel` (default 4), `st
 - [x] M5: evals against real open-source changes, results published
 - [x] M6: local visual decision inbox
 - [x] M7: move to WSL2, cut the conductor, pulse, profiles, promotions and laws, add `parallax doctor`
-- [ ] M8 to M14: see [docs/plan.md](docs/plan.md)
+- [x] M8: intent, spec, plan, and the gates. `parallax lint` and the output shape
+- [ ] M9 to M14: see [docs/plan.md](docs/plan.md)
 
 ## Evals
 

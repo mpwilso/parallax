@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from pathlib import Path, PurePath
 
 from .core import POLICY_FILE, STATE_DIR
@@ -35,6 +36,22 @@ def check_write(path: str, worktree: Path) -> str | None:
     return None
 
 
+def check_read(target: str, worktree: Path) -> str | None:
+    """Read-only agents (drafters) have no sandbox yet, so their reads stay inside the worktree.
+
+    A glob is judged by the part before its first wildcard. Empty means the worktree itself.
+    """
+    base = re.split(r"[*?\[{]", target, maxsplit=1)[0] if target else ""
+    t = Path(base) if base else Path(".")
+    if not t.is_absolute():
+        t = Path(worktree) / t
+    full = os.path.normcase(str(t.resolve()))
+    root = os.path.normcase(str(Path(worktree).resolve()))
+    if full != root and not full.startswith(root + os.sep):
+        return "read outside the task worktree"
+    return None
+
+
 def check_shell(command: str, worktree: Path) -> str | None:
     """Refuse commands that mention a protected file. False positives are fine."""
     text = command.casefold()
@@ -54,3 +71,19 @@ def fingerprint(root: Path) -> dict[str, str | None]:
         f = Path(root) / name
         out[name] = hashlib.sha256(f.read_bytes()).hexdigest() if f.exists() else None
     return out
+
+
+# The brief's full list. Lint uses it now to refuse plans that list protected files; the guard
+# above still enforces the older, shorter list until M9 moves both layers onto this one.
+PROTECTED_ANY_DEPTH = {STATE_DIR, ".git", ".claude", POLICY_FILE, MISSION_FILE, "claude.md", ".mcp.json", "review.md"}
+PROTECTED_FROM_ROOT = (("docs", "parallax.md"), ("docs", "tasks"))
+
+
+def is_protected(rel: str) -> bool:
+    """Is this repo-relative path one the maker may never write? Case-insensitive, fails safe."""
+    parts = tuple(p.casefold() for p in PurePath(rel.replace("\\", "/")).parts if p not in ("", "."))
+    if not parts:
+        return False
+    if any(p in {n.casefold() for n in PROTECTED_ANY_DEPTH} for p in parts):
+        return True
+    return any(parts[:len(prefix)] == prefix for prefix in PROTECTED_FROM_ROOT)

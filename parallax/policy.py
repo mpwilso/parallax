@@ -18,6 +18,7 @@ DEFAULT_LIMITS = {
     "max_parallel": 4, "stuck_after": 3, "stale_minutes": 60,
     "promote_after": 10, "evidence_days": 30, "law_after": 3,
 }
+DEFAULT_BUDGET = {"drafting_usd": 2.0}  # estimated dollars
 WORKTREE_TOKEN = "<worktree>"
 
 DEFAULT_POLICY = """\
@@ -44,6 +45,10 @@ DEFAULT_POLICY = """\
 max_parallel  = 4    # tasks running at once
 stuck_after   = 3    # the same call refused this many times stops the task
 stale_minutes = 60   # a running task silent this long is flagged stuck
+
+[budget]
+# estimated US dollars at API list prices, as Claude Code computes them. not a charge.
+drafting_usd = 2.00  # the most one drafting call (intent, spec or plan) may use
 """
 
 
@@ -73,7 +78,7 @@ def _check_table(where: str, table: dict[str, str]) -> None:
 
 class Policy:
     def __init__(self, actions: dict[str, str], limits: dict[str, int] | None = None,
-                 exact: dict[str, dict[str, str]] | None = None):
+                 exact: dict[str, dict[str, str]] | None = None, budget: dict[str, float] | None = None):
         _check_table("[actions]", actions)
         self.exact = {action: dict(table) for action, table in (exact or {}).items() if table}
         if "git.merge" in self.exact:
@@ -87,14 +92,21 @@ class Policy:
             raise ValueError(f"unknown limits: {sorted(unknown)}")
         if any(not isinstance(v, int) or isinstance(v, bool) or v < 1 for v in limits.values()):
             raise ValueError("limits must be whole numbers of 1 or more")
+        budget = dict(budget or {})
+        unknown = set(budget) - set(DEFAULT_BUDGET)
+        if unknown:
+            raise ValueError(f"unknown budget settings: {sorted(unknown)}")
+        if any(not isinstance(v, (int, float)) or isinstance(v, bool) or v <= 0 for v in budget.values()):
+            raise ValueError("budget settings must be dollar amounts above 0")
         self.actions = actions
         self.limits = {**DEFAULT_LIMITS, **limits}
+        self.budget = {**DEFAULT_BUDGET, **budget}
 
     @classmethod
     def from_dict(cls, data: dict) -> "Policy":
         if "profiles" in data:
             raise ValueError("profiles are gone. every task uses [actions]; remove [profiles]")
-        return cls(data.get("actions", {}), data.get("limits", {}), data.get("exact", {}))
+        return cls(data.get("actions", {}), data.get("limits", {}), data.get("exact", {}), data.get("budget", {}))
 
     @classmethod
     def load(cls, path: Path) -> "Policy":

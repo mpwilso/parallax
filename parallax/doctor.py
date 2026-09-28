@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
+from .approvals import key_path
+
 OK, WARN, FAIL, INFO = "ok", "warn", "fail", "info"
 HARDENING = "README.md#harden-wsl"
 
@@ -38,15 +40,6 @@ def _run(argv: list[str]) -> str | None:
     except (OSError, subprocess.TimeoutExpired):
         return None
     return out.stdout if out.returncode == 0 else None
-
-
-def config_home() -> Path:
-    return Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
-
-
-def key_path() -> Path:
-    """The approval key. Outside every worktree, and the sandbox can't read it (M9)."""
-    return config_home() / "parallax" / "key"
 
 
 @dataclass

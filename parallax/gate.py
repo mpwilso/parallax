@@ -45,6 +45,11 @@ def make_permission_fn(
             project.ledger.append("action.refused", "agent", detail, task=task_id, action=action,
                                   why="plan stage is read-only")
             return Permission(False, "refused: plan stage is read-only")
+        if read_only:
+            for target in paths or [detail]:
+                why = guard.check_read(target, worktree)
+                if why:
+                    return refuse(action, target, why)
 
         if action == "fs.write":
             if not paths or not all(paths):

@@ -40,4 +40,4 @@ This is a personal project built on personal time and accounts. Don't reference,
 
 ## Current milestone
 
-Follow docs/plan.md. M7 is built. Next is M8: intent, spec, plan, and the gates.
+Follow docs/plan.md. M7 and M8 are built. Next is M9: the sandboxed build.

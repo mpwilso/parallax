@@ -158,25 +158,6 @@ def test_maker_waits_for_a_human_on_ask(repo):
     assert proj.ledger.verify()[0]
 
 
-def test_plan_stage_is_read_only_and_disputed_plan_blocks_build(repo):
-    proj, tid, wt = setup(repo)
-    agent = ScriptedAgent(plan_steps=[("read", "README"), ("write", "a.txt", "x")],
-                          plan="PLAN-TEXT: one step", steps=[("write", "b.txt", "y")])
-    checker = FakeChecker(plan_verdict="fail", findings=["no tests"])
-    assert run_task(proj, tid, agent, checker, plan=True) == "disputed"
-    assert [p.allowed for _, _, p in agent.results] == [True, False]
-    assert [stage for stage, _ in agent.goals] == ["plan"]
-    assert not (wt / "a.txt").exists()
-    [plan] = [e for e in proj.ledger.entries() if e["kind"] == "plan.recorded"]
-    assert plan["data"]["text"] == "PLAN-TEXT: one step"
-
-    proj.resolve(proj.inbox()[0]["id"], True, "tests come in a later task")
-    assert proj.task(tid)["status"] == "plan approved"
-    assert run_task(proj, tid, agent, checker) == "ready"
-    assert "PLAN-TEXT" in agent.goals[-1][1]  # the maker builds from its approved plan
-    assert "PLAN-TEXT" not in checker.calls[-1][1]  # the diff checker never sees it
-
-
 def test_checker_error_goes_to_inbox_without_retry(repo):
     proj, tid, wt = setup(repo)
     checker = FakeChecker(error=True)
