@@ -117,6 +117,7 @@ parallax preflight <task-id>                   # test both sandbox layers with t
 parallax build <task-id>                       # the maker builds the approved plan in the sandbox, then it's checked
 parallax show <task-id>                        # where it stands: ready, or what needs you
 parallax recheck <task-id>                     # check a built task again
+parallax accept <task-id>                      # commit exactly what was reviewed; it prints the merge for you to run
 parallax stop                                  # end every running build now
 parallax lint docs/tasks/<task-id>/plan.md     # check a file against the output shape
 parallax task list                             # every task, its status, and what it cost (estimated)
@@ -136,6 +137,8 @@ If your tests need packages, set `[build] setup` in the policy file to a command
 [build]
 setup = 'uv venv -q --python /usr/bin/python3 "$PARALLAX_VENV" && uv pip install -q --link-mode copy --python "$PARALLAX_VENV" pytest'
 ```
+
+At Ready, `parallax accept <task-id>` checks the approved files against their hashes, scans the change for secrets, writes `docs/tasks/<id>/record.md` from the ledger, and commits exactly the reviewed tree plus `docs/tasks/<id>/` on the task's branch, with no hooks and with trailers (`Parallax-Task`, `Approved-By`, `Verified-By`, `Ledger-Head`). It's signed if you've set `user.signingkey`. Then it prints the merge command. Merging is yours; your next command notices the merge and records it. What this does and doesn't protect is in [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 `parallax task new "..."` and `parallax run <task-id>` still run a task the old way, straight from its goal. How the lifecycle, the output shape and the principles fit together is in [docs/parallax.md](docs/parallax.md).
 
@@ -176,7 +179,8 @@ Limits live in the policy file under `[limits]`: `max_parallel` (default 4), `st
 - [x] M8: intent, spec, plan, and the gates. `parallax lint` and the output shape
 - [x] M9: the sandboxed build, preflight, and `parallax stop`
 - [x] M10: the check: code checks, the plan's tests in the sandbox, the blind checker, and rework
-- [ ] M11 to M14: see [docs/plan.md](docs/plan.md)
+- [x] M11: accept, the implementation record, and the threat model
+- [ ] M12 to M14: see [docs/plan.md](docs/plan.md)
 
 ## Evals
 

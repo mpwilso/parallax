@@ -38,4 +38,4 @@ This is a personal project built on personal time and accounts. Don't reference,
 
 ## Current milestone
 
-Follow docs/plan.md. M7 to M10 are built. Next is M11: accept.
+Follow docs/plan.md. M7 to M11 are built: the core loop is complete. Next is M12: the UI for the lifecycle.

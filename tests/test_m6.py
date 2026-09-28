@@ -1,6 +1,5 @@
 import http.client
 import json
-import shlex
 import subprocess
 import threading
 from pathlib import Path
@@ -69,16 +68,6 @@ def test_task_view_has_timeline_diff_and_merge_hint(seeded):
     texts = [e["text"] for e in t["timeline"]]
     assert "created" in texts and any(x.startswith("checker (diff): pass") for x in texts)
     assert views.tasks_view(proj)[0]["goal"] == "update the changelog"  # newest first
-
-
-def test_the_merge_steps_really_merge(seeded):
-    proj, ids = seeded
-    t = proj.task(ids["ready_task"])
-    for step in views.merge_steps(t).splitlines():
-        args = step.split(" ", 1)[1]
-        cmd = ["git", "-c", "user.email=t@t", "-c", "user.name=t"] + shlex.split(args)
-        subprocess.run(cmd, cwd=proj.root, check=True, capture_output=True)
-    assert (proj.root / "mul.py").read_text().startswith("def mul")
 
 
 def test_views_keep_non_ascii(repo):

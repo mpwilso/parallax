@@ -27,6 +27,7 @@ start here:
   parallax preflight <task>             test the sandbox for an approved task
   parallax build <task>                 build it in the sandbox, then check it. parallax stop ends it
   parallax show <task>                  where it stands: ready, or what needs you
+  parallax accept <task>                commit what was reviewed. merging is yours
   parallax lint <file>                  check a report or task file against the output shape
 
 more: parallax run, inbox, ui, draft, log, verify, eval. `parallax <command> -h` for details.
@@ -71,6 +72,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("stop", help="end every running build now")
     rc = sub.add_parser("recheck", help="check a built task again, in the background: code checks, tests, the blind checker")
     rc.add_argument("task")
+    ac = sub.add_parser("accept", help="commit exactly what was reviewed, for you to merge")
+    ac.add_argument("task")
+    ac.add_argument("--reason", default="", help="needed only to accept a risk, such as a secrets-scan hit")
     sh = sub.add_parser("show", help="where a task stands, in the output shape")
     sh.add_argument("task")
 
@@ -136,6 +140,9 @@ def _run(args) -> int:
         from .runner import flag_stale_runs
         for tid in flag_stale_runs(proj):  # housekeeping on every command, in place of a pulse
             print(f"task {tid} went quiet and is flagged stuck. it's in your inbox.")
+        from .accept import confirm_merges
+        for tid in confirm_merges(proj):
+            print(f"task {tid}: you merged it unchanged. recorded.")
 
     if args.cmd == "task":
         if args.tcmd == "new":
@@ -186,6 +193,13 @@ def _run(args) -> int:
         check.can_check(proj, args.task)
         build.launch(proj, build.prepare(proj, args.task), mode="check")
         print(f"checking {args.task} in the background. parallax show {args.task} tells you where it stands.")
+        return 0
+
+    if args.cmd == "accept":
+        from .accept import accept, merge_command
+        e = accept(proj, args.task, args.reason)
+        print(f"accepted {args.task} as {e['data']['commit'][:7]}. merge it yourself:")
+        print(merge_command(e))
         return 0
 
     if args.cmd == "show":

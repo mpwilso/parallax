@@ -94,6 +94,14 @@ def report(project: Project, task_id: str) -> str:
         bottom = f"Ready: the checker {how} and {passed} of {total} plan tests pass."
         return lint.shaped("Decision needed", bottom, gaps, f"you run parallax accept {task_id}, or reject it with a reason.",
                            found, changed, "the checker", boundary + findings)
+    if status in ("accepted", "merged"):
+        from .accept import merge_command
+        acc = _last(entries, "task.accepted")
+        if status == "merged":
+            return lint.report("FYI", f"Task {task_id} was accepted as {acc['data']['commit'][:7]} and you merged it unchanged.",
+                               "nothing", "nothing waits on you.", [f"merge confirmed (ledger {_last(entries, 'merge.confirmed')['id']})"])
+        return lint.report("Decision needed", f"Task {task_id} was accepted as {acc['data']['commit'][:7]}; merging is yours.",
+                           "nothing", f"you run {merge_command(acc)}.", [f"accepted (ledger {acc['id']})"])
     if status in ("running", "checking", "reworking"):
         cycles = sum(e["kind"] == "rework.started" for e in entries)
         more = f" (rework {cycles} of {project.policy.check['rework_cap']})" if cycles else ""

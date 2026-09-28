@@ -44,7 +44,7 @@ def _make(project: Project, task_id: str, maker: Agent, goal: str, stage: str, f
     except Exception as err:  # an adapter crash is recorded, not hidden
         res = AgentResult("error", f"{type(err).__name__}: {err}")
     project.ledger.append("maker.finished", "maker", res.summary, task=task_id, stage=stage, status=res.status,
-                          cost_usd=res.cost_usd)
+                          cost_usd=res.cost_usd, model=getattr(maker, "model", None))
     return res
 
 

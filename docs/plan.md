@@ -206,6 +206,7 @@ From the brief, lighter versions:
 - It commits exactly the reviewed tree plus `docs/tasks/<id>/` using git plumbing (`commit-tree`, which runs no hooks), with trailers. The commit is signed if you set up a key. It prints the merge command.
 - The next command confirms whether you merged the commit unchanged. `docs/THREAT_MODEL.md` is written here, including what a signed commit does and doesn't prove, and the OWASP Agentic table.
 - Test removed: `test_m6.py::test_the_merge_steps_really_merge`, because accept replaces the manual steps; a new test runs accept, then the printed merge.
+- Built with one addition: after the commit, accept moves the untracked `docs/tasks/<id>/` out of your checkout into the task's folder under `~/.local/share/parallax/tasks/`. git refuses to merge over untracked files, even identical ones, so without this the printed merge fails; the merge brings the files back, tracked. When the base branch has moved on, accept prints a plain `git merge` instead of `--ff-only`.
 - **You run** `parallax accept 3f9a1c`, then `git log -1 --format=%B parallax/3f9a1c-readme-install-steps`. **You see:**
   ```
   accepted 3f9a1c as 5d2e9f1. merge it yourself:

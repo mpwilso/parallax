@@ -29,6 +29,10 @@ def derive(entries: list[dict]) -> dict[str, dict]:
             t["status"] = "reworking"
         elif kind == "task.rejected":
             t["status"] = "rejected"
+        elif kind == "task.accepted":
+            t["status"] = "accepted"
+        elif kind == "merge.confirmed":
+            t["status"] = "merged"
         elif kind == "task.stopped":
             t["status"] = "stopped"
         elif kind == "maker.finished" and d["status"] != "done" and t["status"] == "running":
