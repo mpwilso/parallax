@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 GENESIS = "0" * 64
+_append_lock = threading.Lock()  # parallel tool calls append from several threads
 
 
 def _hash(body: dict) -> str:
@@ -33,18 +35,19 @@ class Ledger:
         return entries[-1]["hash"] if entries else GENESIS
 
     def append(self, kind: str, actor: str, reason: str = "", **data) -> dict:
-        body = {
-            "id": uuid.uuid4().hex[:8],
-            "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "kind": kind,
-            "actor": actor,
-            "reason": reason,
-            "data": data,
-            "prev": self._last_hash(),
-        }
-        entry = {**body, "hash": _hash(body)}
-        with self.path.open("a") as f:
-            f.write(json.dumps(entry, sort_keys=True) + "\n")
+        with _append_lock:
+            body = {
+                "id": uuid.uuid4().hex[:8],
+                "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "kind": kind,
+                "actor": actor,
+                "reason": reason,
+                "data": data,
+                "prev": self._last_hash(),
+            }
+            entry = {**body, "hash": _hash(body)}
+            with self.path.open("a") as f:
+                f.write(json.dumps(entry, sort_keys=True) + "\n")
         return entry
 
     def verify(self) -> tuple[bool, str]:

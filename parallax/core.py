@@ -9,11 +9,13 @@ import subprocess
 import uuid
 from pathlib import Path
 
+from .agents.base import AGREE
 from .ledger import Ledger
 from .policy import ALLOW, ASK, DEFAULT_POLICY, DENY, Policy
 
 STATE_DIR = ".parallax"
 POLICY_FILE = "parallax.policy.toml"
+INBOX_KINDS = {"decision.requested", "disagreement.raised"}
 
 
 class ParallaxError(Exception):
@@ -74,12 +76,31 @@ class Project:
         return self.task(task_id)
 
     def tasks(self) -> dict[str, dict]:
+        """Task status is derived from the ledger, never stored separately."""
         out: dict[str, dict] = {}
         for e in self.ledger.entries():
-            if e["kind"] == "task.created":
-                out[e["data"]["task"]] = {"goal": e["reason"], "status": "open", **e["data"]}
-            elif e["kind"] == "task.closed":
-                out[e["data"]["task"]]["status"] = e["data"]["outcome"]
+            kind, d = e["kind"], e["data"]
+            if kind == "task.created":
+                out[d["task"]] = {"goal": e["reason"], "status": "open", **d}
+                continue
+            t = out.get(d.get("task"))
+            if t is None:
+                continue
+            if kind == "task.closed":
+                t["status"] = d["outcome"]
+            elif kind == "maker.started":
+                t["status"] = "running"
+            elif kind == "maker.finished" and d["status"] != "done":
+                t["status"] = "maker failed"
+            elif kind == "verdict.recorded" and d["stage"] == "diff" and d["verdict"] in AGREE:
+                t["status"] = "ready"
+            elif kind == "disagreement.raised":
+                t["status"] = "disputed"
+            elif kind == "decision.resolved" and d.get("about") == "disagreement.raised":
+                if d["outcome"] == "rejected":
+                    t["status"] = "needs work"
+                else:
+                    t["status"] = "plan approved" if d.get("stage") == "plan" else "ready"
         return out
 
     def task(self, task_id: str) -> dict:
@@ -88,11 +109,12 @@ class Project:
             raise ParallaxError(f"no task {task_id}")
         return tasks[task_id]
 
-    def diff(self, task_id: str) -> str:
+    def diff(self, task_id: str, *args: str) -> str:
+        """Working tree against the task's base. Content only, never commit messages."""
         t = self.task(task_id)
         wt = Path(t["worktree"])
         _git(wt, "add", "-N", ".")  # include new files in the diff without staging content
-        return _git(wt, "diff", t["base"])
+        return _git(wt, "diff", *args, t["base"])
 
     # policy checks ---------------------------------------------------------
     def check(self, task_id: str, action: str, detail: str = "", actor: str = "agent") -> dict:
@@ -111,19 +133,29 @@ class Project:
 
     # inbox -----------------------------------------------------------------
     def inbox(self) -> list[dict]:
+        """Permission requests and maker/checker disagreements nobody has ruled on yet."""
         entries = self.ledger.entries()
         resolved = {e["data"]["decision"] for e in entries if e["kind"] == "decision.resolved"}
-        return [e for e in entries if e["kind"] == "decision.requested" and e["id"] not in resolved]
+        return [e for e in entries if e["kind"] in INBOX_KINDS and e["id"] not in resolved]
+
+    def decision_outcome(self, decision_id: str) -> dict | None:
+        """The human's ruling on an inbox item, or None while it's still pending."""
+        for e in self.ledger.entries():
+            if e["kind"] == "decision.resolved" and e["data"]["decision"] == decision_id:
+                return e
+        return None
 
     def resolve(self, decision_id: str, approve: bool, reason: str, actor: str = "human") -> dict:
+        """For a disagreement, approve sides with the maker and reject sides with the checker."""
         if not reason.strip():
             raise ParallaxError("a decision needs a reason")
         pending = {e["id"]: e for e in self.inbox()}
         if decision_id not in pending:
             raise ParallaxError(f"no pending decision {decision_id}")
         req = pending[decision_id]
+        context = {k: req["data"][k] for k in ("action", "stage") if k in req["data"]}
         return self.ledger.append(
             "decision.resolved", actor, reason,
-            decision=decision_id, task=req["data"]["task"], action=req["data"]["action"],
+            decision=decision_id, task=req["data"]["task"], about=req["kind"], **context,
             outcome="approved" if approve else "rejected",
         )

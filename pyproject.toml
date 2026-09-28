@@ -15,6 +15,7 @@ parallax = "parallax.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest"]
+claude = ["claude-agent-sdk"]
 
 [tool.setuptools]
-packages = ["parallax"]
+packages = ["parallax", "parallax.agents"]

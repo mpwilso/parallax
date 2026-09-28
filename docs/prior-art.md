@@ -51,7 +51,7 @@ From toryo:
 4. Ledger events: `verdict.recorded`, `disagreement.raised`. Disagreement becomes an inbox item.
 5. A fake agent for tests, so the test suite never calls a model.
 6. Hard guard in the adapter: any write to the policy file, `mission.md`, or `.parallax/` is refused before policy is even consulted (invariant 9). Test it.
-7. Optional plan stage: maker writes `plan.md` in the worktree, plan checker reviews goal plus plan, disagreement goes to the inbox. The diff checker never sees the plan.
+7. Optional plan stage: maker plans read-only, and its plan is stored in the ledger as `plan.recorded`, not as `plan.md` in the worktree. A file in the worktree would land in the diff (so the diff checker would see it) and in the branch. Plan checker reviews goal plus plan, disagreement goes to the inbox. The diff checker never sees the plan.
 
 **M3: conductor and pulse.** `mission.md` (who / what / how), `parallax pulse`, caps (4 parallel, depth 1), stuck detection, policy profiles including `readonly`, batched inbox with recommendations.
 

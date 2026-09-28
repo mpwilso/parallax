@@ -5,9 +5,11 @@ import argparse
 import sys
 from pathlib import Path
 
+from .agents.base import AgentUnavailable
 from .core import ParallaxError, Project
 
 MARK = {"allow": "ALLOWED", "ask": "NEEDS YOU", "deny": "REFUSED"}
+LOG_FIELDS = ("task", "action", "stage", "status", "verdict", "outcome", "why")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -30,9 +32,17 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--detail", default="")
     c.add_argument("--actor", default="agent")
 
+    rn = sub.add_parser("run", help="run the maker on a task, then the blind checker")
+    rn.add_argument("task")
+    rn.add_argument("--plan", action="store_true", help="plan first and have the plan checked")
+    rn.add_argument("--model", default=None)
+    rv = sub.add_parser("review", help="run the blind checker on a task's current diff")
+    rv.add_argument("task")
+    rv.add_argument("--model", default=None)
+
     sub.add_parser("inbox", help="decisions waiting on you")
     for name in ("approve", "reject"):
-        r = sub.add_parser(name, help=f"{name} a pending decision")
+        r = sub.add_parser(name, help=f"{name} a pending decision (for a disagreement: side with the maker / the checker)")
         r.add_argument("decision")
         r.add_argument("--reason", required=True)
 
@@ -41,9 +51,10 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("verify", help="check the ledger hasn't been edited")
 
     args = p.parse_args(argv)
+    sys.stdout.reconfigure(errors="replace")  # agent text can hold characters the console can't show
     try:
         return _run(args)
-    except ParallaxError as err:
+    except (ParallaxError, AgentUnavailable) as err:
         print(f"parallax: {err}", file=sys.stderr)
         return 1
 
@@ -80,22 +91,30 @@ def _run(args) -> int:
             print(f"  waiting in inbox as decision {e['id']}")
         return 0 if res["ruling"] == "allow" else 2
 
+    if args.cmd in ("run", "review"):
+        return _agents(proj, args)
+
     if args.cmd == "inbox":
         items = proj.inbox()
         if not items:
             print("inbox empty. nothing waiting on you.")
         for e in items:
-            print(f"{e['id']}  task {e['data']['task']}  {e['data']['action']}  {e['reason']}")
+            d = e["data"]
+            what = f"disagreement ({d['stage']})" if e["kind"] == "disagreement.raised" else d["action"]
+            print(f"{e['id']}  task {d['task']}  {what}  {e['reason']}")
         return 0
 
     if args.cmd in ("approve", "reject"):
         e = proj.resolve(args.decision, args.cmd == "approve", args.reason)
-        print(f"{e['data']['outcome']}  {e['data']['action']}  (ledger {e['id']})")
+        d = e["data"]
+        what = d.get("action") or f"disagreement ({d.get('stage')})"
+        print(f"{d['outcome']}  {what}  (ledger {e['id']})")
         return 0
 
     if args.cmd == "log":
         for e in proj.ledger.entries()[-args.n:]:
-            extra = " ".join(f"{k}={v}" for k, v in e["data"].items() if k in ("task", "action", "outcome", "why"))
+            extra = " ".join(f"{k}={v}" for k, v in e["data"].items() if k in LOG_FIELDS)
+            e["reason"] = (e["reason"].splitlines() or [""])[0]  # one entry, one line; the ledger has it all
             print(f"{e['ts']}  {e['id']}  {e['kind']:<18} {e['actor']:<6} {extra}  {e['reason']}")
         return 0
 
@@ -104,6 +123,31 @@ def _run(args) -> int:
         print(msg)
         return 0 if ok else 1
     return 1
+
+
+def _agents(proj: Project, args) -> int:
+    from .agents.claude import ClaudeAgent, ClaudeChecker
+    from .checker import diff_material, review
+    from .runner import ensure_not_disputed, run_task
+
+    model = {"model": args.model} if args.model else {}
+    checker = ClaudeChecker(**model)
+    if args.cmd == "review":
+        ensure_not_disputed(proj, args.task)
+        ve, dis = review(proj, args.task, checker, "diff", diff_material(proj, args.task))
+        print(f"checker: {ve['data']['verdict']}  {ve['reason']}".rstrip())
+        if dis:
+            print(f"disagreement {dis['id']} is in your inbox")
+        return 0
+
+    def waiting(e: dict) -> None:
+        print(f"waiting on decision {e['id']}  {e['data']['action']}  {e['reason']}")
+        print("  approve or reject it from another terminal.")
+
+    status = run_task(proj, args.task, ClaudeAgent(**model), checker,
+                      plan=args.plan, on_wait=waiting, say=print)
+    print(f"task {args.task}: {status}")
+    return 0
 
 
 if __name__ == "__main__":

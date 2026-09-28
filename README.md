@@ -47,10 +47,24 @@ parallax log                       # the ledger
 parallax verify                    # confirm the ledger hasn't been edited
 ```
 
+## Maker and blind checker (Milestone 2)
+
+```bash
+pip install -e .[claude]           # the Claude adapter; the core stays stdlib only
+parallax run <task-id>             # maker works the task, then the blind checker reviews the diff
+parallax run <task-id> --plan      # maker plans first (read-only), a checker reviews the plan
+parallax review <task-id>          # run the checker alone on the current diff
+parallax inbox                     # permission requests and maker/checker disagreements
+parallax approve <id> --reason ".." # on a disagreement: side with the maker
+parallax reject <id> --reason ".."  # on a disagreement: side with the checker
+```
+
+While the maker runs, any `ask` action pauses it until you approve or reject from another terminal. The checker sees only the task goal and the diff: never the maker's summary, its plan, or commit messages. `pass` and `no_finding` count as agreement and the task becomes `ready`. Anything else goes to your inbox. Agents can't write `parallax.policy.toml`, `mission.md`, or `.parallax/`, whatever the policy says.
+
 ## Roadmap
 
 - [x] M1: policy file, ledger, single task in an isolated worktree
-- [ ] M2: maker and blind checker, plan review, verdicts, disagreement routing
+- [x] M2: maker and blind checker, plan review, verdicts, disagreement routing
 - [ ] M3: conductor on a pulse, driven by a human-owned mission file, several tasks in parallel
 - [ ] M4: evidence moves the line both ways: promotion proposals and law proposals, each approved by a human
 - [ ] M5: evals against real open-source changes, results published
