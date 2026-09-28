@@ -327,7 +327,8 @@ def read_run(path: Path) -> tuple[dict, list[Result]]:
 
 def _cell(text: str) -> str:
     """Quoted agent text, on one line, safe in a table, and in the house style (no em dashes)."""
-    text = " ".join(str(text).split()).replace(" — ", ", ").replace("—", ", ")
+    dash = "\N{EM DASH}"
+    text = " ".join(str(text).split()).replace(f" {dash} ", ", ").replace(dash, ", ")
     return text.replace("|", "\\|")
 
 
