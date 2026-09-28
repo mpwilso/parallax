@@ -1,4 +1,7 @@
-"""Run one task: optional plan and plan check, then build and the blind diff check."""
+"""`parallax run`: the old way, a task run straight from its goal, then the M2 diff check.
+
+Lifecycle tasks go through build.py and check.py instead. This stays for `task new` and the evals.
+"""
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -6,7 +9,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import guard
-from .agents.base import AGREE, Agent, AgentResult, Checker
+from .agents.base import Agent, AgentResult, Checker
 from .checker import diff_material, review
 from .core import ROOT_ENV, TASK_ENV, ParallaxError, Project
 from .gate import make_permission_fn
@@ -14,24 +17,6 @@ from .gate import make_permission_fn
 
 def _quiet(msg: str) -> None:
     pass
-
-
-def approved_plan(project: Project, task_id: str) -> str | None:
-    """The latest plan, if the plan checker agreed or a human sided with the maker."""
-    text, ok, disputes = None, False, {}
-    for e in project.ledger.entries():
-        kind, d = e["kind"], e["data"]
-        if d.get("task") != task_id:
-            continue
-        if kind == "plan.recorded":
-            text, ok = d["text"], False
-        elif kind == "verdict.recorded" and d["stage"] == "plan":
-            ok = d["verdict"] in AGREE
-        elif kind == "disagreement.raised" and d["stage"] == "plan":
-            disputes[e["id"]] = True
-        elif kind == "decision.resolved" and d.get("decision") in disputes:
-            ok = d["outcome"] == "approved"
-    return text if ok else None
 
 
 def ensure_can_run(project: Project, task_id: str) -> dict:
@@ -51,50 +36,28 @@ def _check_cap(project: Project, task_id: str) -> None:
 
 
 def _make(project: Project, task_id: str, maker: Agent, goal: str, stage: str, fn,
-          keep_summary: bool = True, extra_env: dict[str, str] | None = None) -> AgentResult:
+          extra_env: dict[str, str] | None = None) -> AgentResult:
     project.ledger.append("maker.started", "parallax", "", task=task_id, stage=stage)
     env = {**(extra_env or {}), TASK_ENV: task_id, ROOT_ENV: str(project.root)}
     try:
         res = maker.run(goal, Path(project.task(task_id)["worktree"]), fn, stage=stage, env=env)
     except Exception as err:  # an adapter crash is recorded, not hidden
         res = AgentResult("error", f"{type(err).__name__}: {err}")
-    summary = res.summary if keep_summary else ""  # plans get their own entry
-    project.ledger.append("maker.finished", "maker", summary, task=task_id, stage=stage, status=res.status,
+    project.ledger.append("maker.finished", "maker", res.summary, task=task_id, stage=stage, status=res.status,
                           cost_usd=res.cost_usd)
     return res
 
 
-def run_task(project: Project, task_id: str, maker: Agent, checker: Checker, *, plan: bool | None = None,
+def run_task(project: Project, task_id: str, maker: Agent, checker: Checker, *,
              say: Callable[[str], None] = _quiet, env: dict[str, str] | None = None) -> str:
     t = ensure_can_run(project, task_id)
     _check_cap(project, task_id)
     wt, goal = Path(t["worktree"]), t["goal"]
-    if plan is None:
-        plan = t["plan"]
-
-    if plan:
-        say("maker planning (read-only)")
-        fn = make_permission_fn(project, task_id, wt, read_only=True)
-        res = _make(project, task_id, maker, goal, "plan", fn, keep_summary=False, extra_env=env)
-        if res.status != "done" or project.task(task_id)["status"] == "stuck":
-            return project.task(task_id)["status"]
-        p = project.ledger.append("plan.recorded", "maker", "", task=task_id, text=res.summary)
-        say("checker reviewing plan")
-        ve, dis = review(project, task_id, checker, "plan", res.summary, plan=p["id"])
-        say(f"checker: {ve['data']['verdict']}")
-        if dis:
-            say(f"disagreement {dis['id']} is in your inbox")
-            return project.task(task_id)["status"]
-
-    build_goal = goal
-    agreed = approved_plan(project, task_id)
-    if agreed:
-        build_goal = f"{build_goal}\n\nFollow this approved plan:\n{agreed}"
 
     say("maker building")
     before = guard.fingerprint(project.root)
     fn = make_permission_fn(project, task_id, wt)
-    res = _make(project, task_id, maker, build_goal, "build", fn, extra_env=env)
+    res = _make(project, task_id, maker, goal, "build", fn, extra_env=env)
     say(f"maker: {res.status}")
 
     # backstop for invariant 9: whatever got past the gate, the human hears about it

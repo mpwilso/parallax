@@ -266,7 +266,10 @@ def reject(project: Project, task_id: str, reason: str) -> dict:
         raise ParallaxError("a rejection needs a reason")
     st = state(project, task_id)
     if st.gate is None:
-        raise ParallaxError(f"the plan for {task_id} is already approved")
+        status = project.task(task_id)["status"]
+        if status not in ("ready", "built", "risk accepted", "needs work"):
+            raise ParallaxError(f"task {task_id} is {status}; there's nothing to reject right now")
+        return project.ledger.append("task.rejected", "human", reason, task=task_id, was=status)
     files = {d: file_hash(doc_path(project, task_id, d)) for d in st.gate if doc_path(project, task_id, d).exists()}
     return project.ledger.append("gate.rejected", "human", reason, task=task_id, gate="+".join(st.gate), files=files)
 
@@ -318,20 +321,9 @@ def _report(project: Project, task_id: str, docs, type_: str, bottom: str, next_
     Inline in the header when it fits the header cap; otherwise each gap goes under Found,
     word for word, citing the file and line it came from.
     """
-    listed = gaps(project, task_id, docs)
-    if not listed:
-        return lint.report(type_, bottom, "nothing", next_, list(found))
-    inline = "; ".join(f"{doc}.md says: {text.rstrip('.')}" for doc, _, text in listed) + "."
-    text = lint.report(type_, bottom, inline, next_, list(found))
-    if not any("header is" in m for _, m in lint.lint_report(text)):
-        return text
-    cited = [f"docs/tasks/{task_id}/{doc}.md:{n} not looked at: {t}" for doc, n, t in listed]
-    text = lint.report(type_, bottom, f"what the drafters list under Found ({len(listed)})", next_,
-                       list(found) + cited)
-    if not any("body is" in m for _, m in lint.lint_report(text)):
-        return text
-    return lint.report(type_, bottom, f"what the drafters list under Details ({len(listed)})", next_,
-                       list(found), cited)
+    listed = [(f"{doc}.md says: {text}", f"docs/tasks/{task_id}/{doc}.md:{n} not looked at: {text}")
+              for doc, n, text in gaps(project, task_id, docs)]
+    return lint.shaped(type_, bottom, listed, next_, list(found))
 
 
 def report(project: Project, task_id: str) -> str:

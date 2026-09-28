@@ -188,10 +188,11 @@ From the brief, lighter versions:
 - The blind checker gets exactly its brief input. REVIEW.md is written here.
 - Rework: up to 3 recorded cycles. The maker gets the checker's findings. On re-review the checker gets only its brief input with the new diff, never the maker's reply. The 4th fail becomes Decision needed.
 - Tests changed: `test_m2.py::test_checker_is_blind_to_maker_explanation` becomes the exact-input pin test, including on re-review. `test_disagreement_goes_to_inbox_and_needs_a_reason` and `test_checker_error_goes_to_inbox_without_retry` change to match the rework rule.
-- **You run** `parallax show 3f9a1c`. **You see** a lint-clean report:
+- Built in M10 as planned, plus `parallax recheck <task>` to check a task that's already built (003876 was built in M9, before the check existed). The command isn't `check`, which M7 cut and its test keeps cut.
+- **You run** `parallax show 3f9a1c`. **You see** a lint-clean report (the example first read "Ready. The checker passed", two sentences, which the brief's one-sentence Bottom line and lint refuse):
   ```
   Type: Decision needed
-  Bottom line: Ready. The checker passed and 3 of 3 plan tests pass.
+  Bottom line: Ready: the checker passed and 3 of 3 plan tests pass.
   Not looked at: nothing
   Next: you run parallax accept 3f9a1c, or reject it with a reason.
   Found

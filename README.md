@@ -114,7 +114,9 @@ parallax intent new "the install steps are wrong for WSL"
 parallax approve <task-id>                     # approve intent and plan (a large task: intent first, then spec and plan)
 parallax reject <task-id> --reason "..."       # or reject, then edit the files or run parallax draft <task-id>
 parallax preflight <task-id>                   # test both sandbox layers with the build's own rules
-parallax build <task-id>                       # the maker builds the approved plan in the sandbox, in the background
+parallax build <task-id>                       # the maker builds the approved plan in the sandbox, then it's checked
+parallax show <task-id>                        # where it stands: ready, or what needs you
+parallax recheck <task-id>                     # check a built task again
 parallax stop                                  # end every running build now
 parallax lint docs/tasks/<task-id>/plan.md     # check a file against the output shape
 parallax task list                             # every task, its status, and what it cost (estimated)
@@ -124,7 +126,9 @@ parallax verify                                # confirm the ledger hasn't been 
 
 Read the drafted files before approving, and edit them if needed: the approval records each file's hash and is signed with your approval key.
 
-`parallax build` runs preflight first and refuses to launch if either layer would let a protected path be written. The maker runs in Claude Code's sandbox with rules generated from the plan: writes only in the task's worktree (never the protected files), no reads of your home folder except the worktree and the task's venv, and no network unless the plan names the domains. Nothing waits on you mid-build: an action that needs your approval is refused and recorded. The maker never commits. The build's log is in `~/.local/share/parallax/tasks/`. The check of the result lands in M10.
+`parallax build` runs preflight first and refuses to launch if either layer would let a protected path be written. The maker runs in Claude Code's sandbox with rules generated from the plan: writes only in the task's worktree (never the protected files), no reads of your home folder except the worktree and the task's venv, and no network unless the plan names the domains. Nothing waits on you mid-build: an action that needs your approval is refused and recorded. The maker never commits. The build's log is in `~/.local/share/parallax/tasks/`.
+
+Then the check runs, in the same background process. Code checks the diff against the plan first: files outside it, unlisted binaries or symlinks, new dependencies, and a diff over 400 changed lines all come to you. Parallax runs the plan's tests itself, in the sandbox, with the test harness (conftest, pytest settings) from the base branch. The blind checker, a different Claude model, sees only the intent's outcome and constraints, `REVIEW.md`, and the diff. If tests fail or the checker finds something `REVIEW.md` says blocks, the maker gets the findings and reworks, up to 3 times; the fail after that comes to you. `parallax show <task-id>` says where it stands.
 
 If your tests need packages, set `[build] setup` in the policy file to a command that makes the task's venv at `$PARALLAX_VENV`. It runs as you, before the build. For example:
 
@@ -171,7 +175,8 @@ Limits live in the policy file under `[limits]`: `max_parallel` (default 4), `st
 - [x] M7: move to WSL2, cut the conductor, pulse, profiles, promotions and laws, add `parallax doctor`
 - [x] M8: intent, spec, plan, and the gates. `parallax lint` and the output shape
 - [x] M9: the sandboxed build, preflight, and `parallax stop`
-- [ ] M10 to M14: see [docs/plan.md](docs/plan.md)
+- [x] M10: the check: code checks, the plan's tests in the sandbox, the blind checker, and rework
+- [ ] M11 to M14: see [docs/plan.md](docs/plan.md)
 
 ## Evals
 

@@ -25,7 +25,8 @@ start here:
   parallax approve <task>               approve the task's pending gate
   parallax reject <task> --reason "..." reject it, with a reason
   parallax preflight <task>             test the sandbox for an approved task
-  parallax build <task>                 build it in the sandbox. parallax stop ends it
+  parallax build <task>                 build it in the sandbox, then check it. parallax stop ends it
+  parallax show <task>                  where it stands: ready, or what needs you
   parallax lint <file>                  check a report or task file against the output shape
 
 more: parallax run, inbox, ui, draft, log, verify, eval. `parallax <command> -h` for details.
@@ -68,6 +69,10 @@ def main(argv: list[str] | None = None) -> int:
     bd = sub.add_parser("build", help="build an approved plan in the sandbox, in the background")
     bd.add_argument("task")
     sub.add_parser("stop", help="end every running build now")
+    rc = sub.add_parser("recheck", help="check a built task again, in the background: code checks, tests, the blind checker")
+    rc.add_argument("task")
+    sh = sub.add_parser("show", help="where a task stands, in the output shape")
+    sh.add_argument("task")
 
     rn = sub.add_parser("run", help="run the maker on a task, then the blind checker")
     rn.add_argument("task")
@@ -119,6 +124,7 @@ def _run(args) -> int:
         proj = Project.init(cwd)
         print(f"initialized parallax in {proj.root}")
         print("  parallax.policy.toml  what agents may do. anything unlisted is denied.")
+        print("  REVIEW.md             how the blind checker reviews, and what blocks ready. you own it.")
         print('next: parallax intent new "what you want done"')
         return 0
 
@@ -172,6 +178,19 @@ def _run(args) -> int:
             return 0 if lines[-1].startswith("ready") else 1
         build.launch(proj, p)
         print(f"building {args.task}, estimated budget ${p.left:.2f}. parallax stop ends it.")
+        return 0
+
+    if args.cmd == "recheck":
+        from . import build, check
+        refuse_inside_task(proj.root)
+        check.can_check(proj, args.task)
+        build.launch(proj, build.prepare(proj, args.task), mode="check")
+        print(f"checking {args.task} in the background. parallax show {args.task} tells you where it stands.")
+        return 0
+
+    if args.cmd == "show":
+        from . import show
+        _shaped(proj, show.report(proj, args.task))
         return 0
 
     if args.cmd == "stop":
@@ -266,6 +285,9 @@ def _shaped(proj: Project, text: str) -> None:
 def _gate(proj: Project, task_id: str, args) -> None:
     if args.cmd == "reject":
         e = lifecycle.reject(proj, task_id, args.reason)
+        if e["kind"] == "task.rejected":
+            print(f"rejected task {task_id} (ledger {e['id']}). your reason stays in the ledger.")
+            return
         print(f"rejected {e['data']['gate'].replace('+', ' and ')} for {task_id} (ledger {e['id']}).")
         print(f"next: edit docs/tasks/{task_id}/ and approve it, or run parallax draft {task_id} to redraft with your reason.")
         return

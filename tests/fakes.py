@@ -4,7 +4,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from parallax.agents.base import AgentResult, CheckerError, Verdict
+from parallax.agents.base import AgentResult, CheckerError, Finding, Review, Verdict
 
 
 class ScriptedAgent:
@@ -49,10 +49,25 @@ class ScriptedAgent:
 
 
 class FakeChecker:
-    def __init__(self, verdict="pass", findings=(), plan_verdict="pass", error=False):
+    """reviews: what check() answers, in order; the last one repeats."""
+
+    def __init__(self, verdict="pass", findings=(), plan_verdict="pass", error=False, reviews=None):
         self.verdict, self.plan_verdict = verdict, plan_verdict
         self.findings, self.error = list(findings), error
         self.calls: list[tuple[str, str, str]] = []  # (goal, material, kind)
+        self.reviews = list(reviews or [Review("pass")])
+        self.briefs: list[str] = []
+        self.models: list[str] = []
+
+    def __call__(self, left, model):  # the checker factory: budget left and the policy's model
+        self.models.append(model)
+        return self
+
+    def check(self, brief):
+        self.briefs.append(brief)
+        if self.error:
+            raise CheckerError("garbled reply")
+        return self.reviews[min(len(self.briefs), len(self.reviews)) - 1]
 
     def review(self, goal, material, kind):
         self.calls.append((goal, material, kind))
@@ -86,3 +101,35 @@ class FakeDrafter:
         if doc in self.fail:
             return AgentResult("error", "stopped at the budget cap ($2.0)", self.cost)
         return AgentResult("done", self.docs[doc], self.cost)
+
+
+def blocker(text="the steps are wrong", where="README.md:3"):
+    return Review("fail", [Finding("blocker", where, text)], "nothing")
+
+
+def junit_runner(results=None, exit_code=0):
+    """A stand-in for running the plan's tests in the sandbox: writes a JUnit report.
+
+    results: {file: (passed, failed)}; by default every plan test file passes 3 of 3."""
+    calls = []
+
+    def run(config, cwd, cmd, env):
+        calls.append((cwd, cmd, env))
+        files = results or {}
+        if not files:
+            files = {t.split(" ")[0]: (3, 0) for t in cmd.split("--junitxml=")[1].split(" ")[1:] if t.endswith(".py")}
+        cases = []
+        for f, (ok, bad) in files.items():
+            mod = f[:-3].replace("/", ".")
+            cases += [f'<testcase classname="{mod}" name="t{i}"/>' for i in range(ok)]
+            cases += [f'<testcase classname="{mod}" name="f{i}"><failure message="x"/></testcase>' for i in range(bad)]
+        junit = Path(cwd) / ".parallax-tmp" / "junit.xml"
+        junit.write_text("<testsuites><testsuite>" + "".join(cases) + "</testsuite></testsuites>")
+        return exit_code, f"{sum(v[0] for v in files.values())} passed"
+
+    run.calls = calls
+    return run
+
+
+def good_probe(config, cwd, spec, env):
+    return {"written": [], "readable": [], "network": [], "env": ["HOME", "PATH"], "env_values": []}

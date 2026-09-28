@@ -10,7 +10,8 @@ Parallax follows the AI-native SDLC playbook (https://claude.com/blog/the-ai-nat
 2. **Spec** (large tasks only) and **plan**, drafted the same way. The plan ends with a `toml` block code reads: files, tests, expected size, domains, outside reads, binaries, symlinks, dependencies, review tightening, estimated cost and budget cap.
 3. **Gates.** A small task has two touches: approve intent and plan together, then merge. A large task has three: approve intent; approve spec and plan together; merge. Each approval records every file's hash and is signed with a key only you can read.
 4. **Build.** `parallax build <task>` runs preflight, then the maker builds the approved plan in Claude Code's sandbox, in the background. `parallax stop` ends it.
-5. **Check** (M10) and **accept** (M11) follow.
+5. **Check.** In the same background process: code checks the diff against the plan, Parallax runs the plan's tests in the sandbox with the base branch's test harness, and the blind checker reviews. Failures go back to the maker, up to 3 recorded cycles, then to you. `parallax show <task>` says where it stands.
+6. **Accept** (M11) follows.
 
 What we follow from the playbook: files as the hand-off between stages, human gates on intent and plan, agents verifying before review, one record per change. What we skip: the maintain stage and autonomous triggers. Nothing starts without you.
 
@@ -36,6 +37,8 @@ Each line says how it's enforced today: a test, a rule in code, or judgment only
 - **Reserved rails (merge, secrets, deploy) fail closed and are checked twice, independently.** Merge can't be set in policy (test: `test_merge_cannot_be_delegated`). The sandbox is the second check: no writes to the shared `.git`, no reads of your home folder or the approval key, no network outside the plan, and it refuses to run if unavailable. Preflight tests both layers before every launch (tests: `test_preflight_refuses_anything_that_gets_through`, `test_preflight_against_the_real_sandbox`). The builder starts with a scrubbed environment (test: `test_the_builder_gets_a_scrubbed_environment`).
 - **Anything that watches for new work starts in dry-run; going live is a recorded decision.** Nothing watches for work today. Judgment only.
 - **One task, one record: retries fold into the task; proposals carry their provenance.** Every draft, failure and gate decision is a ledger entry on its task. The record file comes in M11.
+- **The checker is blind, and the brief is pinned.** It gets exactly the outcome, the constraints, REVIEW.md and the diff, on every review (test: `test_checker_is_blind_to_maker_explanation`). Only REVIEW.md's blocking severities block (test: `test_only_review_md_blocking_severities_block`).
+- **The maker's own report of passing tests doesn't count.** Parallax runs them, with the harness from the base branch (test: `test_the_test_harness_comes_from_the_base_branch`).
 - **One clear next action per inbox item.** Every report has one Next line (rule in lint).
 - **Some steps are human-only on purpose (merge), and the UI says so.** Parallax never merges. The UI marks it in M12.
 - **Outside input (issue text, repo content, web pages) is data, never instructions.** Drafters are told so, and can't act beyond reading. Judgment only, backed by their read-only tools.

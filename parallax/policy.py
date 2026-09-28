@@ -19,6 +19,12 @@ DEFAULT_LIMITS = {
     "promote_after": 10, "evidence_days": 30, "law_after": 3,
 }
 DEFAULT_BUDGET = {"drafting_usd": 2.0}  # estimated dollars
+DEFAULT_CHECK = {
+    "model": "claude-sonnet-5-5",  # a different Claude model from the maker's; the eval measures it
+    "diff_cap": 400,               # changed lines a blind review can take reliably
+    "rework_cap": 3,               # rework cycles before the task comes to you
+    "test_command": "python -m pytest -q -p no:cacheprovider --junitxml={junit} {tests}",
+}
 WORKTREE_TOKEN = "<worktree>"
 
 DEFAULT_POLICY = """\
@@ -55,6 +61,12 @@ drafting_usd = 2.00  # the most one drafting call (intent, spec or plan) may use
 # outside the sandbox, in the task's worktree, with $PARALLAX_VENV set to where the venv goes.
 # the maker gets the venv on its PATH and can read it, nothing more. empty: no venv.
 setup = ""
+
+[check]
+model = "claude-sonnet-5-5"  # the blind checker, a different Claude model from the maker
+diff_cap = 400               # a bigger diff comes to you to split, or to accept the risk
+rework_cap = 3               # rework cycles before a failing check comes to you
+# test_command = "python -m pytest -q -p no:cacheprovider --junitxml={junit} {tests}"
 """
 
 
@@ -85,7 +97,7 @@ def _check_table(where: str, table: dict[str, str]) -> None:
 class Policy:
     def __init__(self, actions: dict[str, str], limits: dict[str, int] | None = None,
                  exact: dict[str, dict[str, str]] | None = None, budget: dict[str, float] | None = None,
-                 build: dict[str, str] | None = None):
+                 build: dict[str, str] | None = None, check: dict | None = None):
         _check_table("[actions]", actions)
         self.exact = {action: dict(table) for action, table in (exact or {}).items() if table}
         if "git.merge" in self.exact:
@@ -112,13 +124,24 @@ class Policy:
         if set(build) - {"setup"} or not isinstance(build.get("setup", ""), str):
             raise ValueError("[build] takes one setting: setup, a shell command")
         self.build = {"setup": build.get("setup", "")}
+        check = dict(check or {})
+        if set(check) - set(DEFAULT_CHECK):
+            raise ValueError(f"unknown [check] settings: {sorted(set(check) - set(DEFAULT_CHECK))}")
+        for key in ("diff_cap", "rework_cap"):
+            v = check.get(key, DEFAULT_CHECK[key])
+            if not isinstance(v, int) or isinstance(v, bool) or v < 1:
+                raise ValueError(f"[check] {key} must be a whole number of 1 or more")
+        for key in ("model", "test_command"):
+            if not isinstance(check.get(key, ""), str):
+                raise ValueError(f"[check] {key} must be text")
+        self.check = {**DEFAULT_CHECK, **check}
 
     @classmethod
     def from_dict(cls, data: dict) -> "Policy":
         if "profiles" in data:
             raise ValueError("profiles are gone. every task uses [actions]; remove [profiles]")
         return cls(data.get("actions", {}), data.get("limits", {}), data.get("exact", {}), data.get("budget", {}),
-                   data.get("build", {}))
+                   data.get("build", {}), data.get("check", {}))
 
     @classmethod
     def load(cls, path: Path) -> "Policy":

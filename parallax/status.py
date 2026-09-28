@@ -21,8 +21,14 @@ def derive(entries: list[dict]) -> dict[str, dict]:
             t["status"] = d["outcome"]
         elif kind in ("build.started", "maker.started"):
             t["status"] = "running"
-        elif kind == "build.finished":
+        elif kind in ("build.finished", "check.finished"):
             t["status"] = d["status"]
+        elif kind == "check.started":
+            t["status"] = "checking"
+        elif kind == "rework.started":
+            t["status"] = "reworking"
+        elif kind == "task.rejected":
+            t["status"] = "rejected"
         elif kind == "task.stopped":
             t["status"] = "stopped"
         elif kind == "maker.finished" and d["status"] != "done" and t["status"] == "running":
@@ -36,7 +42,8 @@ def derive(entries: list[dict]) -> dict[str, dict]:
         elif kind == "decision.resolved":
             about, approved = d.get("about"), d["outcome"] == "approved"
             if about == "disagreement.raised":
-                t["status"] = ("plan approved" if d.get("stage") == "plan" else "ready") if approved else "needs work"
+                won = {"plan": "plan approved", "scope": "risk accepted"}.get(d.get("stage"), "ready")
+                t["status"] = won if approved else "needs work"
             elif about == "stuck.raised":
                 t["status"] = "open" if approved else "closed"
     return out

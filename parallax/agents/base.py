@@ -46,6 +46,29 @@ class Verdict:
     cost_usd: float | None = None
 
 
+@dataclass
+class Finding:
+    severity: str  # one of REVIEW.md's severities: blocker, major, minor, nit
+    where: str     # path:line, or "" when it's about the whole change
+    text: str
+
+
+@dataclass
+class Review:
+    """The blind checker's answer to its brief."""
+    verdict: str  # pass | fail | no_finding, as the checker judged it
+    findings: list[Finding] = field(default_factory=list)
+    not_looked_at: str = "nothing"
+    cost_usd: float | None = None
+    model: str = ""
+
+
+class BlindChecker(Protocol):
+    """Sees exactly its brief (see review.py) and nothing else. No tools, no files."""
+
+    def check(self, brief: str) -> Review: ...
+
+
 class Agent(Protocol):
     def run(self, goal: str, cwd: Path, permission_fn: PermissionFn, stage: str = "build",
             env: dict[str, str] | None = None) -> AgentResult: ...

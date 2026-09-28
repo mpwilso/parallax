@@ -20,7 +20,8 @@ from parallax.gate import Scope, host_allowed, make_permission_fn
 from parallax.runner import flag_stale_runs
 from test_m8 import INTENT, WANT, docs, make_key
 
-HAS_SRT = all(shutil.which(b) for b in ("srt", "bwrap", "socat"))
+# not inside a sandbox already: a sandbox won't start nested in one (the M9 spike)
+HAS_SRT = all(shutil.which(b) for b in ("srt", "bwrap", "socat")) and not os.environ.get("SANDBOX_RUNTIME")
 
 
 @pytest.fixture
@@ -313,7 +314,7 @@ def test_cli_build_runs_preflight_then_launches(proj, monkeypatch, capsys):
     assert main(["build", tid]) == 0
     assert capsys.readouterr().out == f"building {tid}, estimated budget $2.00. parallax stop ends it.\n"
     [(argv, env)] = spawned
-    assert argv[-3:] == ["parallax.build", str(proj.root), tid]
+    assert argv[-4:] == ["parallax.build", str(proj.root), tid, "build"]
     assert env["CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"] == "1" and "ANTHROPIC_API_KEY" not in env
     [s] = kinds(proj, "build.started")
     assert s["data"]["pid"] == 4242 and proj.task(tid)["status"] == "running"

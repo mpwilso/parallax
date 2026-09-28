@@ -148,24 +148,27 @@ def _spawn(argv: list[str], env: dict, cwd: Path, log: Path) -> int:
                                 stderr=subprocess.STDOUT, start_new_session=True).pid
 
 
-def launch(project: Project, p: Prepared, spawn: Callable | None = None) -> int:
-    """Start the builder in the background with a scrubbed environment. Returns its pid."""
-    argv = [sys.executable, "-u", "-m", "parallax.build", str(project.root), p.task["task"]]
+def launch(project: Project, p: Prepared, spawn: Callable | None = None, mode: str = "build") -> int:
+    """Start the builder in the background with a scrubbed environment. Returns its pid.
+
+    mode: "build" builds, then checks; "check" only checks what's already built."""
+    argv = [sys.executable, "-u", "-m", "parallax.build", str(project.root), p.task["task"], mode]
     pid = (spawn or _spawn)(argv, scrubbed_env(p.venv), project.root, p.home / "build.log")
     project.ledger.append("build.started", "parallax", "", task=p.task["task"], pid=pid, budget_usd=p.left,
-                          settings=str(p.settings))
+                          settings=str(p.settings), mode=mode)
     return pid
 
 
-def run_build(project: Project, task_id: str, maker_for: Callable[[float, str], Agent]) -> str:
-    """The builder process: run the maker once, then record what came of it."""
+def run_build(project: Project, task_id: str, maker_for: Callable[[float, str], Agent], extra: str = "") -> str:
+    """Run the maker once, then record what came of it. extra: what a rework must fix."""
     if inside_task(project.root):
         raise ParallaxError("tasks can't start builds")
     p = prepare(project, task_id, setup=False, launching=False)
     env = {TASK_ENV: task_id, ROOT_ENV: str(project.root)}
     fn = make_permission_fn(project, task_id, p.worktree, scope=p.scope)
     before = sandbox.untracked(p.worktree)
-    res = _make(project, task_id, maker_for(p.left, str(p.settings)), goal(project, task_id), "build", fn, extra_env=env)
+    res = _make(project, task_id, maker_for(p.left, str(p.settings)), goal(project, task_id) + (f"\n\n{extra}" if extra else ""), "build",
+                 fn, extra_env=env)
 
     removed = sandbox.remove_leftovers(p.worktree, before)
     if removed:
@@ -203,11 +206,13 @@ def _alive(pid: int) -> bool:
 def running_builds(project: Project) -> dict[str, int]:
     """task -> builder pid, for tasks whose build hasn't finished or been stopped."""
     out: dict[str, int] = {}
+    legacy: set[str] = set()  # started before builds had a mode (M9): those end at build.finished
     for e in project.ledger.entries():
         tid = e["data"].get("task")
         if e["kind"] == "build.started":
             out[tid] = e["data"]["pid"]
-        elif e["kind"] in ("build.finished", "task.stopped"):
+            legacy.discard(tid) if "mode" in e["data"] else legacy.add(tid)
+        elif e["kind"] in ("builder.finished", "task.stopped") or (e["kind"] == "build.finished" and tid in legacy):
             out.pop(tid, None)
     return out
 
@@ -240,10 +245,21 @@ def _maker(left: float, settings: str) -> Agent:
     return ClaudeAgent(max_budget_usd=left, settings=settings)
 
 
+def _checker(left: float, model: str):
+    from .agents.claude import ClaudeChecker
+    return ClaudeChecker(model=model, max_budget_usd=left)
+
+
 def main(argv: list[str]) -> int:
-    root, task_id = argv
-    status = run_build(Project(Path(root)), task_id, _maker)
-    print(f"build {task_id}: {status}", flush=True)
+    from .check import run_check
+
+    root, task_id, mode = argv
+    project = Project(Path(root))
+    status = run_build(project, task_id, _maker) if mode == "build" else "built"
+    if status == "built":
+        status = run_check(project, task_id, _checker, _maker)
+    project.ledger.append("builder.finished", "parallax", "", task=task_id, status=status)
+    print(f"{mode} {task_id}: {status}", flush=True)
     return 0
 
 

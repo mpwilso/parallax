@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import os
 import subprocess
 import sys
@@ -6,11 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from fakes import FakeChecker, ScriptedAgent
+from fakes import FakeChecker, FakeDrafter, ScriptedAgent, blocker, good_probe, junit_runner
+from parallax import build, check, lifecycle, review
+from parallax.agents.base import Review
 from parallax.agents.claude import rule_on_tool_call, tool_to_action
 from parallax.core import POLICY_FILE, ParallaxError, Project
 from parallax.gate import make_permission_fn
 from parallax.runner import run_task
+from test_m8 import docs as lifecycle_docs, make_key
 
 POLICY = """\
 [actions]
@@ -78,26 +82,55 @@ def test_changed_policy_file_stops_every_later_action(repo):
     assert checker.calls == []
 
 
-def test_checker_is_blind_to_maker_explanation(repo):
-    proj, tid, wt = setup(repo)
-    agent = ScriptedAgent(
-        plan="PLAN-SECRET: write hello.txt",
-        steps=[
-            ("write", "hello.txt", "hello\n"),
-            ("shell", ["git", "add", "hello.txt"]),
-            ("shell", [*GIT, "commit", "-q", "-m", "COMMIT-SECRET because reasons"]),
-        ],
-        summary="SUMMARY-SECRET: I wrote hello.txt",
-    )
-    checker = FakeChecker()
-    assert run_task(proj, tid, agent, checker, plan=True) == "ready"
+def _approved(repo, tightening=""):
+    """A lifecycle task with its plan approved, with secrets planted where the checker must not look."""
+    make_key()
+    proj = Project.init(repo)
+    d = lifecycle_docs(tightening=tightening)
+    d["intent"] = d["intent"].replace("The steps assume PowerShell.", "PROBLEM-SECRET: the steps assume PowerShell.")
+    d["plan"] = d["plan"].replace("1. Edit README.md.", "1. PLAN-SECRET: edit README.md.")
+    tid = lifecycle.new_intent(proj, "fix the readme", FakeDrafter(d))["task"]
+    lifecycle.approve(proj, tid)
+    return proj, tid
 
-    (_, plan_material, k1), (goal, diff, k2) = checker.calls
-    assert (k1, k2) == ("plan", "diff")
-    assert "PLAN-SECRET" in plan_material
-    assert goal == "add a greeting file" and "hello.txt" in diff and "+hello" in diff
-    for secret in ("PLAN-SECRET", "COMMIT-SECRET", "SUMMARY-SECRET"):
-        assert secret not in goal + diff
+
+def _check(proj, tid, maker, checker, runner=None):
+    return check.run_check(proj, tid, checker, lambda left, settings: maker,
+                           test_runner=runner or junit_runner(), preflight_runner=good_probe)
+
+
+def _new_file_diff(path: str, content: str) -> str:
+    blob = hashlib.sha1(f"blob {len(content.encode())}\0{content}".encode()).hexdigest()[:7]
+    body = "".join(f"+{line}\n" for line in content.splitlines())
+    n = len(content.splitlines())
+    return (f"diff --git a/{path} b/{path}\nnew file mode 100644\nindex 0000000..{blob}\n--- /dev/null\n"
+            f"+++ b/{path}\n@@ -0,0 +1{'' if n == 1 else f',{n}'} @@\n{body}")
+
+
+def test_checker_is_blind_to_maker_explanation(repo):
+    """The pin: the checker gets exactly its brief, on the first review and on re-review."""
+    proj, tid = _approved(repo, tightening="check the WSL steps")
+    maker = ScriptedAgent(steps=[("write", "README.md", "first\n"),
+                                 ("shell", ["git", "add", "README.md"]),
+                                 ("shell", [*GIT, "commit", "-q", "-m", "COMMIT-SECRET because reasons"])],
+                          summary="SUMMARY-SECRET: I wrote it")
+    checker = FakeChecker(reviews=[blocker("REVIEWER-FINDING"), Review("pass")])
+    assert build.run_build(proj, tid, lambda left, settings: maker) == "built"
+    maker.steps["build"] = [("write", "README.md", "second\n")]
+    maker.summary = "REPLY-SECRET: fixed it as you asked"
+    assert _check(proj, tid, maker, checker) == "ready"
+
+    review_md = review.TEMPLATE.rstrip() + "\n\n## This task only\n\ncheck the WSL steps"
+    expected = [
+        f"Outcome:\nA new user on WSL can follow them.\n\nConstraints:\nKeep the macOS steps.\n\n"
+        f"REVIEW.md:\n{review_md}\n\nDiff:\n{_new_file_diff('README.md', content)}\n"
+        for content in ("first\n", "second\n")
+    ]
+    assert checker.briefs == expected  # exactly this, first review and re-review alike
+    for secret in ("PROBLEM-SECRET", "PLAN-SECRET", "SUMMARY-SECRET", "COMMIT-SECRET", "REPLY-SECRET"):
+        assert all(secret not in b for b in checker.briefs), secret
+    assert "REVIEWER-FINDING" in maker.goals[-1][1]  # the maker gets the findings; the checker never gets the reply
+    assert checker.models == ["claude-sonnet-5-5"] * 2
     assert proj.ledger.verify()[0]
 
 
@@ -112,14 +145,20 @@ def test_agreement_makes_task_ready(repo, verdict):
 
 @pytest.mark.parametrize("approve,status", [(True, "ready"), (False, "needs work")])
 def test_disagreement_goes_to_inbox_and_needs_a_reason(repo, approve, status):
-    proj, tid, wt = setup(repo)
-    checker = FakeChecker(verdict="fail", findings=["greeting is misspelled"])
-    assert run_task(proj, tid, ScriptedAgent(), checker) == "disputed"
+    """The rework rule: 3 recorded cycles, then the 4th fail comes to you."""
+    proj, tid = _approved(repo)
+    maker = ScriptedAgent(steps=[("write", "README.md", "x\n")])
+    checker = FakeChecker(reviews=[blocker("greeting is misspelled")])
+    build.run_build(proj, tid, lambda left, settings: maker)
+    assert _check(proj, tid, maker, checker) == "disputed"
+    assert len(checker.briefs) == 4 and len(maker.goals) == 4  # the first check, then 3 reworks
+    assert [e["data"]["cycle"] for e in proj.ledger.entries() if e["kind"] == "rework.started"] == [1, 2, 3]
     [item] = proj.inbox()
-    assert item["kind"] == "disagreement.raised" and "misspelled" in item["reason"]
+    assert item["kind"] == "disagreement.raised" and "after 3 rework cycles" in item["reason"]
+    assert "misspelled" in item["reason"]
 
     with pytest.raises(ParallaxError):
-        run_task(proj, tid, ScriptedAgent(), checker)  # can't rerun over an open disagreement
+        check.can_check(proj, tid)  # can't recheck over an open disagreement
     with pytest.raises(ParallaxError):
         proj.resolve(item["id"], approve, "  ")
     proj.resolve(item["id"], approve, "read the diff myself")
@@ -129,10 +168,13 @@ def test_disagreement_goes_to_inbox_and_needs_a_reason(repo, approve, status):
 
 
 def test_checker_error_goes_to_inbox_without_retry(repo):
-    proj, tid, wt = setup(repo)
+    proj, tid = _approved(repo)
+    maker = ScriptedAgent(steps=[("write", "README.md", "x\n")])
     checker = FakeChecker(error=True)
-    assert run_task(proj, tid, ScriptedAgent(), checker) == "disputed"
-    assert len(checker.calls) == 1
+    build.run_build(proj, tid, lambda left, settings: maker)
+    assert _check(proj, tid, maker, checker) == "disputed"
+    assert len(checker.briefs) == 1 and len(maker.goals) == 1
+    assert not [e for e in proj.ledger.entries() if e["kind"] == "rework.started"]
     [item] = proj.inbox()
     assert item["reason"].startswith("checker error")
 

@@ -94,6 +94,9 @@ class Project:
         policy_path = root / POLICY_FILE
         if not policy_path.exists():
             policy_path.write_text(DEFAULT_POLICY)
+        from .review import REVIEW_FILE, TEMPLATE as REVIEW_TEMPLATE
+        if not (root / REVIEW_FILE).exists():
+            (root / REVIEW_FILE).write_text(REVIEW_TEMPLATE, encoding="utf-8")
         (root / STATE_DIR).mkdir(exist_ok=True)
         (root / STATE_DIR / ".gitignore").write_text("*.lock\n")
         project = cls(root)
