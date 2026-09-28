@@ -114,6 +114,7 @@ def test_approving_the_gate_needs_no_reason_and_signs_the_file_hashes(proj, monk
     assert out.startswith(f"approved intent and plan for {tid} (ledger ")
     assert "estimated cost $1.50 (unverified), budget cap $2.00." in out
     assert "review tightening for this task: check the WSL steps by hand" in out
+    assert out.endswith(f"next: parallax build {tid}\n")
 
     [g] = kinds(proj, "gate.approved")
     folder = lifecycle.task_dir(proj, tid)

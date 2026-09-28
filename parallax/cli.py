@@ -317,7 +317,7 @@ def _gate(proj: Project, task_id: str, args) -> None:
         print(f"estimated cost ${plan['estimated_cost_usd']:.2f} (unverified), budget cap ${plan['budget_cap_usd']:.2f}.")
         if plan.get("review_tightening"):
             print(f"review tightening for this task: {_line(plan['review_tightening'])}")
-    print("the build step lands in m9.")
+    print(f"next: parallax build {task_id}")
 
 
 def _lint(path: Path, cwd: Path) -> int:
