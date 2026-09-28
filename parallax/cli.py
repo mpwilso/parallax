@@ -20,7 +20,7 @@ start here:
   parallax init                         set up parallax in your repo's folder
   parallax task new "what you want"     a task in its own copy of the repo
   parallax run <task>                   an agent does it, a second one checks it
-  parallax inbox                        everything waiting on you
+  parallax ui                           everything waiting on you, in your browser
   parallax approve <id> --reason "..."  (or reject) every call needs a reason
 
 more: parallax goal, pulse, evidence, log, verify. `parallax <command> -h` for details.
@@ -73,6 +73,9 @@ def main(argv: list[str] | None = None) -> int:
     pl.add_argument("--model", default=None)
 
     sub.add_parser("inbox", help="everything waiting on you, grouped, with recommendations")
+    ui = sub.add_parser("ui", help="open the inbox in your browser: every decision with what you need to make it")
+    ui.add_argument("--port", type=int, default=0)
+    ui.add_argument("--no-open", action="store_true", help="don't open the browser, just print the link")
     for name in ("approve", "reject"):
         r = sub.add_parser(name, help=f"{name} inbox items (on a disagreement: side with the maker / the checker)")
         r.add_argument("items", nargs="+", metavar="item")
@@ -153,6 +156,17 @@ def _run(args) -> int:
     if args.cmd in ("run", "review"):
         refuse_inside_task(proj.root)
         return _agents(proj, args)
+
+    if args.cmd == "ui":
+        from .ui import UI
+        app = UI(proj.root, args.port)
+        print(f"parallax ui is {'running' if args.no_open else 'open in your browser'}: {app.url}")
+        print("keep this window open while you use it. Ctrl+C to stop.", flush=True)
+        try:
+            app.serve(open_browser=not args.no_open)
+        except KeyboardInterrupt:
+            print("stopped.")
+        return 0
 
     if args.cmd in ("goal", "pulse"):
         refuse_inside_task(proj.root)
@@ -258,6 +272,8 @@ def _conduct(proj: Project, args) -> int:
     c = res["counts"]
     print(f"conductor {res['conductor']}. {c['inbox']} waiting on you, {c['ready']} ready to merge, "
           f"{c['running'] + c['launched']} running, {c['queued']} queued")
+    if c["inbox"]:
+        print("decide in `parallax ui`, or `parallax inbox`.")
     return 0
 
 
@@ -315,8 +331,8 @@ def _agents(proj: Project, args) -> int:
         return 0
 
     def waiting(e: dict) -> None:
-        print(f"waiting on decision {e['id']}  {e['data']['action']}  {e['reason']}")
-        print("  approve or reject it from another terminal.")
+        print(f"waiting on you: {e['data']['action']} {_line(e['reason'], 100)}")
+        print(f"  decide in `parallax ui`, or: parallax approve {e['id']} --reason \"...\"", flush=True)
 
     status = run_task(proj, args.task, ClaudeAgent(**model), checker,
                       plan=args.plan, on_wait=waiting, say=print)
@@ -328,8 +344,8 @@ def _agents(proj: Project, args) -> int:
 NEXT = {
     "ready": "next: look at the change with `parallax task diff {task}`. merging it is your call.\n",
     "reported": "next: read the report with `parallax log`.\n",
-    "disputed": "next: it's waiting on you in `parallax inbox`.\n",
-    "stuck": "next: it's waiting on you in `parallax inbox`.\n",
+    "disputed": "next: it's waiting on you. decide in `parallax ui`, or `parallax inbox`.\n",
+    "stuck": "next: it's waiting on you. decide in `parallax ui`, or `parallax inbox`.\n",
     "maker failed": "next: see what happened with `parallax log`, then try `parallax run {task}` again.\n",
 }
 
