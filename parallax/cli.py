@@ -84,9 +84,9 @@ def main(argv: list[str] | None = None) -> int:
     el = sub.add_parser("eval", help="test parallax on real merged fixes (run from the parallax repo folder)")
     esub = el.add_subparsers(dest="ecmd", required=True)
     ec = esub.add_parser("check", help="make sure every case is sound. no model, no cost")
-    ec.add_argument("--case", default=None)
+    ec.add_argument("--case", action="append", help="just this case (repeat for more)")
     er = esub.add_parser("run", help="run parallax on the cases and write a report")
-    er.add_argument("--case", default=None, help="run just this case")
+    er.add_argument("--case", action="append", help="just this case (repeat for more)")
     er.add_argument("--budget", type=float, default=25.0, help="stop before spending more than this, in dollars")
     er.add_argument("--model", default=None)
     ep = esub.add_parser("report", help="rebuild a run's report")
@@ -288,7 +288,8 @@ def _eval(args, cwd: Path) -> int:
 
     from .agents.claude import ClaudeAgent, ClaudeChecker
     model = {"model": args.model} if args.model else {}
-    print(f"running {len(cases)} cases, budget ${args.budget:.2f}. this takes a while; each case prints when done.")
+    n = f"{len(cases)} case{'s' if len(cases) != 1 else ''}"
+    print(f"running {n}, budget ${args.budget:.2f}. this takes a while; each case prints when done.")
     out = evals.run(root, cases,
                     make_maker=lambda cap: ClaudeAgent(**model, max_budget_usd=cap),
                     make_checker=lambda cap: ClaudeChecker(**model, max_budget_usd=cap),

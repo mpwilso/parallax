@@ -43,7 +43,9 @@ def refuse_inside_task(root: Path) -> None:
 
 
 def _git(repo: Path, *args: str) -> str:
-    result = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+    # git speaks UTF-8; Windows' default (cp1252) crashes on diffs with characters like box drawing
+    result = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True,
+                            encoding="utf-8", errors="replace")
     if result.returncode != 0:
         raise ParallaxError(result.stderr.strip() or f"git {' '.join(args)} failed")
     return result.stdout.strip()

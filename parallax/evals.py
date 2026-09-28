@@ -60,13 +60,15 @@ def find_cases(start: Path) -> Path:
     raise ParallaxError("no evals/cases.toml here. run this from the parallax repo folder")
 
 
-def load_cases(root: Path, only: str | None = None) -> list[Case]:
+def load_cases(root: Path, only: list[str] | str | None = None) -> list[Case]:
     with open(root / CASES_FILE, "rb") as f:
         cases = [Case(**c) for c in tomllib.load(f).get("case", [])]
     if only:
-        cases = [c for c in cases if c.id == only]
-        if not cases:
-            raise ParallaxError(f"no case {only!r} in evals/cases.toml")
+        only = [only] if isinstance(only, str) else only
+        missing = set(only) - {c.id for c in cases}
+        if missing:
+            raise ParallaxError(f"no case {', '.join(sorted(missing))} in evals/cases.toml")
+        cases = [c for c in cases if c.id in only]
     return cases
 
 
@@ -271,6 +273,8 @@ def run_case(case: Case, workdir: Path, maker: Agent, checker: Checker) -> Resul
             reasons = {"stuck": "maker got stuck", "maker failed": f"maker stopped: {r.summary}",
                        "disputed": "wrong fix, and the checker flagged it"}
             r.reason = reasons.get(r.task_status, "wrong or incomplete fix")
+        elif r.task_status in ("maker failed", "stuck"):
+            r.reason = f"the humans' tests pass, but the maker didn't finish ({r.summary or r.task_status}), so the checker never ran"
     except Exception as err:  # a crashed case is a result too, never skipped silently
         r.outcome, r.reason = "error", f"{type(err).__name__}: {err}"[:300]
     r.seconds = round(time.monotonic() - started, 1)
@@ -322,7 +326,9 @@ def read_run(path: Path) -> tuple[dict, list[Result]]:
 
 
 def _cell(text: str) -> str:
-    return " ".join(str(text).split()).replace("|", "\\|")
+    """Quoted agent text, on one line, safe in a table, and in the house style (no em dashes)."""
+    text = " ".join(str(text).split()).replace(" — ", ", ").replace("—", ", ")
+    return text.replace("|", "\\|")
 
 
 def write_report(jsonl: Path) -> Path:

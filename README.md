@@ -114,7 +114,7 @@ The bars are in `[limits]`: `promote_after` (10), `evidence_days` (30), `law_aft
 - [x] M2: maker and blind checker, plan review, verdicts, disagreement routing
 - [x] M3: conductor on a pulse, driven by a human-owned mission file, several tasks in parallel
 - [x] M4: evidence moves the line both ways: promotion proposals and law proposals, each approved by a human
-- [ ] M5: evals against real open-source changes, results published
+- [x] M5: evals against real open-source changes, results published
 - [ ] M6: local visual decision inbox
 
 ## Evals
@@ -128,6 +128,11 @@ parallax eval check     # every case is sound: the PR's tests fail before the fi
 parallax eval run       # run all cases, stops at --budget (default $25), writes a report
 parallax eval report    # rebuild the latest report
 ```
+
+**Latest results** (2026-09-28, 11 cases from 6 projects, $12.12 in all):
+
+- **10 of 11 fixes resolved.** Run [67faab](evals/results/2026-09-28-67faab.md) resolved 8. Two more crashed on a bug in Parallax itself: diffs with non-ASCII text broke on Windows. That's fixed, and both resolved on rerun [73982e](evals/results/2026-09-28-73982e.md).
+- **The blind checker:** 8 right, 1 missed, 1 false alarm. The miss (humanize-174) passed all 665 existing tests but not the humans' rounding rule, so it would have reached you marked ready. The false alarm (tomlkit-512) flagged a correct fix. One case finished at its budget cap before the checker ran.
 
 Cases live in [evals/cases.toml](evals/cases.toml). Evals run under a fixed policy with no asks, so nothing waits on a human and no model approves anything.
 

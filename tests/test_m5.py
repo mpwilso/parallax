@@ -147,6 +147,14 @@ def test_task_new_says_what_to_do_next(repo, monkeypatch, capsys):
     assert "next: parallax run " in capsys.readouterr().out
 
 
+def test_diffs_with_non_ascii_text_work(repo):
+    # found by the first eval run: box-drawing characters crashed the diff on Windows
+    proj = Project.init(repo)
+    t = proj.new_task("x")
+    (Path(t["worktree"]) / "table.txt").write_text("╒═══╕\n│ é │\n╘═══╛\n", encoding="utf-8")
+    assert "╒═══╕" in proj.diff(t["task"])
+
+
 def test_bare_parallax_prints_a_guide(capsys):
     assert main([]) == 0
     out = capsys.readouterr().out
