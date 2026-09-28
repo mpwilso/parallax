@@ -152,13 +152,10 @@ def test_build_needs_an_approved_unchanged_plan(proj):
         build.prepare(proj, tid)
 
 
-def test_the_cap_counts_what_was_spent_since_the_plan_was_approved(proj):
-    tid = approved_task(proj)  # drafting cost 0.2, before the plan's cap existed
-    cap, left = build.budget(proj, tid, lifecycle.plan_data(proj, tid))
-    assert (cap, left) == (2.0, 2.0)
-    proj.ledger.append("maker.finished", "maker", "", task=tid, stage="build", status="done", cost_usd=1.5)
-    assert build.budget(proj, tid, lifecycle.plan_data(proj, tid)) == (2.0, 0.5)
-    proj.ledger.append("maker.finished", "maker", "", task=tid, stage="build", status="done", cost_usd=0.5)
+def test_the_cap_counts_everything_the_task_spent(proj):
+    tid = approved_task(proj)  # drafting cost 0.2, and it counts
+    assert build.costs.budget(proj, tid, lifecycle.plan_data(proj, tid)) == (2.0, 1.8)
+    proj.ledger.append("maker.finished", "maker", "", task=tid, stage="build", status="done", cost_usd=1.8)
     with pytest.raises(Exception, match="used its budget cap"):
         build.prepare(proj, tid)
 
@@ -312,7 +309,7 @@ def test_cli_build_runs_preflight_then_launches(proj, monkeypatch, capsys):
     monkeypatch.setattr(preflight, "run_srt", good_probe)
     monkeypatch.setattr(build, "_spawn", lambda argv, env, cwd, log: spawned.append((argv, env)) or 4242)
     assert main(["build", tid]) == 0
-    assert capsys.readouterr().out == f"building {tid}, estimated budget $2.00. parallax stop ends it.\n"
+    assert capsys.readouterr().out == f"building {tid}, estimated budget $1.80. parallax stop ends it.\n"  # drafting cost 0.2
     [(argv, env)] = spawned
     assert argv[-4:] == ["parallax.build", str(proj.root), tid, "build"]
     assert env["CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"] == "1" and "ANTHROPIC_API_KEY" not in env
@@ -332,7 +329,7 @@ def test_the_builder_runs_the_maker_and_records_the_outcome(proj):
                              summary="rewrote the README", cost=0.3)
 
     assert build.run_build(proj, tid, maker_for) == "built"
-    assert got["left"] == 2.0 and got["settings"].endswith("settings.json")
+    assert got["left"] == 1.8 and got["settings"].endswith("settings.json")
     assert kinds(proj, "sandbox.cleaned")[0]["data"]["files"] == [".env"]
     assert lifecycle.status_line(proj, tid) == "built"
     assert "README.md" in proj.diff(tid, "--name-only")

@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from . import approvals, lint
+from . import approvals, costs, lint
 from .agents.base import Agent, AgentResult
 from .core import ROOT_ENV, TASK_ENV, ParallaxError, Project, refuse_inside_task
 from .gate import make_permission_fn
@@ -79,8 +79,8 @@ files lists every file the change touches, tests included. Never list CLAUDE.md,
 .claude/, .mcp.json, .git, .parallax/, parallax.policy.toml, mission.md, docs/parallax.md or
 docs/tasks/: the maker can never write them. domains, outside_reads, binaries, symlinks and
 dependencies stay empty unless the work needs them; say why in the steps. Costs are estimated
-US dollars for building and checking this task; the cap stops the run, so set it a little above
-the estimate.""",
+US dollars for the whole task: the drafting so far, then building, checking and any rework. The
+cap stops the task, so set it a little above the estimate.""",
 }
 
 
@@ -164,6 +164,9 @@ def _material(project: Project, task_id: str, doc: str, feedback: str) -> str:
         parts.append(f"The intent:\n{_read(project, task_id, 'intent')}")
     if doc == "plan" and doc_path(project, task_id, "spec").exists():
         parts.append(f"The spec:\n{_read(project, task_id, 'spec')}")
+    if doc == "plan":
+        parts.append(f"Drafting this task has cost an estimated ${costs.spent(project, task_id):.2f} so far. "
+                     "It counts against the cap.")
     if feedback:
         parts.append(f"The human rejected the last draft. Their reason (data):\n{feedback}")
     return "\n\n".join(parts)
@@ -253,6 +256,12 @@ def approve(project: Project, task_id: str) -> dict:
             path = doc_path(project, task_id, doc)
             if not path.exists() or file_hash(path) != sha:
                 raise ParallaxError(f"{rel(project, path)} changed after you approved it. put it back as it was")
+    if "plan" in st.gate:
+        plan = plan_data(project, task_id)
+        used = costs.spent(project, task_id)
+        if plan and float(plan["budget_cap_usd"]) <= used:
+            raise ParallaxError(f"the plan's budget cap (${float(plan['budget_cap_usd']):.2f}) isn't above what drafting "
+                                f"already spent (${used:.2f} estimated). raise budget_cap_usd in the plan, then approve")
     files = {doc: file_hash(doc_path(project, task_id, doc)) for doc in st.gate}
     gate = "+".join(st.gate)
     return project.ledger.append("gate.approved", "human", "", task=task_id, gate=gate, files=files,

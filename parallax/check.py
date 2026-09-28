@@ -16,7 +16,7 @@ import hashlib
 from dataclasses import asdict
 from typing import Callable
 
-from . import build, lifecycle, review, testrun, tree
+from . import build, costs, lifecycle, review, testrun, tree
 from .agents.base import BlindChecker, CheckerError, Review
 from .core import ParallaxError, Project
 
@@ -73,10 +73,12 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
     intent = lifecycle.doc_path(project, task_id, "intent").read_text(encoding="utf-8")
     review_text = review.load(project.root)
     brief = review.brief(intent, review_text, plan["review_tightening"], s.diff)
-    left = build.budget(project, task_id, plan)[1]
+    left = costs.budget(project, task_id, plan)[1]
+    if left <= 0:
+        project.ledger.append("check.finished", "parallax", "the budget cap is reached", task=task_id,
+                              status="stuck", tree=s.tree)
+        return costs.stop_at_cap(project, task_id, p.cap), []
     try:
-        if left <= 0:
-            raise CheckerError(f"no budget left for the checker (${p.cap:.2f} estimated cap)")
         rv: Review = checker_for(left, settings["model"]).check(brief)
     except Exception as err:  # recorded for you, never retried silently
         project.ledger.append("verdict.recorded", "checker", str(err), task=task_id, stage="check", tree=s.tree,
@@ -113,13 +115,15 @@ def run_check(project: Project, task_id: str, checker_for: CheckerFor, maker_for
     cap = project.policy.check["rework_cap"]
     while True:
         status, fix = check_once(project, task_id, checker_for, test_runner)
-        if status != "rework":
+        if status != "rework":  # ready, disputed, or stuck at the cap
             return status
         cycles = rework_cycles(project, task_id)
         if cycles >= cap:
             summary = "; ".join(line.splitlines()[0] for line in fix)
             return _to_you(project, task_id, "check", f"the check still fails after {cap} rework cycles: {summary}")
         p = build.prepare(project, task_id, setup=False, launching=False)
+        if p.left <= 0:
+            return costs.stop_at_cap(project, task_id, p.cap)
         if not all(line.ok for line in build.run_preflight(project, p, preflight_runner)):
             project.ledger.append("stuck.raised", "parallax", "preflight failed before a rework, so it didn't launch",
                                   task=task_id)

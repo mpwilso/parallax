@@ -2,8 +2,8 @@
 
 Before launch, in your terminal:
 - the plan's approval must verify, and every approved file must still match its hash;
-- the budget is what's left of the plan's cap, counting every recorded cost since the plan was
-  approved (drafting ran before the cap existed, under its own per-call ceiling);
+- the budget is what's left of the plan's cap, counting every cost the task has recorded,
+  drafting included (costs.py). With nothing left, it won't launch;
 - the policy's [build] setup makes the task's venv once, as you, before any maker exists;
 - the sandbox rules are generated from the plan and written outside the worktree;
 - preflight must pass.
@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from . import guard, lifecycle, preflight, sandbox
+from . import costs, guard, lifecycle, preflight, sandbox
 from .agents.base import Agent
 from .core import ROOT_ENV, TASK_ENV, ParallaxError, Project, inside_task, refuse_inside_task
 from .gate import Scope, make_permission_fn
@@ -55,16 +55,6 @@ def scrubbed_env(venv: Path | None, environ: dict | None = None) -> dict[str, st
         env["VIRTUAL_ENV"] = str(venv)
     env["CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"] = "1"
     return env
-
-
-def budget(project: Project, task_id: str, plan: dict) -> tuple[float, float]:
-    """(cap, left): the plan's cap and what's left of it since the plan was approved."""
-    entries = [e for e in project.ledger.entries() if e["data"].get("task") == task_id]
-    approved = max((i for i, e in enumerate(entries) if e["kind"] == "gate.approved" and "plan" in e["data"]["files"]),
-                   default=0)
-    spent = sum(e["data"].get("cost_usd") or 0 for e in entries[approved:])
-    cap = float(plan["budget_cap_usd"])
-    return cap, round(cap - spent, 4)
 
 
 def goal(project: Project, task_id: str) -> str:
@@ -118,8 +108,8 @@ def prepare(project: Project, task_id: str, setup: bool = True, launching: bool 
     plan = lifecycle.plan_data(project, task_id)
     if plan is None:
         raise ParallaxError(f"the approved plan for {task_id} has no readable toml block")
-    cap, left = budget(project, task_id, plan)
-    if left <= 0:
+    cap, left = costs.budget(project, task_id, plan)
+    if launching and left <= 0:
         raise ParallaxError(f"task {task_id} has used its budget cap (${cap:.2f} estimated)")
 
     wt = Path(t["worktree"])
@@ -164,6 +154,8 @@ def run_build(project: Project, task_id: str, maker_for: Callable[[float, str], 
     if inside_task(project.root):
         raise ParallaxError("tasks can't start builds")
     p = prepare(project, task_id, setup=False, launching=False)
+    if p.left <= 0:
+        return costs.stop_at_cap(project, task_id, p.cap)
     env = {TASK_ENV: task_id, ROOT_ENV: str(project.root)}
     fn = make_permission_fn(project, task_id, p.worktree, scope=p.scope)
     before = sandbox.untracked(p.worktree)
@@ -182,12 +174,16 @@ def run_build(project: Project, task_id: str, maker_for: Callable[[float, str], 
         status = "disputed"
     elif project.task(task_id)["status"] == "stuck":
         status = "stuck"
+    elif costs.budget(project, task_id, p.plan)[1] <= 0 or "budget cap" in (res.summary or ""):
+        status = "over budget"  # recorded below, and it comes to you
     elif res.status == "done":
         status = "built"
     else:
         status = "blocked" if res.summary.strip().lower().startswith("blocked:") else "maker failed"
     first = res.summary.strip().splitlines()[0][:200] if res.summary.strip() else ""
     project.ledger.append("build.finished", "parallax", first, task=task_id, status=status)
+    if status == "over budget":
+        return costs.stop_at_cap(project, task_id, p.cap)
     if status == "blocked":  # a refusal made the task impossible: it comes to you now, not after rework
         project.ledger.append("stuck.raised", "parallax", first, task=task_id)
     return status

@@ -270,3 +270,56 @@ def test_show_keeps_a_long_reason_out_of_the_header(repo):
     assert "Bottom line: Needs you: the plan's tests couldn't run (exit 4)." in text
     assert f"- {long} (ledger {item['id']})" in text
     assert lint.lint_report(text, root=proj.root, ledger_ids={e["id"] for e in proj.ledger.entries()}) == []
+
+
+# the budget cap --------------------------------------------------------------------------------
+
+def test_a_task_stops_at_its_cap(repo):
+    """003876's case: drafting counts, and a build that crosses the cap stops the task."""
+    proj, tid, wt = approved(repo)  # drafting cost 0.2 of the 2.00 cap
+    checker = FakeChecker()
+    maker = ScriptedAgent(steps=[("write", "README.md", "ok\n")], cost=1.9)
+    assert build.run_build(proj, tid, lambda left, settings: maker) == "stuck"
+    [item] = proj.inbox()
+    assert item["reason"] == "the budget cap is reached: $2.10 of $2.00 estimated" and item["data"]["budget"]
+    assert proj.task(tid)["status"] == "stuck" and checker.briefs == []
+    assert show.report(proj, tid).startswith("Type: Decision needed\nBottom line: Needs you: the budget cap is reached")
+
+
+def test_the_checkers_cost_can_stop_a_rework_before_it_starts(repo):
+    proj, tid, wt = approved(repo)
+    maker = built(proj, tid, [("write", "README.md", "ok\n")])
+    maker.cost = 1.4
+    proj.ledger.append("maker.finished", "maker", "", task=tid, stage="build", status="done", cost_usd=1.4)
+    costly = Review("fail", [Finding("blocker", "README.md:1", "wrong")], "nothing", cost_usd=0.5)
+    assert run(proj, tid, maker, FakeChecker(reviews=[costly])) == "stuck"
+    assert len(maker.goals) == 1 and not kinds(proj, "rework.started")  # the maker wasn't launched again
+    assert "budget cap is reached" in proj.inbox()[0]["reason"]
+
+
+def test_every_call_gets_what_is_left_as_its_ceiling(repo):
+    proj, tid, wt = approved(repo)
+    lefts = {}
+    maker = ScriptedAgent(steps=[("write", "README.md", "ok\n")], cost=0.5)
+    build.run_build(proj, tid, lambda left, settings: lefts.setdefault("maker", left) and maker)
+    checker = FakeChecker()
+    check.run_check(proj, tid, lambda left, model: lefts.setdefault("checker", left) and checker,
+                    lambda left, settings: maker, test_runner=junit_runner(), preflight_runner=good_probe)
+    assert lefts == {"maker": 1.8, "checker": 1.3}
+
+
+def test_the_sdk_stopping_at_its_budget_comes_to_you(repo):
+    proj, tid, wt = approved(repo)
+    maker = ScriptedAgent(status="error", summary="stopped at the budget cap ($1.8)", cost=0.1)
+    assert build.run_build(proj, tid, lambda left, settings: maker) == "stuck"
+    assert "budget cap is reached" in proj.inbox()[0]["reason"]
+
+
+def test_approval_refuses_a_cap_drafting_already_spent(repo):
+    make_key()
+    proj = Project.init(repo)
+    drafter = FakeDrafter(docs(), cost=1.5)
+    tid = lifecycle.new_intent(proj, "fix the readme", drafter)["task"]
+    assert "Drafting this task has cost an estimated $1.50 so far" in drafter.requests[-1]
+    with pytest.raises(Exception, match="isn't above what drafting already spent"):
+        lifecycle.approve(proj, tid)
