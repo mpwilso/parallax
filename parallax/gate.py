@@ -11,7 +11,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Callable
 
-from . import guard
+from . import guard, rules
 from .agents.base import Permission, PermissionFn
 from .core import Project
 from .policy import ALLOW, DENY
@@ -36,10 +36,15 @@ def make_permission_fn(
         return Permission(False, f"refused: {why}")
 
     def decide(action: str, detail: str, paths: list[str] | None) -> Permission:
-        nonlocal stopped
-        if guard.fingerprint(project.root) != snapshot:
-            stopped = "protected files changed during the run, all actions stopped"
-            return refuse(action, detail, stopped)
+        nonlocal stopped, snapshot
+        now = guard.fingerprint(project.root)
+        if now != snapshot:
+            if rules.trail_ok(project, snapshot, now):  # a change you approved: adopt it
+                snapshot = now
+                project.reload_policy()
+            else:
+                stopped = "protected files changed during the run, all actions stopped"
+                return refuse(action, detail, stopped)
 
         if read_only and action != "fs.read":
             project.ledger.append("action.refused", "agent", detail, task=task_id, action=action,

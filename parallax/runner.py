@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
-from . import guard
+from . import guard, rules
 from . import mission as missions
 from .agents.base import AGREE, Agent, AgentResult, Checker
 from .checker import diff_material, review
@@ -105,7 +105,8 @@ def run_task(project: Project, task_id: str, maker: Agent, checker: Checker, *, 
     touched = guard.protected_in(project.diff(task_id, "--name-only").splitlines())
     if touched:
         problems.append(f"diff touches protected files: {', '.join(touched)}")
-    if guard.fingerprint(project.root) != before:
+    after = guard.fingerprint(project.root)
+    if after != before and not rules.trail_ok(project, before, after):
         problems.append("policy or mission file changed during the run")
     if problems:
         why = "; ".join(problems)

@@ -7,17 +7,19 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import tomllib
 import uuid
 from pathlib import Path
 
 from . import status
 from .ledger import Ledger
 from .mission import MISSION_FILE, TEMPLATE as MISSION_TEMPLATE
-from .policy import ALLOW, ASK, DEFAULT_POLICY, DEFAULT_PROFILE, DENY, Policy
+from .policy import ALLOW, ASK, DEFAULT_POLICY, DEFAULT_PROFILE, DENY, Policy, normalize_detail
 
 STATE_DIR = ".parallax"
 POLICY_FILE = "parallax.policy.toml"
-INBOX_KINDS = {"decision.requested", "disagreement.raised", "stuck.raised", "proposal.raised"}
+INBOX_KINDS = {"decision.requested", "disagreement.raised", "stuck.raised", "proposal.raised",
+               "promotion.raised", "law.raised"}
 TASK_ENV, ROOT_ENV = "PARALLAX_TASK", "PARALLAX_ROOT"  # set for every maker process
 
 
@@ -56,9 +58,12 @@ class Project:
         self.root = Path(root).resolve()
         self.state = self.root / STATE_DIR
         self.ledger = Ledger(self.state / "ledger.jsonl")
+        self.reload_policy()
+
+    def reload_policy(self) -> None:
         try:
             self.policy = Policy.load(self.root / POLICY_FILE)
-        except ValueError as err:
+        except (ValueError, tomllib.TOMLDecodeError) as err:
             raise ParallaxError(f"bad policy: {err}") from err
 
     # setup ---------------------------------------------------------------
@@ -132,15 +137,18 @@ class Project:
     # policy checks ---------------------------------------------------------
     def check(self, task_id: str, action: str, detail: str = "", actor: str = "agent") -> dict:
         """An agent asks to take an action. Returns the ruling and logs it."""
-        table = self.policy.table(self.task(task_id)["profile"])
-        ruling = table.get(action, DENY)
+        t = self.task(task_id)
+        profile, key = t["profile"], normalize_detail(action, detail, t["worktree"])
+        ruling = self.policy.ruling(action, profile, key)
+        refs = {"task": task_id, "action": action, "key": key}
         if ruling == ALLOW:
-            e = self.ledger.append("action.granted", actor, detail, task=task_id, action=action)
+            e = self.ledger.append("action.granted", actor, detail, **refs)
         elif ruling == DENY:
-            why = "denied by policy" if action in table else "not in policy, denied by default"
-            e = self.ledger.append("action.refused", actor, detail, task=task_id, action=action, why=why)
+            listed = self.policy.listed(action, profile, key)
+            why = "denied by policy" if listed else "not in policy, denied by default"
+            e = self.ledger.append("action.refused", actor, detail, **refs, why=why)
         else:
-            e = self.ledger.append("decision.requested", actor, detail, task=task_id, action=action)
+            e = self.ledger.append("decision.requested", actor, detail, **refs)
         return {"ruling": ruling, "entry": e}
 
     # inbox -----------------------------------------------------------------

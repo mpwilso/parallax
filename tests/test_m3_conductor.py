@@ -154,11 +154,11 @@ def test_goal_becomes_proposals_that_need_a_yes(repo):
     assert len(entries) == 3 and proj.tasks() == {}  # nothing created yet
     assert entries[2]["data"]["profile"] == "default" and "unknown profile" in entries[2]["data"]["why"]
 
-    _, task = resolve_item(proj, entries[0]["id"], True, "yes, small")
+    task = resolve_item(proj, entries[0]["id"], True, "yes, small").task
     assert task["status"] == "queued" and task["goal"] == "add mul()" and task["proposal"] == entries[0]["id"]
-    _, task = resolve_item(proj, entries[1]["id"], True, "worth a look")
+    task = resolve_item(proj, entries[1]["id"], True, "worth a look").task
     assert task["profile"] == "readonly"
-    _, none = resolve_item(proj, entries[2]["id"], False, "no")
+    none = resolve_item(proj, entries[2]["id"], False, "no").task
     assert none is None and len(proj.tasks()) == 2
 
     snap_conductor = FakeConductor()

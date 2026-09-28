@@ -10,6 +10,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
+from . import evidence
 from . import mission as missions
 from .agents.base import Conductor
 from .core import Project, refuse_inside_task
@@ -74,6 +75,10 @@ def _pulse(project: Project, conductor: Conductor | None, launch, now: datetime)
             why = f"no activity for {limits['stale_minutes']} minutes, the run may have died"
             project.ledger.append("stuck.raised", "parallax", why, task=tid)
             findings.append(f"task {tid} flagged stuck: {why}")
+
+    # evidence: requests you keep approving become promotion proposals (code, not a model)
+    for p in evidence.raise_promotions(project, now):
+        findings.append(f"promotion proposed: {p['data']['action']} {p['data']['key']}")
 
     # 2. launch queued tasks, oldest first, up to the cap
     tasks = project.tasks()

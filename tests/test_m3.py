@@ -62,7 +62,8 @@ def test_profiles_are_full_tables_and_readonly_is_fixed():
 
 
 def test_limits_have_defaults_and_are_validated():
-    assert Policy({}).limits == {"max_parallel": 4, "stuck_after": 3, "stale_minutes": 60}
+    assert Policy({}).limits == {"max_parallel": 4, "stuck_after": 3, "stale_minutes": 60,
+                                 "promote_after": 10, "evidence_days": 30, "law_after": 3}
     assert Policy({}, limits={"max_parallel": 2}).limits["max_parallel"] == 2
     for bad in ({"max_parallel": 0}, {"max_paralel": 2}, {"stuck_after": True}):
         with pytest.raises(ValueError):

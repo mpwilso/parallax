@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .agents.base import AgentUnavailable
 from .core import ParallaxError, Project, refuse_inside_task
-from .inbox import batched, label, recommendations, resolve_item, split_goal
+from .inbox import batched, details, label, recommendations, resolve_item, split_goal
 
 MARK = {"allow": "ALLOWED", "ask": "NEEDS YOU", "deny": "REFUSED"}
 LOG_FIELDS = ("task", "action", "stage", "status", "verdict", "outcome", "why")
@@ -58,6 +58,9 @@ def main(argv: list[str] | None = None) -> int:
         r = sub.add_parser(name, help=f"{name} inbox items (on a disagreement: side with the maker / the checker)")
         r.add_argument("items", nargs="+", metavar="item")
         r.add_argument("--reason", required=True, help="one reason, recorded on every item")
+
+    ev = sub.add_parser("evidence", help="approvals and rejections per exact request, and where the line could move")
+    ev.add_argument("-n", type=int, default=20)
 
     lg = sub.add_parser("log", help="show the ledger")
     lg.add_argument("-n", type=int, default=20)
@@ -126,8 +129,8 @@ def _run(args) -> int:
             print(header)
             for e in items:
                 print(f"  {e['id']}  {label(e)}  {_line(e['reason'])}")
-                if e["kind"] == "proposal.raised" and e["data"].get("why"):
-                    print(f"            why: {_line(e['data']['why'])}")
+                for extra in details(e):
+                    print(f"            {_line(extra)}")
                 if e["id"] in recs:
                     r = recs[e["id"]]
                     print(f"            conductor recommends {r['data']['option']}: {_line(r['reason'])}")
@@ -137,17 +140,31 @@ def _run(args) -> int:
         failed = 0
         for item in args.items:
             try:
-                e, task = resolve_item(proj, item, args.cmd == "approve", args.reason)
+                out = resolve_item(proj, item, args.cmd == "approve", args.reason)
             except ParallaxError as err:
                 print(f"parallax: {err}", file=sys.stderr)
                 failed += 1
                 continue
-            d = e["data"]
+            e, d = out.entry, out.entry["data"]
             what = d.get("action") or (f"disagreement ({d['stage']})" if d.get("stage") else d["about"].split(".")[0])
             print(f"{d['outcome']}  {what}  (ledger {e['id']})")
-            if task:
-                print(f"  task {task['task']} created and queued for the next pulse")
+            if out.task:
+                print(f"  task {out.task['task']} created and queued for the next pulse")
+            if out.changed:
+                print(f"  {out.changed}")
         return 1 if failed else 0
+
+    if args.cmd == "evidence":
+        from .evidence import table
+        rows = table(proj)[:args.n]
+        if not rows:
+            print("no decisions in the evidence window yet.")
+        else:
+            print(f"{'approved':>8}  {'rejected':>8}  {'status':<22}  request")
+        for (profile, action, key), s, status in rows:
+            where = "" if profile == "default" else f" ({profile})"
+            print(f"{len(s['approved']):>8}  {len(s['rejected']):>8}  {status:<22}  {action}{where}: {_line(key, 80)}")
+        return 0
 
     if args.cmd == "log":
         for e in proj.ledger.entries()[-args.n:]:
