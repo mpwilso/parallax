@@ -269,7 +269,7 @@ function context(it) {
           el("code", {}, `${target} = ${c.rule.ruling}`), el("span", { class: "note" }, `  (profile ${c.rule.profile})`))));
       } else out.push(el("p", { class: "note" }, "This one goes into mission.md's how section, which agents read on their next run."));
       out.push(...section(`The evidence: ${c.evidence.length} of your rejections`, el("div", { class: "card" },
-        el("ul", { class: "plain" }, c.evidence.map(r => el("li", {}, el("code", {}, r.about), "  you said: ", el("em", {}, r.reason)))))));
+        el("ul", { class: "plain" }, c.evidence.map(r => el("li", {}, el("code", {}, r.about), ". You said: ", el("em", {}, r.reason)))))));
       break;
     }
   }
@@ -295,7 +295,8 @@ async function decide(targets, approve) {
   if (!reason) return;
   try {
     const res = await api("/api/resolve", { method: "POST", body: JSON.stringify({ ids: targets.map(t => t.id), approve, reason }) });
-    state.result = res.results;
+    const names = Object.fromEntries(targets.map(t => [t.id, t.headline]));
+    state.result = res.results.map(r => ({ ...r, headline: names[r.id], choice: approve ? targets[0].choices[0] : targets[0].choices[1] }));
     state.draft = "";
     state.checked.clear();
     await refresh(true);
@@ -307,16 +308,17 @@ async function decide(targets, approve) {
 
 function resultView() {
   if (!state.result) return null;
-  return el("div", { class: "result" }, state.result.map(r => r.ok
-    ? el("div", { class: "card good" }, "Decided." + (r.changed ? " " + r.changed + "." : "") + (r.task ? ` Task ${r.task} created and queued for the next pulse.` : ""))
-    : el("div", { class: "card bad" }, r.error, r.snippet ? el("pre", {}, r.snippet) : null)));
+  return el("div", { class: "result", style: "margin:0 0 18px" }, state.result.map(r => r.ok
+    ? el("div", { class: "card good" }, (r.choice ? `You chose ${r.choice} for: ` : "Done: ") + (r.headline || r.id) + "."
+        + (r.changed ? " " + r.changed + "." : "") + (r.task ? ` Task ${r.task} created and queued for the next pulse.` : ""))
+    : el("div", { class: "card bad" }, (r.headline ? r.headline + ": " : "") + r.error, r.snippet ? el("pre", {}, r.snippet) : null)));
 }
 
 function renderInboxDetail(d) {
   const picked = [...state.checked].map(find).filter(Boolean);
   if (picked.length > 1) {
-    d.append(el("h1", {}, `${picked.length} ${picked[0].kind_name} items`), el("div", { class: "sub" }, "One reason covers all of them."),
-      el("div", { class: "card" }, el("ul", { class: "plain" }, picked.map(p => el("li", {}, p.headline)))), resultView(), decideBar(picked));
+    d.append(...[el("h1", {}, `${picked.length} ${picked[0].kind_name} items`), el("div", { class: "sub" }, "One reason covers all of them."),
+      el("div", { class: "card" }, el("ul", { class: "plain" }, picked.map(p => el("li", {}, p.headline)))), resultView(), decideBar(picked)].filter(Boolean));
     return;
   }
   const it = find(state.selected);
@@ -326,9 +328,9 @@ function renderInboxDetail(d) {
       items().length ? "Everything you need to decide is on its page." : "Agents are working, or idle. New items appear here on their own."));
     return;
   }
-  d.append(el("h1", {}, it.headline),
+  d.append(...[resultView(), el("h1", {}, it.headline),
     el("div", { class: "sub" }, it.kind_name + (it.task ? " on task " + it.task : "") + ", " + ago(it.ts)),
-    ...context(it), resultView(), decideBar([it]));
+    ...context(it), decideBar([it])].filter(Boolean));
 }
 
 // ---------- tasks ----------
@@ -346,15 +348,17 @@ async function renderTaskDetail(d) {
   if (!state.task) { d.append(el("div", { class: "empty" }, el("div", { class: "big" }, "Pick a task on the left."), "You'll see its timeline and its change.")); return; }
   let t;
   try { t = await api("/api/task/" + state.task); } catch (err) { d.append(el("div", { class: "card bad" }, err.message)); return; }
-  d.replaceChildren(el("h1", {}, t.goal.split("\n")[0]),
+  if (state.tab !== "tasks" || state.task !== t.id) return;  // the view moved on while this loaded
+  d.replaceChildren(...[el("h1", {}, t.goal.split("\n")[0]),
     el("div", { class: "sub" }, el("span", { class: "chip " + t.status.replace(" ", "-") }, t.status), "  task " + t.id,
       t.cost_usd ? ", " + money(t.cost_usd) : "", t.profile !== "default" ? ", profile " + t.profile : ""),
-    t.merge ? el("div", { class: "card" }, el("div", {}, "Merging is your call. When you're happy with it, in your repo's folder:"),
-      el("div", { class: "copy", style: "margin-top:8px" }, el("code", {}, t.merge),
+    t.merge ? el("div", { class: "card" }, el("div", {}, "Merging is your call. When you're happy with it, run this in your repo's folder:"),
+      el("div", { class: "copy", style: "margin-top:8px;align-items:flex-start" }, el("pre", { style: "margin:0;white-space:pre-wrap;flex:1" }, el("code", {}, t.merge)),
         el("button", { class: "linkish", onclick: e => { navigator.clipboard.writeText(t.merge); e.target.textContent = "Copied"; } }, "Copy"))) : null,
-    t.report ? section("Report", el("div", { class: "card" }, el("pre", { style: "white-space:pre-wrap;margin:0" }, t.report))) : null,
+    ...(t.report ? section("Report", el("div", { class: "card" }, el("pre", { style: "white-space:pre-wrap;margin:0" }, t.report))) : []),
     ...section("The change", diffView(t.diff)),
-    ...section("Timeline", el("ul", { class: "timeline" }, t.timeline.map(e => el("li", {}, el("span", { class: "when" }, ago(e.ts)), el("span", {}, e.text))))));
+    ...section("Timeline", el("ul", { class: "timeline" }, t.timeline.map(e => el("li", {}, el("span", { class: "when" }, ago(e.ts)), el("span", {}, e.text))))),
+  ].filter(Boolean));
 }
 
 // ---------- shell ----------

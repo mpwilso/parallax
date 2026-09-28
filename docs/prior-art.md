@@ -68,7 +68,9 @@ From toryo:
 
 **M5: evals.** The setup (issue text in, hidden tests from the merged PR out) follows SWE-bench. Parallax uses a small curated set that runs natively on Windows instead of SWE-bench's Docker harness, and adds what SWE-bench doesn't measure: the blind checker's catches, misses, and false alarms, and how much would have reached a human. The maker's copy of the repo holds no history past the base commit, so the fix can't be looked up.
 
-**M6 onward:** visual inbox. SQLite only as a rebuildable index over the ledger if JSONL gets slow, never as a second source of truth.
+**M6: visual inbox.** `parallax ui`: a local page with every decision and the context to make it, updating live. It listens on 127.0.0.1 only and uses a per-launch token held in memory and handed to the browser in the URL fragment, so an agent on the same machine can't make a decision through it. Stdlib only: `http.server` and one HTML file, no build step and no downloads.
+
+**Later:** SQLite only as a rebuildable index over the ledger if JSONL gets slow, never as a second source of truth.
 
 ## Sources
 

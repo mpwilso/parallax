@@ -5,6 +5,8 @@ two choices, which depend on the kind of item.
 """
 from __future__ import annotations
 
+import subprocess
+
 from . import inbox
 from .core import Project
 
@@ -171,5 +173,21 @@ def task_view(project: Project, task_id: str) -> dict:
         "id": task_id, "goal": t["goal"], "status": t["status"], "cost_usd": t.get("cost_usd"),
         "profile": t["profile"], "branch": t.get("branch"), "timeline": timeline[-200:],
         "diff": _diff(project, task_id), "report": reports[-1]["data"]["text"] if reports else "",
-        "merge": f"git merge {t['branch']}" if t["status"] == "ready" and t.get("branch") else "",
+        "merge": merge_steps(t) if t["status"] == "ready" and t.get("branch") else "",
     }
+
+
+def merge_steps(t: dict) -> str:
+    """Exactly what to type to merge a ready task. The maker's work may not be committed yet."""
+    wt = t["worktree"]
+    try:
+        dirty = subprocess.run(["git", "-C", wt, "status", "--porcelain"], capture_output=True, text=True,
+                               encoding="utf-8", errors="replace").stdout.strip()
+    except OSError:
+        dirty = ""
+    steps = []
+    if dirty:
+        message = _one_line(t["goal"].splitlines()[0], 72).replace('"', "'")
+        steps += [f'git -C "{wt}" add -A', f'git -C "{wt}" commit -m "{message}"']
+    steps.append(f"git merge {t['branch']}")
+    return "\n".join(steps)

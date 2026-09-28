@@ -58,6 +58,16 @@ parallax log                           # the ledger
 parallax verify                        # confirm the ledger hasn't been edited
 ```
 
+## Deciding in your browser
+
+```powershell
+parallax ui
+```
+
+This opens every decision waiting on you in a local page. Items are on the left; click one to see what you need to decide it: the change as a colored diff, the checker's findings, the evidence behind a promotion or a law. Write a reason and click one of two plain choices ("Allow" / "Refuse", "Side with the maker" / "Side with the checker", and so on). New items appear on their own while agents work, the tab shows how many are waiting, and you can turn on a desktop notification for when an agent is paused on you. The Tasks tab shows every task with its status, cost, timeline and change, and for a ready task, the exact commands to merge it yourself.
+
+The page runs on your machine only. Every decision still needs a reason and is recorded as yours, and no agent can reach the page to make one.
+
 ## Maker and blind checker (Milestone 2)
 
 ```bash
@@ -115,7 +125,7 @@ The bars are in `[limits]`: `promote_after` (10), `evidence_days` (30), `law_aft
 - [x] M3: conductor on a pulse, driven by a human-owned mission file, several tasks in parallel
 - [x] M4: evidence moves the line both ways: promotion proposals and law proposals, each approved by a human
 - [x] M5: evals against real open-source changes, results published
-- [ ] M6: local visual decision inbox
+- [x] M6: local visual decision inbox
 
 ## Evals
 

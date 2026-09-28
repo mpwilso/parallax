@@ -37,4 +37,4 @@ This is a personal project built on personal time and accounts. Don't reference,
 
 ## Current milestone
 
-M6: local visual decision inbox. See docs/prior-art.md "Build plan" section.
+M1 to M6 are built. The next milestone isn't planned yet; see the README roadmap and docs/prior-art.md.
