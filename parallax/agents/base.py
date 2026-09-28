@@ -64,10 +64,23 @@ class Recommendation:
 
 
 @dataclass
+class Law:
+    """A proposed law, backed by rejections that share one cause. Laws only tighten.
+
+    rule is None for a prose law (a line in mission.md's how section), otherwise
+    {"profile", "action", "key" (None for action-level), "ruling" ("ask" or "deny")}.
+    """
+    text: str
+    evidence: list[str] = field(default_factory=list)  # decision.resolved ids of rejections
+    rule: dict | None = None
+
+
+@dataclass
 class Report:
     findings: list[str] = field(default_factory=list)
     proposals: list[Proposal] = field(default_factory=list)
     recommendations: list[Recommendation] = field(default_factory=list)
+    laws: list[Law] = field(default_factory=list)
 
 
 class Conductor(Protocol):

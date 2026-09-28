@@ -76,12 +76,34 @@ Each pulse flags runs that went quiet, starts queued tasks in the background (up
 
 Limits live in the policy file under `[limits]`: `max_parallel` (default 4), `stuck_after` (the same call refused this many times stops the maker and puts it in your inbox, default 3), and `stale_minutes` (default 60). Named profiles go under `[profiles.NAME.actions]`. `readonly` is built in and allows `fs.read` only. A task can't create tasks or resolve decisions.
 
+## Evidence moves the line (Milestone 4)
+
+```bash
+parallax evidence                  # approvals and rejections per exact request, and where each stands
+parallax pulse                     # raises promotions from your approvals, and laws from your rejections
+parallax inbox                     # promotions and laws get their own group, with their evidence
+parallax approve <id> --reason ".." # parallax writes the change into the policy or mission.md
+```
+
+- **Promotions loosen.** When you've approved the same exact request 10 times with no rejection in the last 30 days (say `shell.run "pytest -q"`), pulse proposes allowing that exact request. This is computed by code, not a model, and only ever for one exact command or path, never a pattern.
+- **Laws tighten.** When 3 or more of your rejections share a cause, the conductor proposes a law and cites them. Parallax checks every cited rejection against the ledger, and drops any law that would loosen something. A law becomes a policy rule when one expresses it, or a line in `mission.md`'s how section when it doesn't.
+- **Nothing changes without you.** Approving writes the change, with a comment pointing at the ledger. Each edit is verified before it's written, and if it can't be verified, parallax changes nothing and shows you the lines to add by hand. Runs in progress pick up approved changes; any other edit to the rules stops them.
+
+Exact rules look like this, and you can write them yourself too:
+
+```toml
+[exact."shell.run"]
+"pytest -q" = "allow"
+```
+
+The bars are in `[limits]`: `promote_after` (10), `evidence_days` (30), `law_after` (3).
+
 ## Roadmap
 
 - [x] M1: policy file, ledger, single task in an isolated worktree
 - [x] M2: maker and blind checker, plan review, verdicts, disagreement routing
 - [x] M3: conductor on a pulse, driven by a human-owned mission file, several tasks in parallel
-- [ ] M4: evidence moves the line both ways: promotion proposals and law proposals, each approved by a human
+- [x] M4: evidence moves the line both ways: promotion proposals and law proposals, each approved by a human
 - [ ] M5: evals against real open-source changes, results published
 - [ ] M6: local visual decision inbox
 

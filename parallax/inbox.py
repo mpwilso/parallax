@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from . import evidence, rules
 from . import mission as missions
-from . import rules
 from .agents.base import Conductor, Proposal
 from .core import ParallaxError, Project, refuse_inside_task
 from .policy import ALLOW
@@ -64,6 +64,15 @@ def resolve_item(project: Project, item_id: str, approve: bool, reason: str) -> 
     changed = ""
     if approve and item["kind"] == "promotion.raised":
         changed = rules.set_policy_rule(project, d["profile"], d["action"], d["key"], ALLOW, item_id)
+    elif approve and item["kind"] == "law.raised":
+        if d.get("rule"):
+            r = d["rule"]
+            why = evidence.check_rule(project, r)  # the policy may have moved since it was proposed
+            if why:
+                raise ParallaxError(f"law {item_id} no longer applies: {why}. reject it instead")
+            changed = rules.set_policy_rule(project, r["profile"], r["action"], r.get("key"), r["ruling"], item_id)
+        else:
+            changed = rules.add_law(project, item["reason"], item_id)
     res = project.resolve(item_id, approve, reason)
     task = None
     if approve and item["kind"] == "proposal.raised":

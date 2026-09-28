@@ -37,4 +37,4 @@ This is a personal project built on personal time and accounts. Don't reference,
 
 ## Current milestone
 
-M4: evidence moves the line. See docs/prior-art.md "Build plan" section.
+M5: evals against merged open-source changes. See docs/prior-art.md "Build plan" section.

@@ -61,6 +61,10 @@ From toryo:
 - Parallel runs share one ledger, so appends take a cross-process lock.
 
 **M4: evidence moves the line.** Promotion proposals from approval history, law proposals from repeated rejection reasons. Both need a human yes.
+- Promotions are per exact request (one command or path), computed by code from the ledger: 10 approvals, no rejections, 30 days by default. Unlike toryo, nothing auto-promotes and nothing auto-reverts; loosening only happens on a human yes.
+- Laws only tighten. The conductor proposes them from rejection reasons and must cite the rejections; parallax verifies every citation and drops laws that don't hold up. Each rejection backs at most one law.
+- A law is enforced in code when a policy rule can express it, and is prose in `mission.md` otherwise.
+- Parallax writes approved changes itself. Each edit is verified by parsing before it's written and recorded as `rules.changed` (hash before and after) first, so a running gate can tell a change you approved from tampering.
 
 **M5 onward:** evals against merged OSS PRs, visual inbox. SQLite only as a rebuildable index over the ledger if JSONL gets slow, never as a second source of truth.
 

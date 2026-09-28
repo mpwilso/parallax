@@ -51,8 +51,9 @@ class ScriptedAgent:
 class FakeConductor:
     """Returns a canned report. `recommend` maps a callable over the snapshot to recommendations."""
 
-    def __init__(self, findings=(), proposals=(), recommend=None, split=(), error=False):
+    def __init__(self, findings=(), proposals=(), recommend=None, split=(), error=False, laws=()):
         self.findings, self.proposals = list(findings), list(proposals)
+        self.laws = laws if callable(laws) else list(laws)
         self.recommend, self.split_into, self.error = recommend, list(split), error
         self.reviews: list[tuple[str, str]] = []  # (mission, snapshot)
         self.splits: list[tuple[str, str]] = []
@@ -62,7 +63,8 @@ class FakeConductor:
         if self.error:
             raise ConductorError("garbled reply")
         recs = self.recommend(snapshot) if self.recommend else []
-        return Report(list(self.findings), list(self.proposals), recs)
+        laws = self.laws(snapshot) if callable(self.laws) else list(self.laws)
+        return Report(list(self.findings), list(self.proposals), recs, laws)
 
     def split(self, mission, goal):
         self.splits.append((mission, goal))

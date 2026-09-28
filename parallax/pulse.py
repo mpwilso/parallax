@@ -20,6 +20,11 @@ from .ledger import file_lock
 BUSY = ("running", "launched")
 
 
+def _short(text: str, width: int = 80) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= width else text[:width - 3] + "..."
+
+
 def spawn_run(project: Project, task_id: str) -> int:
     """Start `parallax run <task>` detached, output to .parallax/runs/<task>.log."""
     runs = project.state / "runs"
@@ -53,6 +58,27 @@ def snapshot(project: Project, reported: list[str] = (), limit: int = 50) -> str
                 and e["data"]["outcome"] == "rejected" and e["data"]["decision"] in proposals]
     lines += ["", "rejected proposals (don't propose again):"]
     lines += [f"- {clip(p['reason'])} (rejected: {clip(r['reason'])})" for p, r in rejected[-10:]]
+
+    lines += ["", f"recent rejections (a law must cite at least {project.policy.limits['law_after']} of these ids):"]
+    for res, item in evidence.rejections(project)[-limit:]:
+        d = item["data"]
+        what = f"{d['action']} {d.get('key') or clip(item['reason'])}" if d.get("action") else clip(item["reason"])
+        lines.append(f"- {res['id']} rejected {item['kind']}: {clip(what)}. reason: {clip(res['reason'])}")
+
+    lines += ["", "policy:"]
+    for profile, table in project.policy.profiles.items():
+        rules = ", ".join(f"{a}={r}" for a, r in sorted(table.items())) or "(nothing listed, all denied)"
+        exact = [f'{a} "{k}"={r}' for a, t in sorted(project.policy.exact.get(profile, {}).items())
+                 for k, r in sorted(t.items())]
+        lines.append(f"- {profile}: {rules}" + (f"; exact: {', '.join(exact)}" if exact else ""))
+
+    laws = {e["id"]: e for e in entries if e["kind"] == "law.raised"}
+    pending = {e["id"] for e in project.inbox()}
+    gone = {e["data"]["decision"] for e in entries if e["kind"] == "decision.resolved"
+            and e["data"]["decision"] in laws and e["data"]["outcome"] == "rejected"}
+    lines += ["", "law proposals pending or rejected (don't propose again):"]
+    lines += [f"- {clip(e['reason'])} ({'pending' if i in pending else 'rejected'})"
+              for i, e in laws.items() if i in pending or i in gone]
     return "\n".join(lines)
 
 
@@ -110,6 +136,13 @@ def _pulse(project: Project, conductor: Conductor | None, launch, now: datetime)
             findings += report.findings
             for p in report.proposals:
                 record_proposal(project, p, source="pulse")
+            for law in report.laws:  # checked against the ledger before it reaches you
+                why = evidence.check_law(project, law, now)
+                if why:
+                    findings.append(f"dropped a law from the conductor ({_short(law.text)}): {why}")
+                else:
+                    evidence.raise_law(project, law)
+                    findings.append(f"law proposed: {_short(law.text)}")
             pending = {e["id"] for e in project.inbox()}
             for r in report.recommendations:
                 if r.item in pending and r.option in ("approve", "reject"):
