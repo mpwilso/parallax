@@ -9,8 +9,7 @@ def derive(entries: list[dict]) -> dict[str, dict]:
     for e in entries:
         kind, d = e["kind"], e["data"]
         if kind == "task.created":
-            out[d["task"]] = {"goal": e["reason"], "status": "open", "profile": "default",
-                              "plan": False, **d, "last": e["ts"]}
+            out[d["task"]] = {"goal": e["reason"], "status": "open", "plan": False, **d, "last": e["ts"]}
             continue
         t = out.get(d.get("task"))
         if t is None:
@@ -20,16 +19,10 @@ def derive(entries: list[dict]) -> dict[str, dict]:
             t["cost_usd"] = t.get("cost_usd", 0.0) + d["cost_usd"]
         if kind == "task.closed":
             t["status"] = d["outcome"]
-        elif kind == "task.queued":
-            t["status"] = "queued"
-        elif kind == "run.launched":
-            t["status"] = "launched"
         elif kind == "maker.started":
             t["status"] = "running"
         elif kind == "maker.finished" and d["status"] != "done" and t["status"] == "running":
             t["status"] = "maker failed"
-        elif kind == "report.recorded":
-            t["status"] = "reported"
         elif kind == "verdict.recorded" and d["stage"] == "diff" and d["verdict"] in AGREE:
             t["status"] = "ready"
         elif kind == "disagreement.raised":

@@ -19,8 +19,6 @@ from pathlib import Path
 
 from . import views
 from .core import ParallaxError, Project, refuse_inside_task
-from .inbox import resolve_item
-from .rules import RulesEditError
 
 PAGE = Path(__file__).with_name("ui.html")
 TOKEN_HEADER = "X-Parallax-Token"
@@ -40,7 +38,7 @@ class UI:
         return f"http://127.0.0.1:{self.port}/#{self.token}"
 
     def project(self) -> Project:
-        return Project(self.root)  # fresh each request: picks up policy edits and new ledger lines
+        return Project(self.root)  # fresh each request: picks up new ledger lines
 
     def serve(self, open_browser: bool = True) -> None:
         if open_browser:
@@ -130,11 +128,8 @@ def _handler(ui: UI):
             results = []
             for item in ids:
                 try:
-                    out = resolve_item(p, str(item), approve, reason)
-                    results.append({"id": item, "ok": True, "changed": out.changed,
-                                    "task": out.task["task"] if out.task else None})
-                except RulesEditError as err:
-                    results.append({"id": item, "ok": False, "error": str(err).split("\n")[0], "snippet": err.snippet})
+                    p.resolve(str(item), approve, reason)
+                    results.append({"id": item, "ok": True})
                 except ParallaxError as err:
                     results.append({"id": item, "ok": False, "error": str(err)})
             self._json(200, {"results": results})

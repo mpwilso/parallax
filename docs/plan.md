@@ -163,6 +163,11 @@ From the brief, lighter versions:
   - The tool layer calls the permission function with made-up inputs for every protected path and tool.
   - Any allowed write refuses the launch, and any sentinel that got through is removed.
 - `parallax stop` ends every running agent and records it.
+- **Whole process in `srt`: layer both, with the two-layer design as the floor.** The sandbox runtime can wrap the maker's whole Claude Code process (code.claude.com/docs/en/sandbox-environments), so Read, Edit, Write, hooks and MCP servers sit inside one OS boundary, not only Bash.
+  - What it adds for Parallax: OS enforcement for the file tools. Today a read of `$HOME` or a write to a protected path by Read or Edit is stopped only by permission rules and our hook, so one bug there is a breach. Hooks and MCP gain nothing: our PreToolUse hook runs inside the SDK process, and the maker has no MCP servers.
+  - Why it can't replace the two layers: it's a beta, and its config format may change. On Linux and WSL2 its deny list is built once at launch and doesn't cover files created later, and write grants only apply to paths that already exist. It must leave `~/.claude` and `~/.claude.json` writable and `api.anthropic.com`, `claude.ai` and `platform.claude.com` reachable, so its own boundary is wider than the Bash sandbox's.
+  - So: Parallax always generates the Bash sandbox and permission rules and refuses to launch without them. It also wraps the maker in `srt` with a generated `--settings` file, which fails closed if the file doesn't load, denying writes to `~/.claude/settings.json` and other config paths. The outer layer ships only if a spike shows bubblewrap nests inside it on WSL2; if not, M9 ships the two layers and records why.
+  - Preflight covers both. It adds one case: a protected file that doesn't exist yet (for example no `REVIEW.md` or `.mcp.json`) must not be creatable. Both the outer layer and bubblewrap may miss it, since deny lists are built from paths that exist at launch.
 - Tests removed: `test_m2.py::test_maker_waits_for_a_human_on_ask`, because the build never pauses. Changed: `test_m1.py::test_rulings_are_logged_and_ask_goes_to_inbox`, because "ask" now means deny and record.
 - **You run** `parallax preflight 3f9a1c`. **You see:**
   ```

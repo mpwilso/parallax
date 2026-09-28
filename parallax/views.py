@@ -16,14 +16,8 @@ CHOICES = {
     "decision.requested": ("Allow", "Refuse"),
     "disagreement.raised": ("Side with the maker", "Side with the checker"),
     "stuck.raised": ("Let it run again", "Close the task"),
-    "proposal.raised": ("Create the task", "Drop it"),
-    "promotion.raised": ("Promote", "Keep asking"),
-    "law.raised": ("Adopt the law", "Reject it"),
 }
-KIND_NAMES = {
-    "decision.requested": "permission", "disagreement.raised": "disagreement", "stuck.raised": "stuck",
-    "proposal.raised": "proposal", "promotion.raised": "promotion", "law.raised": "law",
-}
+KIND_NAMES = {"decision.requested": "permission", "disagreement.raised": "disagreement", "stuck.raised": "stuck"}
 VERBS = {"fs.write": "wants to write", "fs.read": "wants to read", "shell.run": "wants to run",
          "net.fetch": "wants to fetch", "git.commit": "wants to commit", "git.push": "wants to push"}
 
@@ -54,12 +48,6 @@ def headline(e: dict) -> str:
             d.get("stage"), "checker disagrees with the change")
     if kind == "stuck.raised":
         return "stuck"
-    if kind == "proposal.raised":
-        return _one_line(f"new task: {e['reason']}")
-    if kind == "promotion.raised":
-        return _one_line(f"promote: {d['action']} {d['key']}")
-    if kind == "law.raised":
-        return _one_line(f"law: {e['reason']}")
     return _one_line(e["reason"])
 
 
@@ -70,7 +58,7 @@ def _context(project: Project, e: dict, entries: list[dict], by_id: dict[str, di
     ctx: dict = {"goal": t.get("goal", "")}
     if kind == "decision.requested":
         ctx.update(action=d["action"], detail=e["reason"], key=d.get("key", ""),
-                   waiting=t.get("status") in ("running", "launched"))
+                   waiting=t.get("status") == "running")
     elif kind == "disagreement.raised":
         verdict = by_id.get(d.get("verdict", ""), {})
         ctx.update(stage=d.get("stage"), why=e["reason"], verdict=verdict.get("data", {}).get("verdict", ""),
@@ -87,27 +75,6 @@ def _context(project: Project, e: dict, entries: list[dict], by_id: dict[str, di
         ctx.update(why=e["reason"], refusals=[
             {"ts": x["ts"], "action": x["data"].get("action", ""), "detail": _one_line(x["data"].get("key") or x["reason"], 200),
              "why": x["data"].get("why", "")} for x in refused[-10:]])
-    elif kind == "proposal.raised":
-        ctx.update(goal=e["reason"], why=d.get("why", ""), profile=d["profile"], plan=d["plan"])
-    elif kind == "promotion.raised":
-        approvals = []
-        for rid in d.get("evidence", []):
-            r = by_id.get(rid)
-            if r:
-                approvals.append({"ts": r["ts"], "task": r["data"].get("task"), "reason": r["reason"]})
-        ctx.update(action=d["action"], key=d["key"], profile=d["profile"], approvals=approvals)
-    elif kind == "law.raised":
-        cited = []
-        for rid in d.get("evidence", []):
-            r = by_id.get(rid)
-            if not r:
-                continue
-            about = by_id.get(r["data"].get("decision"), {})
-            ad = about.get("data", {})
-            what = f"{ad['action']} {ad.get('key') or about.get('reason', '')}" if ad.get("action") else about.get("reason", "")
-            cited.append({"id": rid, "ts": r["ts"], "reason": r["reason"], "about": _one_line(what, 200),
-                          "kind": KIND_NAMES.get(about.get("kind", ""), about.get("kind", ""))})
-        ctx.update(text=e["reason"], rule=d.get("rule"), evidence=cited)
     return ctx
 
 
@@ -115,17 +82,14 @@ def inbox_view(project: Project) -> dict:
     entries = project.ledger.entries()
     by_id = {x["id"]: x for x in entries}
     tasks = project.tasks()
-    recs = inbox.recommendations(project)
     groups = []
     for title, items in inbox.batched(project):
         out = []
         for e in items:
-            rec = recs.get(e["id"])
             out.append({
                 "id": e["id"], "kind": e["kind"], "kind_name": KIND_NAMES.get(e["kind"], e["kind"]),
                 "ts": e["ts"], "task": e["data"].get("task"), "headline": headline(e),
                 "choices": list(CHOICES.get(e["kind"], ("Approve", "Reject"))),
-                "recommendation": {"option": rec["data"]["option"], "why": rec["reason"]} if rec else None,
                 "context": _context(project, e, entries, by_id, tasks),
             })
         groups.append({"title": title, "items": out})
@@ -134,7 +98,7 @@ def inbox_view(project: Project) -> dict:
 
 def tasks_view(project: Project) -> list[dict]:
     rows = [{"id": tid, "goal": t["goal"], "status": t["status"], "cost_usd": t.get("cost_usd"),
-             "last": t.get("last"), "profile": t["profile"], "branch": t.get("branch")}
+             "last": t.get("last"), "branch": t.get("branch")}
             for tid, t in project.tasks().items()]
     return list(reversed(rows))  # newest first
 
@@ -143,7 +107,7 @@ def _event_text(e: dict) -> str | None:
     d, k = e["data"], e["kind"]
     target = _one_line(d.get("key") or e["reason"], 160)
     texts = {
-        "task.created": "created", "task.queued": "queued for the next pulse", "run.launched": "launched by pulse",
+        "task.created": "created",
         "maker.started": f"maker started ({d.get('stage')})",
         "maker.finished": f"maker finished ({d.get('stage')}): {d.get('status')}",
         "action.granted": f"did {d.get('action')} {target}",
@@ -155,7 +119,6 @@ def _event_text(e: dict) -> str | None:
         "verdict.recorded": f"checker ({d.get('stage')}): {d.get('verdict')}",
         "disagreement.raised": f"disagreement: {_one_line(e['reason'])}",
         "stuck.raised": f"stuck: {_one_line(e['reason'])}",
-        "report.recorded": "report written",
     }
     return texts.get(k)
 
@@ -168,11 +131,9 @@ def task_view(project: Project, task_id: str) -> dict:
             text = _event_text(e)
             if text:
                 timeline.append({"ts": e["ts"], "kind": e["kind"], "text": text})
-    reports = [x for x in project.ledger.entries() if x["kind"] == "report.recorded" and x["data"].get("task") == task_id]
     return {
         "id": task_id, "goal": t["goal"], "status": t["status"], "cost_usd": t.get("cost_usd"),
-        "profile": t["profile"], "branch": t.get("branch"), "timeline": timeline[-200:],
-        "diff": _diff(project, task_id), "report": reports[-1]["data"]["text"] if reports else "",
+        "branch": t.get("branch"), "timeline": timeline[-200:], "diff": _diff(project, task_id),
         "merge": merge_steps(t) if t["status"] == "ready" and t.get("branch") else "",
     }
 

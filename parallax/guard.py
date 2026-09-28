@@ -11,8 +11,8 @@ import os
 from pathlib import Path, PurePath
 
 from .core import POLICY_FILE, STATE_DIR
-from .mission import MISSION_FILE
 
+MISSION_FILE = "mission.md"  # the mission feature is gone; the name stays protected
 PROTECTED_NAMES = {POLICY_FILE, MISSION_FILE}
 
 
@@ -38,9 +38,6 @@ def check_write(path: str, worktree: Path) -> str | None:
 def check_shell(command: str, worktree: Path) -> str | None:
     """Refuse commands that mention a protected file. False positives are fine."""
     text = command.casefold()
-    wt = Path(worktree).resolve()
-    for form in {str(wt), wt.as_posix()}:
-        text = text.replace(form.casefold(), "")  # the worktree itself sits under .parallax/
     if any(name in text for name in (*PROTECTED_NAMES, STATE_DIR)):
         return "command mentions a protected file (policy, mission, or .parallax/)"
     return None

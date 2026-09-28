@@ -3,12 +3,12 @@ import json
 import shlex
 import subprocess
 import threading
+from pathlib import Path
 
 import pytest
 
 from parallax import views
 from parallax.core import POLICY_FILE, ROOT_ENV, TASK_ENV, ParallaxError, Project
-from parallax.evidence import raise_promotions
 from parallax.ui import UI
 from seed import seed_all_kinds
 
@@ -55,17 +55,8 @@ def test_every_kind_has_its_context_and_plain_choices(seeded):
 
     p = items[ids["permission"]]
     assert p["headline"] == "wants to run git status" and p["context"]["waiting"] is True
-    assert p["recommendation"] == {"option": "approve", "why": "read-only command, harmless"}
-
-    promo = items[ids["promotion"]]
-    assert len(promo["context"]["approvals"]) == 10 and promo["choices"] == ["Promote", "Keep asking"]
-
-    law = items[ids["law"]]
-    assert [e["reason"] for e in law["context"]["evidence"]][0] == "I review before anything is committed"
-    assert law["context"]["rule"]["ruling"] == "deny" and law["context"]["evidence"][0]["about"].startswith("git.commit")
 
     assert items[ids["stuck"]]["context"]["refusals"][0]["why"].startswith("protected file")
-    assert items[ids["proposal"]]["context"]["plan"] is True
 
 
 def test_task_view_has_timeline_diff_and_merge_hint(seeded):
@@ -93,7 +84,7 @@ def test_the_merge_steps_really_merge(seeded):
 def test_views_keep_non_ascii(repo):
     proj = Project.init(repo)
     t = proj.new_task("tabla ╒═╕")
-    (proj.root / ".parallax" / "worktrees" / t["task"] / "t.txt").write_text("│ é │\n", encoding="utf-8")
+    (Path(t["worktree"]) / "t.txt").write_text("│ é │\n", encoding="utf-8")
     assert "│ é │" in views.task_view(proj, t["task"])["diff"]
 
 
@@ -133,32 +124,6 @@ def test_deciding_needs_a_reason_and_can_batch(server):
                            {"ids": [ids["permission"], extra], "approve": False, "reason": "not now"})
     assert status == 200 and [r["ok"] for r in body["results"]] == [True, True]
     assert proj.decision_outcome(extra)["reason"] == "not now" and proj.decision_outcome(extra)["actor"] == "human"
-
-
-def test_deciding_reports_what_changed(server):
-    app, proj, ids = server
-    _, body, _ = call(app, "POST", "/api/resolve", {"ids": [ids["promotion"]], "approve": True, "reason": "safe"})
-    assert body["results"][0]["changed"].startswith("policy updated: exact shell.run")
-    _, body, _ = call(app, "POST", "/api/resolve", {"ids": [ids["proposal"]], "approve": True, "reason": "yes"})
-    assert body["results"][0]["task"]
-
-
-def test_an_unverifiable_edit_shows_the_snippet_and_decides_nothing(repo):
-    (repo / POLICY_FILE).write_text('exact = { "shell.run" = { "ls" = "deny" } }\n[actions]\n"shell.run" = "ask"\n')
-    proj = Project.init(repo)
-    t = proj.new_task("x")
-    for _ in range(10):
-        proj.resolve(proj.check(t["task"], "shell.run", "pytest -q")["entry"]["id"], True, "ok")
-    [p] = raise_promotions(proj)
-    app = UI(repo)
-    threading.Thread(target=app.server.serve_forever, daemon=True).start()
-    try:
-        _, body, _ = call(app, "POST", "/api/resolve", {"ids": [p["id"]], "approve": True, "reason": "safe"})
-    finally:
-        app.close()
-    r = body["results"][0]
-    assert r["ok"] is False and '"pytest -q" = "allow"' in r["snippet"]
-    assert p["id"] in [e["id"] for e in proj.inbox()]
 
 
 def test_version_changes_with_the_ledger(server):

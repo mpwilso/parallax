@@ -8,47 +8,107 @@ Parallax is a small orchestration layer for AI coding agents built around one id
 
 Most agent tooling is optimized for throughput: more agents, more tasks, more diffs. That works until something ships that nobody really decided to ship. The other extreme asks the human about everything, which turns review into a rubber stamp.
 
-Parallax aims for the middle. The line between "the agent can just do this" and "a human decides" is explicit, written down, and moves only on evidence.
+Parallax aims for the middle: a human decides at a few points that matter, and agents work freely inside a sandbox everywhere else.
 
 ## Core ideas
 
-- **Deny by default.** Every action type starts denied or needs approval. Nothing is allowed because nobody thought to forbid it.
-- **Autonomy is earned by evidence.** Parallax records how each action type is ruled on over time. When the record supports it, it proposes a promotion. A human approves the promotion itself, and that decision is logged.
+- **Deny by default.** Anything that crosses the sandbox's boundary is refused unless you approved it. Nothing is allowed because nobody thought to forbid it.
 - **Two vantage points.** A maker does the work. A checker reviews it without ever seeing the maker's explanation, only the task and the diff. If they disagree, it goes to a human. Disagreements are never auto-resolved.
 - **Honest empty states.** "No finding" is a real answer, not a failure to fill the page.
 - **Everything is on the record.** Grants, refusals, verdicts, disagreements, and human decisions go into an append-only ledger, with reasons.
 
 ## How it works
 
-1. You give Parallax a goal.
-2. The conductor splits it into tasks, each in its own isolated git worktree.
-3. A maker agent works each task within the policy.
-4. Any action the policy doesn't allow becomes a pending decision in your inbox.
-5. A blind checker reviews the diff.
-6. Agreement moves the task forward. Disagreement goes to your inbox.
-7. Merging is always a human decision.
-8. Every step is logged.
+1. You create a task. It gets its own branch and git worktree.
+2. A maker agent works the task within the policy.
+3. Any action the policy doesn't allow becomes a pending decision in your inbox.
+4. A blind checker reviews the diff.
+5. Agreement moves the task forward. Disagreement goes to your inbox.
+6. Merging is always a human decision.
+7. Every step is logged.
+
+Parallax is being restructured around intent, plan, build, check, and accept. See [docs/plan.md](docs/plan.md).
 
 ## Status
 
-Early. v1 is the engine plus a command-line decision inbox. A visual inbox comes later.
+Early. The engine, a command-line inbox, and a visual inbox work. The restructure is in progress.
 
 ## Install
 
-From the folder you cloned Parallax into, one command:
+Parallax runs makers inside Claude Code's sandbox, which needs macOS, Linux, or WSL2. **On Windows, run Parallax inside WSL2**, in a distro just for it. Native Windows isn't supported.
 
-```powershell
-uv tool install --editable ".[claude]"
+Setup on Windows, once, about 30 minutes:
+
+1. In PowerShell as admin: `wsl --install --no-distribution`, then restart.
+2. In PowerShell, make a distro named `parallax`:
+   ```powershell
+   wsl --install Ubuntu-24.04 --no-launch
+   wsl --export Ubuntu-24.04 $env:TEMP\u.tar
+   wsl --import parallax C:\WSL\parallax $env:TEMP\u.tar --version 2
+   wsl --unregister Ubuntu-24.04
+   ```
+3. `wsl -d parallax`, then as root create your user: `adduser <you>` and `usermod -aG sudo <you>`.
+4. Install the tools, as root:
+   ```bash
+   apt update && apt install -y git bubblewrap socat ripgrep nodejs npm python3 curl
+   npm install -g @anthropic-ai/sandbox-runtime
+   ```
+   Then as your user: uv (`curl -LsSf https://astral.sh/uv/install.sh | sh`) and Claude Code (`curl -fsSL https://claude.ai/install.sh | bash`, then run `claude` to log in).
+5. As your user, while Windows drives are still mounted, clone Parallax into the WSL filesystem and install it:
+   ```bash
+   git clone /mnt/c/<path to parallax> ~/code/parallax
+   uv tool install --editable "$HOME/code/parallax[claude]"
+   ```
+   Optional: set up an SSH signing key, so accept commits are signed.
+6. Harden the distro. See [Harden WSL](#harden-wsl).
+7. Start Claude Code, and run Parallax, from inside the distro.
+
+On macOS or Linux, skip the WSL steps: install git, socat and bubblewrap (Linux only), `@anthropic-ai/sandbox-runtime`, uv and Claude Code, then run step 5 with your own clone.
+
+Then check the machine:
+
+```bash
+parallax doctor
 ```
 
-`parallax` then works in any new terminal window, and it runs this folder's code, so pulling updates is enough. No uv? `pip install -e ".[claude]"` works too, as long as that Python's scripts folder is on your PATH. Type `parallax` on its own for a short guide.
+```
+platform      linux on wsl2                      ok
+sandbox       bubblewrap, socat, srt             ok
+claude login  found                              ok
+windows       interop off, path off, drives off  ok
+approval key  ~/.config/parallax/key             ok
+signing key   none: accept commits won't be signed
+ready.
+```
+
+A missing sandbox tool, a missing Claude login, or the wrong platform is a failure. Windows interop, the Windows PATH, or mounted Windows drives left on is a warning. `doctor` creates the approval key if it's missing; only you can read it.
+
+### Harden WSL
+
+With interop on, anything in the distro can start Windows programs. With drives mounted, it can read and write your Windows files. Turn both off. Write `/etc/wsl.conf`:
+
+```
+[user]
+default=<you>
+
+[interop]
+enabled=false
+appendWindowsPath=false
+
+[automount]
+enabled=false
+```
+
+Then in PowerShell run `wsl --terminate parallax`, wait 8 seconds, and open the distro again. `parallax doctor` should show `interop off, path off, drives off`. The settings are described in Microsoft's [wsl.conf reference](https://learn.microsoft.com/windows/wsl/wsl-config).
+
+**Networking:** the default NAT mode is enough. A Windows browser reaches a server bound to 127.0.0.1 in WSL through `localhost`. With interop off, WSL can't open your browser, so `parallax ui --no-open` prints the link for you to open.
 
 ## Quick start
 
 In the folder of a git repo you want agents to work on:
 
-```powershell
-parallax init                          # writes parallax.policy.toml, mission.md, and .parallax/
+```bash
+parallax init                          # writes parallax.policy.toml and .parallax/
 parallax task new "fix typo in docs"   # a task in its own copy of the repo
 parallax run <task-id>                 # an agent does it, a second one checks it
 parallax inbox                         # anything waiting on you
@@ -58,13 +118,15 @@ parallax log                           # the ledger
 parallax verify                        # confirm the ledger hasn't been edited
 ```
 
+Worktrees live outside your repo, in `~/.local/share/parallax/worktrees/`.
+
 ## Deciding in your browser
 
-```powershell
-parallax ui
+```bash
+parallax ui --no-open
 ```
 
-This opens every decision waiting on you in a local page. Items are on the left; click one to see what you need to decide it: the change as a colored diff, the checker's findings, the evidence behind a promotion or a law. Write a reason and click one of two plain choices ("Allow" / "Refuse", "Side with the maker" / "Side with the checker", and so on). New items appear on their own while agents work, the tab shows how many are waiting, and you can turn on a desktop notification for when an agent is paused on you. The Tasks tab shows every task with its status, cost, timeline and change, and for a ready task, the exact commands to merge it yourself.
+This opens every decision waiting on you in a local page. Items are on the left; click one to see what you need to decide it: the change as a colored diff, the checker's findings, the refusals that got a task stuck. Write a reason and click one of two plain choices ("Allow" / "Refuse", "Side with the maker" / "Side with the checker", and so on). New items appear on their own while agents work, the tab shows how many are waiting, and you can turn on a desktop notification for when an agent is paused on you. The Tasks tab shows every task with its status, cost, timeline and change, and for a ready task, the exact commands to merge it yourself.
 
 The page runs on your machine only. Every decision still needs a reason and is recorded as yours, and no agent can reach the page to make one.
 
@@ -73,7 +135,6 @@ The page runs on your machine only. Every decision still needs a reason and is r
 ```bash
 parallax run <task-id>             # maker works the task, then the blind checker reviews the diff
 parallax run <task-id> --plan      # maker plans first (read-only), a checker reviews the plan
-parallax review <task-id>          # run the checker alone on the current diff
 parallax inbox                     # permission requests and maker/checker disagreements
 parallax approve <id> --reason ".." # on a disagreement: side with the maker
 parallax reject <id> --reason ".."  # on a disagreement: side with the checker
@@ -81,42 +142,7 @@ parallax reject <id> --reason ".."  # on a disagreement: side with the checker
 
 While the maker runs, any `ask` action pauses it until you approve or reject from another terminal. The checker sees only the task goal and the diff: never the maker's summary, its plan, or commit messages. `pass` and `no_finding` count as agreement and the task becomes `ready`. Anything else goes to your inbox. Agents can't write `parallax.policy.toml`, `mission.md`, or `.parallax/`, whatever the policy says.
 
-## Conductor and pulse (Milestone 3)
-
-```bash
-# edit mission.md: who the conductor is, what it checks each pulse, how it works with you
-parallax goal "add a subtract and a divide function"   # conductor proposes tasks
-parallax inbox                         # grouped by task, proposals last, each with a recommendation
-parallax approve <id> <id> --reason "..."   # approved proposals become queued tasks
-parallax task new "why is add() slow?" --profile readonly --queue   # an investigator
-parallax pulse                         # schedule this with Task Scheduler or cron
-```
-
-Each pulse flags runs that went quiet, starts queued tasks in the background (up to `max_parallel`, logs in `.parallax/runs/`), asks the conductor for findings, proposals, and recommendations, and records what it found. When it finds nothing, it records "no finding". The conductor has no tools and can't act. It reads `mission.md` and a snapshot, and everything it produces waits for your call.
-
-Limits live in the policy file under `[limits]`: `max_parallel` (default 4), `stuck_after` (the same call refused this many times stops the maker and puts it in your inbox, default 3), and `stale_minutes` (default 60). Named profiles go under `[profiles.NAME.actions]`. `readonly` is built in and allows `fs.read` only. A task can't create tasks or resolve decisions.
-
-## Evidence moves the line (Milestone 4)
-
-```bash
-parallax evidence                  # approvals and rejections per exact request, and where each stands
-parallax pulse                     # raises promotions from your approvals, and laws from your rejections
-parallax inbox                     # promotions and laws get their own group, with their evidence
-parallax approve <id> --reason ".." # parallax writes the change into the policy or mission.md
-```
-
-- **Promotions loosen.** When you've approved the same exact request 10 times with no rejection in the last 30 days (say `shell.run "pytest -q"`), pulse proposes allowing that exact request. This is computed by code, not a model, and only ever for one exact command or path, never a pattern.
-- **Laws tighten.** When 3 or more of your rejections share a cause, the conductor proposes a law and cites them. Parallax checks every cited rejection against the ledger, and drops any law that would loosen something. A law becomes a policy rule when one expresses it, or a line in `mission.md`'s how section when it doesn't.
-- **Nothing changes without you.** Approving writes the change, with a comment pointing at the ledger. Each edit is verified before it's written, and if it can't be verified, parallax changes nothing and shows you the lines to add by hand. Runs in progress pick up approved changes; any other edit to the rules stops them.
-
-Exact rules look like this, and you can write them yourself too:
-
-```toml
-[exact."shell.run"]
-"pytest -q" = "allow"
-```
-
-The bars are in `[limits]`: `promote_after` (10), `evidence_days` (30), `law_after` (3).
+Limits live in the policy file under `[limits]`: `max_parallel` (default 4), `stuck_after` (the same call refused this many times stops the maker and puts it in your inbox, default 3), and `stale_minutes` (a running task silent this long is flagged stuck on your next command, default 60). A task can't create tasks or resolve decisions.
 
 ## Roadmap
 
@@ -126,6 +152,8 @@ The bars are in `[limits]`: `promote_after` (10), `evidence_days` (30), `law_aft
 - [x] M4: evidence moves the line both ways: promotion proposals and law proposals, each approved by a human
 - [x] M5: evals against real open-source changes, results published
 - [x] M6: local visual decision inbox
+- [x] M7: move to WSL2, cut the conductor, pulse, profiles, promotions and laws, add `parallax doctor`
+- [ ] M8 to M14: see [docs/plan.md](docs/plan.md)
 
 ## Evals
 
@@ -133,7 +161,7 @@ Parallax is tested against already-merged open-source fixes: it gets the issue t
 
 What's measured besides "did it work": how often the blind checker caught a bad fix, how often it missed one (a wrong change that would have reached you marked ready), how often it raised a false alarm, and how many items would have landed in your inbox.
 
-```powershell
+```bash
 parallax eval check     # every case is sound: the PR's tests fail before the fix and pass after. no model, no cost
 parallax eval run       # run all cases, stops at --budget (default $25), writes a report
 parallax eval report    # rebuild the latest report

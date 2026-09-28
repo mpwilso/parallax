@@ -1,8 +1,8 @@
 """Policy: what agents may do on their own, what needs a human, what's off limits.
 
 Anything not listed is denied. There is no wildcard allow.
-A profile is a complete action table, never an overlay, so nothing is widened implicitly.
 Exact rules match one exact detail (a command, a path) and win over the action-level ruling.
+The eval policy uses them to allow only the test command.
 """
 from __future__ import annotations
 
@@ -13,9 +13,7 @@ from pathlib import Path
 
 ALLOW, ASK, DENY = "allow", "ask", "deny"
 RULINGS = {ALLOW, ASK, DENY}
-STRICTNESS = {ALLOW: 0, ASK: 1, DENY: 2}
-DEFAULT_PROFILE = "default"
-READONLY = {"fs.read": ALLOW}  # built in, can't be redefined or widened
+# promote_after, evidence_days and law_after are kept for earned autonomy (M14); nothing reads them yet
 DEFAULT_LIMITS = {
     "max_parallel": 4, "stuck_after": 3, "stale_minutes": 60,
     "promote_after": 10, "evidence_days": 30, "law_after": 3,
@@ -28,7 +26,6 @@ DEFAULT_POLICY = """\
 # ask   = becomes a pending decision in your inbox
 # deny  = refused, logged
 #
-# Promotions (ask -> allow) are proposed from evidence and approved by a human.
 # Merging is not a policy setting. It is always a human decision.
 
 [actions]
@@ -40,28 +37,18 @@ DEFAULT_POLICY = """\
 "git.push"  = "deny"
 
 # Exact rules match one exact command or path and win over [actions].
-# Approved promotions and laws are written here by parallax.
 # [exact."shell.run"]
 # "pytest -q" = "allow"
-
-# Named profiles are full action tables, picked per task (`task new --profile NAME`).
-# "readonly" is built in: fs.read only.
-# [profiles.docs.actions]
-# "fs.read"  = "allow"
-# "fs.write" = "ask"
 
 [limits]
 max_parallel  = 4    # tasks running at once
 stuck_after   = 3    # the same call refused this many times stops the task
-stale_minutes = 60   # a running task silent this long is flagged by pulse
-promote_after = 10   # approvals, with no rejections, before a promotion is proposed
-evidence_days = 30   # how far back evidence counts
-law_after     = 3    # rejections sharing a cause before a law is proposed
+stale_minutes = 60   # a running task silent this long is flagged stuck
 """
 
 
 def normalize_detail(action: str, detail: str, worktree: str | Path | None = None) -> str:
-    """The same request from different tasks gets the same key, so evidence and exact rules line up."""
+    """The same request from different tasks gets the same key, so exact rules line up."""
     detail = detail.strip()
     if not worktree:
         return detail
@@ -85,26 +72,14 @@ def _check_table(where: str, table: dict[str, str]) -> None:
 
 
 class Policy:
-    def __init__(self, actions: dict[str, str], profiles: dict[str, dict[str, str]] | None = None,
-                 limits: dict[str, int] | None = None, exact: dict[str, dict[str, dict[str, str]]] | None = None):
-        profiles = dict(profiles or {})
-        for reserved in ("readonly", DEFAULT_PROFILE):
-            if reserved in profiles:
-                raise ValueError(f"profile {reserved!r} is built in and can't be redefined")
-        self.profiles = {DEFAULT_PROFILE: actions, **profiles, "readonly": dict(READONLY)}
-        for name, table in self.profiles.items():
-            _check_table(f"profile {name!r}", table)
-
-        self.exact = {name: dict(tables) for name, tables in (exact or {}).items() if tables}
-        for name, tables in self.exact.items():
-            if name == "readonly":
-                raise ValueError("the readonly profile can't take exact rules")
-            if name not in self.profiles:
-                raise ValueError(f"exact rules for unknown profile {name!r}")
-            if "git.merge" in tables:
-                raise ValueError("git.merge can't be set in policy; merging is always a human call")
-            for action, table in tables.items():
-                _check_table(f"exact rules for {action!r}", table)
+    def __init__(self, actions: dict[str, str], limits: dict[str, int] | None = None,
+                 exact: dict[str, dict[str, str]] | None = None):
+        _check_table("[actions]", actions)
+        self.exact = {action: dict(table) for action, table in (exact or {}).items() if table}
+        if "git.merge" in self.exact:
+            raise ValueError("git.merge can't be set in policy; merging is always a human call")
+        for action, table in self.exact.items():
+            _check_table(f"exact rules for {action!r}", table)
 
         limits = dict(limits or {})
         unknown = set(limits) - set(DEFAULT_LIMITS)
@@ -117,32 +92,24 @@ class Policy:
 
     @classmethod
     def from_dict(cls, data: dict) -> "Policy":
-        profiles = data.get("profiles", {})
-        exact = {DEFAULT_PROFILE: data.get("exact", {})}
-        exact.update({name: p.get("exact", {}) for name, p in profiles.items()})
-        return cls(data.get("actions", {}), {name: p.get("actions", {}) for name, p in profiles.items()},
-                   data.get("limits", {}), exact)
+        if "profiles" in data:
+            raise ValueError("profiles are gone. every task uses [actions]; remove [profiles]")
+        return cls(data.get("actions", {}), data.get("limits", {}), data.get("exact", {}))
 
     @classmethod
     def load(cls, path: Path) -> "Policy":
         with Path(path).open("rb") as f:
             return cls.from_dict(tomllib.load(f))
 
-    def table(self, profile: str = DEFAULT_PROFILE) -> dict[str, str]:
-        if profile not in self.profiles:
-            raise ValueError(f"unknown profile {profile!r}")
-        return self.profiles[profile]
+    def exact_ruling(self, action: str, key: str) -> str | None:
+        return self.exact.get(action, {}).get(key)
 
-    def exact_ruling(self, action: str, key: str, profile: str = DEFAULT_PROFILE) -> str | None:
-        return self.exact.get(profile, {}).get(action, {}).get(key)
-
-    def ruling(self, action: str, profile: str = DEFAULT_PROFILE, key: str | None = None) -> str:
-        table = self.table(profile)
+    def ruling(self, action: str, key: str | None = None) -> str:
         if key is not None:
-            exact = self.exact_ruling(action, key, profile)
+            exact = self.exact_ruling(action, key)
             if exact:
                 return exact
-        return table.get(action, DENY)
+        return self.actions.get(action, DENY)
 
-    def listed(self, action: str, profile: str = DEFAULT_PROFILE, key: str | None = None) -> bool:
-        return action in self.table(profile) or (key is not None and self.exact_ruling(action, key, profile) is not None)
+    def listed(self, action: str, key: str | None = None) -> bool:
+        return action in self.actions or (key is not None and self.exact_ruling(action, key) is not None)

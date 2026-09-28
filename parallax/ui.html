@@ -57,7 +57,7 @@ main { flex: 1; display: grid; grid-template-columns: minmax(280px, 380px) 1fr; 
 .chip { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
 .chip.ready, .chip.good { background: var(--good-bg); color: var(--good); border-color: transparent; }
 .chip.disputed, .chip.stuck, .chip.bad { background: var(--bad-bg); color: var(--bad); border-color: transparent; }
-.chip.running, .chip.launched, .chip.queued, .chip.warn { background: var(--warn-bg); color: var(--warn); border-color: transparent; }
+.chip.running, .chip.warn { background: var(--warn-bg); color: var(--warn); border-color: transparent; }
 
 .empty { color: var(--muted); padding: 60px 20px; text-align: center; }
 .empty .big { font-size: 20px; color: var(--ink); margin-bottom: 6px; }
@@ -72,8 +72,6 @@ ul.plain { margin: 0; padding-left: 18px; }
 .kv .k { color: var(--muted); }
 .note { color: var(--muted); font-size: 13px; }
 .waiting { display: inline-flex; gap: 8px; align-items: center; background: var(--warn-bg); color: var(--warn); padding: 4px 10px; border-radius: 8px; font-size: 13px; }
-.rec { border-left: 3px solid var(--accent); }
-.rec .opt { font-weight: 600; }
 
 .diff { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: auto; }
 .diff pre { margin: 0; padding: 8px 0; }
@@ -192,8 +190,7 @@ function renderList() {
           el("div", { class: "head" }, it.headline),
           el("div", { class: "meta" },
             it.context.waiting ? el("span", { class: "dot", title: "an agent is waiting on this" }) : null,
-            el("span", { class: "chip" }, it.kind_name), ago(it.ts),
-            it.recommendation ? el("span", {}, "recommends " + it.recommendation.option) : null))));
+            el("span", { class: "chip" }, it.kind_name), ago(it.ts)))));
     }
   }
 }
@@ -227,7 +224,7 @@ function diffView(text) {
 
 function context(it) {
   const c = it.context, out = [];
-  if (c.goal && it.kind !== "proposal.raised") out.push(...section("The task", el("div", { class: "card" }, c.goal)));
+  if (c.goal) out.push(...section("The task", el("div", { class: "card" }, c.goal)));
   switch (it.kind) {
     case "decision.requested":
       out.push(...section("What it wants to do", el("div", { class: "card kv" },
@@ -249,32 +246,7 @@ function context(it) {
       if (c.refusals && c.refusals.length) out.push(...section("What kept getting refused", el("div", { class: "card" },
         el("ul", { class: "plain" }, c.refusals.map(r => el("li", {}, el("code", {}, r.action + " " + r.detail), r.why ? "  (" + r.why + ")" : ""))))));
       break;
-    case "proposal.raised":
-      out.push(...section("Proposed task", el("div", { class: "card" }, c.goal)));
-      out.push(...section("Why", el("div", { class: "card" }, c.why || "(no reason given)")));
-      out.push(el("p", { class: "note" }, `Profile: ${c.profile}.` + (c.plan ? " It will plan first, and the plan gets checked." : "")));
-      break;
-    case "promotion.raised":
-      out.push(...section("What would change", el("div", { class: "card" },
-        "Agents could run ", el("code", {}, c.key), " without asking you, exactly as written, nothing else. ",
-        el("span", { class: "note" }, `(${c.action}, profile ${c.profile})`))));
-      out.push(...section(`The evidence: ${c.approvals.length} approvals, no rejections`, el("div", { class: "card" },
-        el("ul", { class: "plain" }, c.approvals.map(a => el("li", {}, ago(a.ts) + ", task " + a.task + ": " + a.reason))))));
-      break;
-    case "law.raised": {
-      out.push(...section("The law", el("div", { class: "card" }, c.text)));
-      if (c.rule) {
-        const target = c.rule.key ? `${c.rule.action} "${c.rule.key}"` : c.rule.action;
-        out.push(...section("What it would write into the policy", el("div", { class: "card" },
-          el("code", {}, `${target} = ${c.rule.ruling}`), el("span", { class: "note" }, `  (profile ${c.rule.profile})`))));
-      } else out.push(el("p", { class: "note" }, "This one goes into mission.md's how section, which agents read on their next run."));
-      out.push(...section(`The evidence: ${c.evidence.length} of your rejections`, el("div", { class: "card" },
-        el("ul", { class: "plain" }, c.evidence.map(r => el("li", {}, el("code", {}, r.about), ". You said: ", el("em", {}, r.reason)))))));
-      break;
-    }
   }
-  if (it.recommendation) out.push(...section("The conductor recommends", el("div", { class: "card rec" },
-    el("span", { class: "opt" }, it.recommendation.option === "approve" ? it.choices[0] : it.choices[1]), ". ", it.recommendation.why)));
   return out;
 }
 
@@ -309,9 +281,8 @@ async function decide(targets, approve) {
 function resultView() {
   if (!state.result) return null;
   return el("div", { class: "result", style: "margin:0 0 18px" }, state.result.map(r => r.ok
-    ? el("div", { class: "card good" }, (r.choice ? `You chose ${r.choice} for: ` : "Done: ") + (r.headline || r.id) + "."
-        + (r.changed ? " " + r.changed + "." : "") + (r.task ? ` Task ${r.task} created and queued for the next pulse.` : ""))
-    : el("div", { class: "card bad" }, (r.headline ? r.headline + ": " : "") + r.error, r.snippet ? el("pre", {}, r.snippet) : null)));
+    ? el("div", { class: "card good" }, (r.choice ? `You chose ${r.choice} for: ` : "Done: ") + (r.headline || r.id) + ".")
+    : el("div", { class: "card bad" }, (r.headline ? r.headline + ": " : "") + r.error)));
 }
 
 function renderInboxDetail(d) {
@@ -351,11 +322,10 @@ async function renderTaskDetail(d) {
   if (state.tab !== "tasks" || state.task !== t.id) return;  // the view moved on while this loaded
   d.replaceChildren(...[el("h1", {}, t.goal.split("\n")[0]),
     el("div", { class: "sub" }, el("span", { class: "chip " + t.status.replace(" ", "-") }, t.status), "  task " + t.id,
-      t.cost_usd ? ", " + money(t.cost_usd) : "", t.profile !== "default" ? ", profile " + t.profile : ""),
+      t.cost_usd ? ", " + money(t.cost_usd) : ""),
     t.merge ? el("div", { class: "card" }, el("div", {}, "Merging is your call. When you're happy with it, run this in your repo's folder:"),
       el("div", { class: "copy", style: "margin-top:8px;align-items:flex-start" }, el("pre", { style: "margin:0;white-space:pre-wrap;flex:1" }, el("code", {}, t.merge)),
         el("button", { class: "linkish", onclick: e => { navigator.clipboard.writeText(t.merge); e.target.textContent = "Copied"; } }, "Copy"))) : null,
-    ...(t.report ? section("Report", el("div", { class: "card" }, el("pre", { style: "white-space:pre-wrap;margin:0" }, t.report))) : []),
     ...section("The change", diffView(t.diff)),
     ...section("Timeline", el("ul", { class: "timeline" }, t.timeline.map(e => el("li", {}, el("span", { class: "when" }, ago(e.ts)), el("span", {}, e.text))))),
   ].filter(Boolean));

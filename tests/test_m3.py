@@ -45,20 +45,7 @@ def test_ledger_chain_survives_parallel_processes(tmp_path):
     assert ledger.verify() == (True, "ledger intact")
 
 
-# profiles and limits ---------------------------------------------------------
-
-def test_profiles_are_full_tables_and_readonly_is_fixed():
-    p = Policy({"fs.read": "allow", "fs.write": "allow"}, {"docs": {"fs.read": "allow"}})
-    assert p.ruling("fs.write") == "allow"
-    assert p.ruling("fs.write", "docs") == "deny"  # not inherited from [actions]
-    assert p.ruling("fs.write", "readonly") == "deny"
-    assert p.ruling("fs.read", "readonly") == "allow"
-    with pytest.raises(ValueError):
-        Policy({}, {"readonly": {"fs.write": "allow"}})
-    with pytest.raises(ValueError):
-        Policy({}, {"docs": {"git.merge": "allow"}})
-    with pytest.raises(ValueError):
-        p.ruling("fs.read", "nope")
+# limits ---------------------------------------------------------------
 
 
 def test_limits_have_defaults_and_are_validated():
@@ -73,21 +60,6 @@ def test_limits_have_defaults_and_are_validated():
 def test_default_policy_file_loads(repo):
     proj = Project.init(repo)
     assert proj.policy.limits["max_parallel"] == 4
-    assert set(proj.policy.profiles) == {"default", "readonly"}
-
-
-def test_readonly_task_is_an_investigator(repo):
-    proj = setup(repo)  # the default profile allows writes; readonly must not
-    t = proj.new_task("why is add() wrong?", profile="readonly")
-    agent = ScriptedAgent(steps=[("read", "calc.py"), ("write", "a.txt", "x")], summary="add subtracts")
-    checker = FakeChecker()
-    assert run_task(proj, t["task"], agent, checker) == "reported"
-    assert [p.allowed for _, _, p in agent.results] == [True, False]
-    assert checker.calls == []
-    [report] = [e for e in proj.ledger.entries() if e["kind"] == "report.recorded"]
-    assert report["data"]["text"] == "add subtracts"
-    with pytest.raises(ParallaxError):
-        proj.new_task("x", profile="nope")
 
 
 # spawn depth 1 ---------------------------------------------------------------
@@ -148,7 +120,7 @@ def test_hook_stops_the_agent_when_the_gate_says_so():
     assert "continue_" not in asyncio.run(rule_on_tool_call(go, "Read", {"file_path": "a"}))
 
 
-# caps and queue ------------------------------------------------------------------
+# caps ------------------------------------------------------------------
 
 def test_run_respects_max_parallel(repo):
     proj = setup(repo, "[limits]\nmax_parallel = 1")
@@ -158,12 +130,3 @@ def test_run_respects_max_parallel(repo):
         run_task(proj, waiting, ScriptedAgent(), FakeChecker())
 
 
-def test_queue_and_stored_plan_flag(repo):
-    proj = setup(repo)
-    t = proj.new_task("x", plan=True, queue=True)
-    assert t["status"] == "queued" and t["plan"] is True
-    with pytest.raises(ParallaxError):
-        proj.queue_task(t["task"])  # already queued
-    agent = ScriptedAgent()
-    run_task(proj, t["task"], agent, FakeChecker())
-    assert [stage for stage, _ in agent.goals] == ["plan", "build"]  # plan came from the task

@@ -4,7 +4,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from parallax.agents.base import AgentResult, CheckerError, ConductorError, Proposal, Recommendation, Report, Verdict
+from parallax.agents.base import AgentResult, CheckerError, Verdict
 
 
 class ScriptedAgent:
@@ -46,31 +46,6 @@ class ScriptedAgent:
             if p is not None and p.stop:  # like the SDK ending the agent from the hook
                 return AgentResult("error", p.message)
         return AgentResult(self.status, self.plan if stage == "plan" else self.summary, self.cost)
-
-
-class FakeConductor:
-    """Returns a canned report. `recommend` maps a callable over the snapshot to recommendations."""
-
-    def __init__(self, findings=(), proposals=(), recommend=None, split=(), error=False, laws=()):
-        self.findings, self.proposals = list(findings), list(proposals)
-        self.laws = laws if callable(laws) else list(laws)
-        self.recommend, self.split_into, self.error = recommend, list(split), error
-        self.reviews: list[tuple[str, str]] = []  # (mission, snapshot)
-        self.splits: list[tuple[str, str]] = []
-
-    def review(self, mission, snapshot):
-        self.reviews.append((mission, snapshot))
-        if self.error:
-            raise ConductorError("garbled reply")
-        recs = self.recommend(snapshot) if self.recommend else []
-        laws = self.laws(snapshot) if callable(self.laws) else list(self.laws)
-        return Report(list(self.findings), list(self.proposals), recs, laws)
-
-    def split(self, mission, goal):
-        self.splits.append((mission, goal))
-        if self.error:
-            raise ConductorError("garbled reply")
-        return list(self.split_into)
 
 
 class FakeChecker:

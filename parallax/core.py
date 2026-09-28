@@ -4,6 +4,7 @@ State lives in the ledger. The inbox is just items raised and not yet resolved.
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import subprocess
@@ -13,13 +14,11 @@ from pathlib import Path
 
 from . import status
 from .ledger import Ledger
-from .mission import MISSION_FILE, TEMPLATE as MISSION_TEMPLATE
-from .policy import ALLOW, ASK, DEFAULT_POLICY, DEFAULT_PROFILE, DENY, Policy, normalize_detail
+from .policy import ALLOW, DEFAULT_POLICY, DENY, Policy, normalize_detail
 
 STATE_DIR = ".parallax"
 POLICY_FILE = "parallax.policy.toml"
-INBOX_KINDS = {"decision.requested", "disagreement.raised", "stuck.raised", "proposal.raised",
-               "promotion.raised", "law.raised"}
+INBOX_KINDS = {"decision.requested", "disagreement.raised", "stuck.raised"}
 TASK_ENV, ROOT_ENV = "PARALLAX_TASK", "PARALLAX_ROOT"  # set for every maker process
 
 
@@ -55,6 +54,17 @@ def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:30] or "task"
 
 
+def worktrees_home(root: Path) -> Path:
+    """Where a repo's task worktrees live: outside the repo, so none sits under a protected path.
+
+    ~/.local/share/parallax/worktrees/<repo>-<hash of its path>, or under $XDG_DATA_HOME if set.
+    """
+    data = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+    root = Path(root).resolve()
+    tag = hashlib.sha256(str(root).encode()).hexdigest()[:8]  # two repos with one name stay apart
+    return Path(data) / "parallax" / "worktrees" / f"{root.name}-{tag}"
+
+
 class Project:
     def __init__(self, root: Path):
         self.root = Path(root).resolve()
@@ -77,10 +87,8 @@ class Project:
         policy_path = root / POLICY_FILE
         if not policy_path.exists():
             policy_path.write_text(DEFAULT_POLICY)
-        if not (root / MISSION_FILE).exists():
-            (root / MISSION_FILE).write_text(MISSION_TEMPLATE, encoding="utf-8")
         (root / STATE_DIR).mkdir(exist_ok=True)
-        (root / STATE_DIR / ".gitignore").write_text("worktrees/\nruns/\n*.lock\n")
+        (root / STATE_DIR / ".gitignore").write_text("*.lock\n")
         project = cls(root)
         if not project.ledger.entries():
             project.ledger.append("project.init", actor, "initialized", policy=project.policy.actions)
@@ -94,31 +102,18 @@ class Project:
         raise ParallaxError("not a parallax project here. run `parallax init` in your repo's folder")
 
     # tasks ---------------------------------------------------------------
-    def new_task(self, goal: str, actor: str = "human", *, profile: str = DEFAULT_PROFILE,
-                 plan: bool = False, queue: bool = False, **refs) -> dict:
+    def new_task(self, goal: str, actor: str = "human", *, plan: bool = False) -> dict:
         refuse_inside_task(self.root)
-        if profile not in self.policy.profiles:
-            raise ParallaxError(f"unknown profile {profile!r}")
         task_id = uuid.uuid4().hex[:6]
         branch = f"parallax/{task_id}-{_slug(goal)}"
-        worktree = self.state / "worktrees" / task_id
+        worktree = worktrees_home(self.root) / task_id
         base = _git(self.root, "rev-parse", "HEAD")
         _git(self.root, "worktree", "add", "-b", branch, str(worktree), base)
         self.ledger.append(
             "task.created", actor, goal,
-            task=task_id, branch=branch, worktree=str(worktree), base=base,
-            profile=profile, plan=plan, **refs,
+            task=task_id, branch=branch, worktree=str(worktree), base=base, plan=plan,
         )
-        if queue:
-            self.queue_task(task_id, actor)
         return self.task(task_id)
-
-    def queue_task(self, task_id: str, actor: str = "human") -> dict:
-        refuse_inside_task(self.root)
-        t = self.task(task_id)
-        if t["status"] in ("queued", "launched", "running", "disputed", "stuck", "closed"):
-            raise ParallaxError(f"task {task_id} is {t['status']}, can't queue it")
-        return self.ledger.append("task.queued", actor, "", task=task_id)
 
     def tasks(self) -> dict[str, dict]:
         return status.derive(self.ledger.entries())
@@ -140,13 +135,13 @@ class Project:
     def check(self, task_id: str, action: str, detail: str = "", actor: str = "agent") -> dict:
         """An agent asks to take an action. Returns the ruling and logs it."""
         t = self.task(task_id)
-        profile, key = t["profile"], normalize_detail(action, detail, t["worktree"])
-        ruling = self.policy.ruling(action, profile, key)
+        key = normalize_detail(action, detail, t["worktree"])
+        ruling = self.policy.ruling(action, key)
         refs = {"task": task_id, "action": action, "key": key}
         if ruling == ALLOW:
             e = self.ledger.append("action.granted", actor, detail, **refs)
         elif ruling == DENY:
-            listed = self.policy.listed(action, profile, key)
+            listed = self.policy.listed(action, key)
             why = "denied by policy" if listed else "not in policy, denied by default"
             e = self.ledger.append("action.refused", actor, detail, **refs, why=why)
         else:

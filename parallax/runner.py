@@ -1,11 +1,11 @@
 """Run one task: optional plan and plan check, then build and the blind diff check."""
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
-from . import guard, rules
-from . import mission as missions
+from . import guard
 from .agents.base import AGREE, Agent, AgentResult, Checker
 from .checker import diff_material, review
 from .core import ROOT_ENV, TASK_ENV, ParallaxError, Project
@@ -45,7 +45,7 @@ def ensure_can_run(project: Project, task_id: str) -> dict:
 
 def _check_cap(project: Project, task_id: str) -> None:
     limit = project.policy.limits["max_parallel"]
-    busy = [i for i, t in project.tasks().items() if t["status"] in ("running", "launched") and i != task_id]
+    busy = [i for i, t in project.tasks().items() if t["status"] == "running" and i != task_id]
     if len(busy) >= limit:
         raise ParallaxError(f"{len(busy)} tasks already running (max_parallel = {limit})")
 
@@ -58,7 +58,7 @@ def _make(project: Project, task_id: str, maker: Agent, goal: str, stage: str, f
         res = maker.run(goal, Path(project.task(task_id)["worktree"]), fn, stage=stage, env=env)
     except Exception as err:  # an adapter crash is recorded, not hidden
         res = AgentResult("error", f"{type(err).__name__}: {err}")
-    summary = res.summary if keep_summary else ""  # plans and reports get their own entries
+    summary = res.summary if keep_summary else ""  # plans get their own entry
     project.ledger.append("maker.finished", "maker", summary, task=task_id, stage=stage, status=res.status,
                           cost_usd=res.cost_usd)
     return res
@@ -70,16 +70,13 @@ def run_task(project: Project, task_id: str, maker: Agent, checker: Checker, *, 
     t = ensure_can_run(project, task_id)
     _check_cap(project, task_id)
     wt, goal = Path(t["worktree"]), t["goal"]
-    readonly = t["profile"] == "readonly"
-    m = missions.load(project.root)
-    laws = f"\n\nLaws for working on this project:\n{m.how}" if m and m.how else ""
     if plan is None:
         plan = t["plan"]
 
     if plan:
         say("maker planning (read-only)")
         fn = make_permission_fn(project, task_id, wt, read_only=True, poll=poll, on_wait=on_wait)
-        res = _make(project, task_id, maker, goal + laws, "plan", fn, keep_summary=False, extra_env=env)
+        res = _make(project, task_id, maker, goal, "plan", fn, keep_summary=False, extra_env=env)
         if res.status != "done" or project.task(task_id)["status"] == "stuck":
             return project.task(task_id)["status"]
         p = project.ledger.append("plan.recorded", "maker", "", task=task_id, text=res.summary)
@@ -90,7 +87,7 @@ def run_task(project: Project, task_id: str, maker: Agent, checker: Checker, *, 
             say(f"disagreement {dis['id']} is in your inbox")
             return project.task(task_id)["status"]
 
-    build_goal = goal + laws
+    build_goal = goal
     agreed = approved_plan(project, task_id)
     if agreed:
         build_goal = f"{build_goal}\n\nFollow this approved plan:\n{agreed}"
@@ -98,7 +95,7 @@ def run_task(project: Project, task_id: str, maker: Agent, checker: Checker, *, 
     say("maker building")
     before = guard.fingerprint(project.root)
     fn = make_permission_fn(project, task_id, wt, poll=poll, on_wait=on_wait)
-    res = _make(project, task_id, maker, build_goal, "build", fn, keep_summary=not readonly, extra_env=env)
+    res = _make(project, task_id, maker, build_goal, "build", fn, extra_env=env)
     say(f"maker: {res.status}")
 
     # backstop for invariant 9: whatever got past the gate, the human hears about it
@@ -106,8 +103,7 @@ def run_task(project: Project, task_id: str, maker: Agent, checker: Checker, *, 
     touched = guard.protected_in(project.diff(task_id, "--name-only").splitlines())
     if touched:
         problems.append(f"diff touches protected files: {', '.join(touched)}")
-    after = guard.fingerprint(project.root)
-    if after != before and not rules.trail_ok(project, before, after):
+    if guard.fingerprint(project.root) != before:
         problems.append("policy or mission file changed during the run")
     if problems:
         why = "; ".join(problems)
@@ -121,9 +117,6 @@ def run_task(project: Project, task_id: str, maker: Agent, checker: Checker, *, 
         return "stuck"
     if res.status != "done":
         return project.task(task_id)["status"]
-    if readonly:  # an investigator: its report is the result, there's no diff to check
-        project.ledger.append("report.recorded", "maker", "", task=task_id, text=res.summary)
-        return project.task(task_id)["status"]
 
     say("checker reviewing diff")
     ve, dis = review(project, task_id, checker, "diff", diff_material(project, task_id))
@@ -131,3 +124,21 @@ def run_task(project: Project, task_id: str, maker: Agent, checker: Checker, *, 
     if dis:
         say(f"disagreement {dis['id']} is in your inbox")
     return project.task(task_id)["status"]
+
+
+def flag_stale_runs(project: Project, now: datetime | None = None) -> list[str]:
+    """A running task gone quiet, with nothing waiting on you, may have died. Flag it stuck.
+
+    Runs on every command, in place of the old pulse.
+    """
+    now = now or datetime.now(timezone.utc)
+    minutes = project.policy.limits["stale_minutes"]
+    waiting_on_you = {e["data"].get("task") for e in project.inbox()}
+    flagged = []
+    for tid, t in project.tasks().items():
+        if (t["status"] == "running" and tid not in waiting_on_you
+                and datetime.fromisoformat(t["last"]) < now - timedelta(minutes=minutes)):
+            why = f"no activity for {minutes} minutes, the run may have died"
+            project.ledger.append("stuck.raised", "parallax", why, task=tid)
+            flagged.append(tid)
+    return flagged
