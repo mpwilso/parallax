@@ -12,6 +12,7 @@ from pathlib import Path
 
 from . import status
 from .ledger import Ledger
+from .mission import MISSION_FILE, TEMPLATE as MISSION_TEMPLATE
 from .policy import ALLOW, ASK, DEFAULT_POLICY, DEFAULT_PROFILE, DENY, Policy
 
 STATE_DIR = ".parallax"
@@ -69,8 +70,10 @@ class Project:
         policy_path = root / POLICY_FILE
         if not policy_path.exists():
             policy_path.write_text(DEFAULT_POLICY)
+        if not (root / MISSION_FILE).exists():
+            (root / MISSION_FILE).write_text(MISSION_TEMPLATE, encoding="utf-8")
         (root / STATE_DIR).mkdir(exist_ok=True)
-        (root / STATE_DIR / ".gitignore").write_text("worktrees/\nruns/\nledger.jsonl.lock\n")
+        (root / STATE_DIR / ".gitignore").write_text("worktrees/\nruns/\n*.lock\n")
         project = cls(root)
         if not project.ledger.entries():
             project.ledger.append("project.init", actor, "initialized", policy=project.policy.actions)

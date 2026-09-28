@@ -11,8 +11,8 @@ import os
 from pathlib import Path, PurePath
 
 from .core import POLICY_FILE, STATE_DIR
+from .mission import MISSION_FILE
 
-MISSION_FILE = "mission.md"
 PROTECTED_NAMES = {POLICY_FILE, MISSION_FILE}
 
 

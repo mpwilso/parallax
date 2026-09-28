@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import guard
+from . import mission as missions
 from .agents.base import AGREE, Agent, AgentResult, Checker
 from .checker import diff_material, review
 from .core import ROOT_ENV, TASK_ENV, ParallaxError, Project
@@ -69,13 +70,15 @@ def run_task(project: Project, task_id: str, maker: Agent, checker: Checker, *, 
     _check_cap(project, task_id)
     wt, goal = Path(t["worktree"]), t["goal"]
     readonly = t["profile"] == "readonly"
+    m = missions.load(project.root)
+    laws = f"\n\nLaws for working on this project:\n{m.how}" if m and m.how else ""
     if plan is None:
         plan = t["plan"]
 
     if plan:
         say("maker planning (read-only)")
         fn = make_permission_fn(project, task_id, wt, read_only=True, poll=poll, on_wait=on_wait)
-        res = _make(project, task_id, maker, goal, "plan", fn, keep_summary=False)
+        res = _make(project, task_id, maker, goal + laws, "plan", fn, keep_summary=False)
         if res.status != "done" or project.task(task_id)["status"] == "stuck":
             return project.task(task_id)["status"]
         p = project.ledger.append("plan.recorded", "maker", "", task=task_id, text=res.summary)
@@ -86,10 +89,10 @@ def run_task(project: Project, task_id: str, maker: Agent, checker: Checker, *, 
             say(f"disagreement {dis['id']} is in your inbox")
             return project.task(task_id)["status"]
 
-    build_goal = goal
+    build_goal = goal + laws
     agreed = approved_plan(project, task_id)
     if agreed:
-        build_goal = f"{goal}\n\nFollow this approved plan:\n{agreed}"
+        build_goal = f"{build_goal}\n\nFollow this approved plan:\n{agreed}"
 
     say("maker building")
     before = guard.fingerprint(project.root)

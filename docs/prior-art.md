@@ -54,6 +54,11 @@ From toryo:
 7. Optional plan stage: maker plans read-only, and its plan is stored in the ledger as `plan.recorded`, not as `plan.md` in the worktree. A file in the worktree would land in the diff (so the diff checker would see it) and in the branch. Plan checker reviews goal plus plan, disagreement goes to the inbox. The diff checker never sees the plan.
 
 **M3: conductor and pulse.** `mission.md` (who / what / how), `parallax pulse`, caps (4 parallel, depth 1), stuck detection, policy profiles including `readonly`, batched inbox with recommendations.
+- The conductor has no tools. It reads the mission and a text snapshot, and returns findings, proposals, and recommendations as structured output. It can't act, so outside text in the snapshot can't become an action.
+- Goals become proposals, and a proposal becomes a task only on a human yes.
+- `readonly` is built in and fixed. Profiles are full action tables, never overlays, so nothing is widened by inheritance.
+- Spawn depth is a hard rule, not a policy value: a maker's process is marked, and parallax refuses to create tasks or resolve decisions from inside it. This also stops a maker from approving its own requests through the shell.
+- Parallel runs share one ledger, so appends take a cross-process lock.
 
 **M4: evidence moves the line.** Promotion proposals from approval history, law proposals from repeated rejection reasons. Both need a human yes.
 

@@ -37,4 +37,4 @@ This is a personal project built on personal time and accounts. Don't reference,
 
 ## Current milestone
 
-M2: maker and blind checker. See docs/prior-art.md "Build plan" section.
+M4: evidence moves the line. See docs/prior-art.md "Build plan" section.

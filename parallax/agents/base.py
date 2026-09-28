@@ -44,6 +44,40 @@ class Verdict:
     findings: list[str] = field(default_factory=list)
 
 
+class ConductorError(Exception):
+    """The conductor gave no usable report."""
+
+
+@dataclass
+class Proposal:
+    goal: str
+    why: str = ""
+    profile: str = "default"
+    plan: bool = False
+
+
+@dataclass
+class Recommendation:
+    item: str    # inbox item id
+    option: str  # "approve" | "reject"
+    why: str = ""
+
+
+@dataclass
+class Report:
+    findings: list[str] = field(default_factory=list)
+    proposals: list[Proposal] = field(default_factory=list)
+    recommendations: list[Recommendation] = field(default_factory=list)
+
+
+class Conductor(Protocol):
+    """Reads the mission and the state of things, and proposes. It never decides."""
+
+    def review(self, mission: str, snapshot: str) -> Report: ...
+
+    def split(self, mission: str, goal: str) -> list[Proposal]: ...
+
+
 class Agent(Protocol):
     def run(self, goal: str, cwd: Path, permission_fn: PermissionFn, stage: str = "build",
             env: dict[str, str] | None = None) -> AgentResult: ...

@@ -61,11 +61,26 @@ parallax reject <id> --reason ".."  # on a disagreement: side with the checker
 
 While the maker runs, any `ask` action pauses it until you approve or reject from another terminal. The checker sees only the task goal and the diff: never the maker's summary, its plan, or commit messages. `pass` and `no_finding` count as agreement and the task becomes `ready`. Anything else goes to your inbox. Agents can't write `parallax.policy.toml`, `mission.md`, or `.parallax/`, whatever the policy says.
 
+## Conductor and pulse (Milestone 3)
+
+```bash
+# edit mission.md: who the conductor is, what it checks each pulse, how it works with you
+parallax goal "add a subtract and a divide function"   # conductor proposes tasks
+parallax inbox                         # grouped by task, proposals last, each with a recommendation
+parallax approve <id> <id> --reason "..."   # approved proposals become queued tasks
+parallax task new "why is add() slow?" --profile readonly --queue   # an investigator
+parallax pulse                         # schedule this with Task Scheduler or cron
+```
+
+Each pulse flags runs that went quiet, starts queued tasks in the background (up to `max_parallel`, logs in `.parallax/runs/`), asks the conductor for findings, proposals, and recommendations, and records what it found. When it finds nothing, it records "no finding". The conductor has no tools and can't act. It reads `mission.md` and a snapshot, and everything it produces waits for your call.
+
+Limits live in the policy file under `[limits]`: `max_parallel` (default 4), `stuck_after` (the same call refused this many times stops the maker and puts it in your inbox, default 3), and `stale_minutes` (default 60). Named profiles go under `[profiles.NAME.actions]`. `readonly` is built in and allows `fs.read` only. A task can't create tasks or resolve decisions.
+
 ## Roadmap
 
 - [x] M1: policy file, ledger, single task in an isolated worktree
 - [x] M2: maker and blind checker, plan review, verdicts, disagreement routing
-- [ ] M3: conductor on a pulse, driven by a human-owned mission file, several tasks in parallel
+- [x] M3: conductor on a pulse, driven by a human-owned mission file, several tasks in parallel
 - [ ] M4: evidence moves the line both ways: promotion proposals and law proposals, each approved by a human
 - [ ] M5: evals against real open-source changes, results published
 - [ ] M6: local visual decision inbox

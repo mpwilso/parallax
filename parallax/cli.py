@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .agents.base import AgentUnavailable
 from .core import ParallaxError, Project, refuse_inside_task
+from .inbox import batched, label, recommendations, resolve_item, split_goal
 
 MARK = {"allow": "ALLOWED", "ask": "NEEDS YOU", "deny": "REFUSED"}
 LOG_FIELDS = ("task", "action", "stage", "status", "verdict", "outcome", "why")
@@ -45,11 +46,18 @@ def main(argv: list[str] | None = None) -> int:
     rv.add_argument("task")
     rv.add_argument("--model", default=None)
 
-    sub.add_parser("inbox", help="decisions waiting on you")
+    gl = sub.add_parser("goal", help="have the conductor split a goal into task proposals")
+    gl.add_argument("text")
+    gl.add_argument("--model", default=None)
+    pl = sub.add_parser("pulse", help="check on tasks, start queued work, ask the conductor, record it")
+    pl.add_argument("--no-conductor", action="store_true", help="checks and launches only")
+    pl.add_argument("--model", default=None)
+
+    sub.add_parser("inbox", help="everything waiting on you, grouped, with recommendations")
     for name in ("approve", "reject"):
-        r = sub.add_parser(name, help=f"{name} a pending decision (for a disagreement: side with the maker / the checker)")
-        r.add_argument("decision")
-        r.add_argument("--reason", required=True)
+        r = sub.add_parser(name, help=f"{name} inbox items (on a disagreement: side with the maker / the checker)")
+        r.add_argument("items", nargs="+", metavar="item")
+        r.add_argument("--reason", required=True, help="one reason, recorded on every item")
 
     lg = sub.add_parser("log", help="show the ledger")
     lg.add_argument("-n", type=int, default=20)
@@ -105,22 +113,41 @@ def _run(args) -> int:
         refuse_inside_task(proj.root)
         return _agents(proj, args)
 
+    if args.cmd in ("goal", "pulse"):
+        refuse_inside_task(proj.root)
+        return _conduct(proj, args)
+
     if args.cmd == "inbox":
-        items = proj.inbox()
-        if not items:
+        groups = batched(proj)
+        if not groups:
             print("inbox empty. nothing waiting on you.")
-        for e in items:
-            d = e["data"]
-            what = f"disagreement ({d['stage']})" if e["kind"] == "disagreement.raised" else d["action"]
-            print(f"{e['id']}  task {d['task']}  {what}  {e['reason']}")
+        recs = recommendations(proj)
+        for header, items in groups:
+            print(header)
+            for e in items:
+                print(f"  {e['id']}  {label(e)}  {_line(e['reason'])}")
+                if e["kind"] == "proposal.raised" and e["data"].get("why"):
+                    print(f"            why: {_line(e['data']['why'])}")
+                if e["id"] in recs:
+                    r = recs[e["id"]]
+                    print(f"            conductor recommends {r['data']['option']}: {_line(r['reason'])}")
         return 0
 
     if args.cmd in ("approve", "reject"):
-        e = proj.resolve(args.decision, args.cmd == "approve", args.reason)
-        d = e["data"]
-        what = d.get("action") or f"disagreement ({d.get('stage')})"
-        print(f"{d['outcome']}  {what}  (ledger {e['id']})")
-        return 0
+        failed = 0
+        for item in args.items:
+            try:
+                e, task = resolve_item(proj, item, args.cmd == "approve", args.reason)
+            except ParallaxError as err:
+                print(f"parallax: {err}", file=sys.stderr)
+                failed += 1
+                continue
+            d = e["data"]
+            what = d.get("action") or (f"disagreement ({d['stage']})" if d.get("stage") else d["about"].split(".")[0])
+            print(f"{d['outcome']}  {what}  (ledger {e['id']})")
+            if task:
+                print(f"  task {task['task']} created and queued for the next pulse")
+        return 1 if failed else 0
 
     if args.cmd == "log":
         for e in proj.ledger.entries()[-args.n:]:
@@ -134,6 +161,49 @@ def _run(args) -> int:
         print(msg)
         return 0 if ok else 1
     return 1
+
+
+def _line(text: str, width: int = 160) -> str:
+    text = " ".join(str(text).split())
+    return text if len(text) <= width else text[:width - 3] + "..."
+
+
+def _conductor(model: str | None):
+    """The conductor to use. Tests swap this out."""
+    from .agents.claude import ClaudeConductor
+    return ClaudeConductor(model) if model else ClaudeConductor()
+
+
+def _conduct(proj: Project, args) -> int:
+    from .pulse import pulse
+
+    if args.cmd == "goal":
+        entries = split_goal(proj, _conductor(args.model), args.text)
+        if not entries:
+            print("the conductor proposed no tasks.")
+        for e in entries:
+            print(f"{e['id']}  {label(e)}  {_line(e['reason'])}")
+        if entries:
+            print("approve with `parallax approve <id> --reason \"...\"`. approved tasks are queued.")
+        return 0
+
+    conductor = None
+    if not args.no_conductor:
+        try:
+            conductor = _conductor(args.model)
+        except AgentUnavailable as err:
+            print(f"conductor unavailable, checks only: {err}")
+    res = pulse(proj, conductor)
+    for tid in res["launched"]:
+        print(f"launched {tid}")
+    for f in res["findings"]:
+        print(f"finding: {_line(f)}")
+    if not res["findings"]:
+        print("no finding")
+    c = res["counts"]
+    print(f"conductor {res['conductor']}. {c['inbox']} waiting on you, {c['ready']} ready to merge, "
+          f"{c['running'] + c['launched']} running, {c['queued']} queued")
+    return 0
 
 
 def _agents(proj: Project, args) -> int:

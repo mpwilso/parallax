@@ -43,14 +43,21 @@ else:
 
 
 @contextmanager
-def _exclusive(lock_path: Path):
-    """One appender at a time, across threads and processes. The OS drops the lock if we die."""
-    with _append_lock, open(lock_path, "a+b") as f:
+def file_lock(lock_path: Path):
+    """Exclusive across processes, blocking. The OS drops the lock if the holder dies."""
+    with open(lock_path, "a+b") as f:
         _lock(f)
         try:
             yield
         finally:
             _unlock(f)
+
+
+@contextmanager
+def _exclusive(lock_path: Path):
+    """One appender at a time, across threads and processes."""
+    with _append_lock, file_lock(lock_path):
+        yield
 
 
 def _hash(body: dict) -> str:
