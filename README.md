@@ -33,24 +33,34 @@ Parallax aims for the middle. The line between "the agent can just do this" and 
 
 Early. v1 is the engine plus a command-line decision inbox. A visual inbox comes later.
 
-## Quick start (Milestone 1)
+## Install
 
-```bash
-pip install -e .
-cd /path/to/some/git/repo
-parallax init                      # writes parallax.policy.toml and .parallax/
-parallax task new "fix typo in docs"
-parallax check <task-id> shell.run # ask the policy about an action
-parallax inbox                     # pending decisions
-parallax approve <decision-id> --reason "looked at it, fine"
-parallax log                       # the ledger
-parallax verify                    # confirm the ledger hasn't been edited
+From the folder you cloned Parallax into, one command:
+
+```powershell
+uv tool install --editable ".[claude]"
+```
+
+`parallax` then works in any new terminal window, and it runs this folder's code, so pulling updates is enough. No uv? `pip install -e ".[claude]"` works too, as long as that Python's scripts folder is on your PATH. Type `parallax` on its own for a short guide.
+
+## Quick start
+
+In the folder of a git repo you want agents to work on:
+
+```powershell
+parallax init                          # writes parallax.policy.toml, mission.md, and .parallax/
+parallax task new "fix typo in docs"   # a task in its own copy of the repo
+parallax run <task-id>                 # an agent does it, a second one checks it
+parallax inbox                         # anything waiting on you
+parallax approve <id> --reason "looked at it, fine"
+parallax task list                     # every task, its status, and what it cost
+parallax log                           # the ledger
+parallax verify                        # confirm the ledger hasn't been edited
 ```
 
 ## Maker and blind checker (Milestone 2)
 
 ```bash
-pip install -e .[claude]           # the Claude adapter; the core stays stdlib only
 parallax run <task-id>             # maker works the task, then the blind checker reviews the diff
 parallax run <task-id> --plan      # maker plans first (read-only), a checker reviews the plan
 parallax review <task-id>          # run the checker alone on the current diff
@@ -109,7 +119,17 @@ The bars are in `[limits]`: `promote_after` (10), `evidence_days` (30), `law_aft
 
 ## Evals
 
-Parallax will be tested against already-merged open-source pull requests: take the issue, let Parallax attempt it, compare against what humans actually shipped. Results get published, including the failures.
+Parallax is tested against already-merged open-source fixes: it gets the issue text only, works it the way it would work anything, and is scored by the tests the humans added in their pull request, which it never sees. Results are published in [evals/results/](evals/results/), failures included.
+
+What's measured besides "did it work": how often the blind checker caught a bad fix, how often it missed one (a wrong change that would have reached you marked ready), how often it raised a false alarm, and how many items would have landed in your inbox.
+
+```powershell
+parallax eval check     # every case is sound: the PR's tests fail before the fix and pass after. no model, no cost
+parallax eval run       # run all cases, stops at --budget (default $25), writes a report
+parallax eval report    # rebuild the latest report
+```
+
+Cases live in [evals/cases.toml](evals/cases.toml). Evals run under a fixed policy with no asks, so nothing waits on a human and no model approves anything.
 
 ## Non-goals
 

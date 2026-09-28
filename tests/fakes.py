@@ -14,9 +14,9 @@ class ScriptedAgent:
     Writes and commands only happen if the gate allows them.
     """
 
-    def __init__(self, steps=(), plan_steps=(), summary="done", plan="1. do it", status="done"):
+    def __init__(self, steps=(), plan_steps=(), summary="done", plan="1. do it", status="done", cost=None):
         self.steps = {"build": list(steps), "plan": list(plan_steps)}
-        self.summary, self.plan, self.status = summary, plan, status
+        self.summary, self.plan, self.status, self.cost = summary, plan, status, cost
         self.goals: list[tuple[str, str]] = []
         self.results: list[tuple[str, str, object]] = []  # (action, detail, Permission)
         self.envs: list[dict] = []
@@ -39,13 +39,13 @@ class ScriptedAgent:
             elif kind == "shell":
                 p = permission_fn("shell.run", " ".join(step[1]), [])
                 if p.allowed:
-                    subprocess.run(step[1], cwd=cwd, check=True, capture_output=True)
+                    subprocess.run(step[1], cwd=cwd, capture_output=True)  # a failed command is output, not a crash
                 self.results.append(("shell.run", " ".join(step[1]), p))
             elif kind == "call":
                 step[1](cwd)
             if p is not None and p.stop:  # like the SDK ending the agent from the hook
                 return AgentResult("error", p.message)
-        return AgentResult(self.status, self.plan if stage == "plan" else self.summary)
+        return AgentResult(self.status, self.plan if stage == "plan" else self.summary, self.cost)
 
 
 class FakeConductor:

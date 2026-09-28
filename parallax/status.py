@@ -16,6 +16,8 @@ def derive(entries: list[dict]) -> dict[str, dict]:
         if t is None:
             continue
         t["last"] = e["ts"]
+        if d.get("cost_usd"):
+            t["cost_usd"] = t.get("cost_usd", 0.0) + d["cost_usd"]
         if kind == "task.closed":
             t["status"] = d["outcome"]
         elif kind == "task.queued":

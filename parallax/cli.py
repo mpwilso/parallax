@@ -13,7 +13,26 @@ MARK = {"allow": "ALLOWED", "ask": "NEEDS YOU", "deny": "REFUSED"}
 LOG_FIELDS = ("task", "action", "stage", "status", "verdict", "outcome", "why")
 
 
+GUIDE = """\
+parallax: agents do the work. you make the calls.
+
+start here:
+  parallax init                         set up parallax in your repo's folder
+  parallax task new "what you want"     a task in its own copy of the repo
+  parallax run <task>                   an agent does it, a second one checks it
+  parallax inbox                        everything waiting on you
+  parallax approve <id> --reason "..."  (or reject) every call needs a reason
+
+more: parallax goal, pulse, evidence, log, verify. `parallax <command> -h` for details.
+"""
+
+
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if not argv:
+        sys.stdout.reconfigure(errors="replace")
+        print(GUIDE, end="")
+        return 0
     p = argparse.ArgumentParser(prog="parallax", description="Agents do the work. You make the calls.")
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -62,6 +81,17 @@ def main(argv: list[str] | None = None) -> int:
     ev = sub.add_parser("evidence", help="approvals and rejections per exact request, and where the line could move")
     ev.add_argument("-n", type=int, default=20)
 
+    el = sub.add_parser("eval", help="test parallax on real merged fixes (run from the parallax repo folder)")
+    esub = el.add_subparsers(dest="ecmd", required=True)
+    ec = esub.add_parser("check", help="make sure every case is sound. no model, no cost")
+    ec.add_argument("--case", default=None)
+    er = esub.add_parser("run", help="run parallax on the cases and write a report")
+    er.add_argument("--case", default=None, help="run just this case")
+    er.add_argument("--budget", type=float, default=25.0, help="stop before spending more than this, in dollars")
+    er.add_argument("--model", default=None)
+    ep = esub.add_parser("report", help="rebuild a run's report")
+    ep.add_argument("run", nargs="?", help="the run's .jsonl file (default: the latest)")
+
     lg = sub.add_parser("log", help="show the ledger")
     lg.add_argument("-n", type=int, default=20)
     sub.add_parser("verify", help="check the ledger hasn't been edited")
@@ -80,8 +110,13 @@ def _run(args) -> int:
     if args.cmd == "init":
         proj = Project.init(cwd)
         print(f"initialized parallax in {proj.root}")
-        print("edit parallax.policy.toml to set what agents may do. anything unlisted is denied.")
+        print("  parallax.policy.toml  what agents may do. anything unlisted is denied.")
+        print("  mission.md            who the conductor is, what it checks, how it works with you.")
+        print('next: parallax task new "what you want done"')
         return 0
+
+    if args.cmd == "eval":
+        return _eval(args, cwd)
 
     proj = Project.find(cwd)
 
@@ -91,6 +126,8 @@ def _run(args) -> int:
             print(f"task {t['task']}  [{t['status']}]  {t['goal']}\n  branch   {t['branch']}\n  worktree {t['worktree']}")
             if t["profile"] != "default":
                 print(f"  profile  {t['profile']}")
+            if t["status"] != "queued":
+                print(f"next: parallax run {t['task']}")
         elif args.tcmd == "queue":
             proj.queue_task(args.task)
             print(f"task {args.task} queued for the next pulse")
@@ -99,7 +136,8 @@ def _run(args) -> int:
             if not tasks:
                 print("no tasks")
             for tid, t in tasks.items():
-                print(f"{tid}  [{t['status']}]  {t['goal']}")
+                cost = f"  ${t['cost_usd']:.2f}" if t.get("cost_usd") else ""
+                print(f"{tid}  [{t['status']}]{cost}  {_line(t['goal'], 100)}")
         elif args.tcmd == "diff":
             print(proj.diff(args.task) or "no changes")
         return 0
@@ -223,6 +261,43 @@ def _conduct(proj: Project, args) -> int:
     return 0
 
 
+def _eval(args, cwd: Path) -> int:
+    from . import evals
+
+    refuse_inside_task(cwd)
+    root = evals.find_cases(cwd)
+    if args.ecmd == "report":
+        runs = sorted((root / evals.RESULTS_DIR).glob("*.jsonl"), key=lambda p: p.stat().st_mtime)
+        path = Path(args.run) if args.run else (runs[-1] if runs else None)
+        if path is None:
+            raise ParallaxError("no eval runs yet. start one with `parallax eval run`")
+        print(f"report: {evals.write_report(path)}")
+        print(evals.summary_line(path))
+        return 0
+
+    cases = evals.load_cases(root, args.case)
+    if args.ecmd == "check":
+        bad = 0
+        for case in cases:
+            print(f"checking {case.id} ...", flush=True)
+            problem = evals.check_case(case, evals.home() / "check")
+            print(f"  {'ok' if problem is None else 'broken: ' + problem}")
+            bad += problem is not None
+        print(f"{len(cases) - bad} of {len(cases)} cases are sound.")
+        return 1 if bad else 0
+
+    from .agents.claude import ClaudeAgent, ClaudeChecker
+    model = {"model": args.model} if args.model else {}
+    print(f"running {len(cases)} cases, budget ${args.budget:.2f}. this takes a while; each case prints when done.")
+    out = evals.run(root, cases,
+                    make_maker=lambda cap: ClaudeAgent(**model, max_budget_usd=cap),
+                    make_checker=lambda cap: ClaudeChecker(**model, max_budget_usd=cap),
+                    budget=args.budget, say=lambda s: print(s, flush=True))
+    print(f"report: {out.with_suffix('.md')}")
+    print(evals.summary_line(out))
+    return 0
+
+
 def _agents(proj: Project, args) -> int:
     from .agents.claude import ClaudeAgent, ClaudeChecker
     from .checker import diff_material, review
@@ -245,7 +320,17 @@ def _agents(proj: Project, args) -> int:
     status = run_task(proj, args.task, ClaudeAgent(**model), checker,
                       plan=args.plan, on_wait=waiting, say=print)
     print(f"task {args.task}: {status}")
+    print(NEXT.get(status, "").format(task=args.task), end="")
     return 0
+
+
+NEXT = {
+    "ready": "next: look at the change with `parallax task diff {task}`. merging it is your call.\n",
+    "reported": "next: read the report with `parallax log`.\n",
+    "disputed": "next: it's waiting on you in `parallax inbox`.\n",
+    "stuck": "next: it's waiting on you in `parallax inbox`.\n",
+    "maker failed": "next: see what happened with `parallax log`, then try `parallax run {task}` again.\n",
+}
 
 
 if __name__ == "__main__":

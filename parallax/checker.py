@@ -20,8 +20,10 @@ def review(project: Project, task_id: str, checker: Checker, kind: str, material
     """Run the checker once. Returns (verdict entry, disagreement entry or None)."""
     goal = project.task(task_id)["goal"]
     digest = hashlib.sha256(material.encode()).hexdigest()
+    cost = None
     try:
         v = checker.review(goal, material, kind)
+        cost = v.cost_usd
         if v.verdict not in VERDICTS:
             raise CheckerError(f"unknown verdict {v.verdict!r}")
         verdict, findings, note = v.verdict, list(v.findings), "; ".join(v.findings)
@@ -29,7 +31,7 @@ def review(project: Project, task_id: str, checker: Checker, kind: str, material
         verdict, findings, note = "error", [], str(err)
 
     ve = project.ledger.append("verdict.recorded", "checker", note, task=task_id, stage=kind,
-                               verdict=verdict, findings=findings, material=digest, **refs)
+                               verdict=verdict, findings=findings, material=digest, cost_usd=cost, **refs)
     if verdict in AGREE:
         return ve, None
     why = f"checker error: {note}" if verdict == "error" else f"maker says done, checker says fail: {note or 'no findings given'}"

@@ -1,0 +1,432 @@
+# Parallax eval cases: real, already-merged fixes to small pure-Python projects.
+# Parallax gets only `goal` (the issue as reported, copied as data). The tests the PR added or
+# changed (`tests`) are hidden from the maker and the checker, and used afterwards to score.
+# Every case must pass `parallax eval check`: those tests fail at `base` and pass at `fix`.
+# All code and issue text belong to their projects; links go back to the source.
+#
+# Left out on purpose: inflect#131 (the hidden test demands an answer the issue never states).
+
+[[case]]
+id = "pathspec-77"
+repo = "https://github.com/cpburnz/python-pathspec"
+issue = "https://github.com/cpburnz/python-pathspec/issues/77"
+pr = "https://github.com/cpburnz/python-pathspec/commit/9302492483b06ca1613aa8b11cf08cef93930b12"
+base = "6fd6bee628f5f2746ac46939b13fd127941a73f9"
+fix = "9302492483b06ca1613aa8b11cf08cef93930b12"
+tests = ["tests/test_gitwildmatch.py"]
+test_command = "python -m pytest -q"
+setup = ["uv pip install -e . pytest"]
+goal = """On bracket expression negation
+
+`^` is escaped, but it works with gitignore.
+
+To test it:
+```shell
+mkdir test && cd test
+git init
+echo 'a[^b]c' > .gitignore
+touch abc azc
+git status -u --ignored
+```
+
+Notice that abc doesn't match but azc does match. pathspec's behavior with `^` is inconsistent with Git.
+
+I read:
+https://github.com/cpburnz/python-pathspec/blob/6fd6bee628f5f2746ac46939b13fd127941a73f9/pathspec/patterns/gitwildmatch.py#L313
+
+But I didn't understand why would you prefer to be compatible with POSIX and Python's `fnmatch.translate` when you could be compatible with gitignore itself. May I ask what led you to the decision to escape `^`?"""
+
+[[case]]
+id = "tomlkit-430"
+repo = "https://github.com/python-poetry/tomlkit"
+issue = "https://github.com/python-poetry/tomlkit/issues/430"
+pr = "https://github.com/python-poetry/tomlkit/pull/520"
+base = "ae1b6790d99b21bc0a339a5825e7d5e40e7e6f6a"
+fix = "483f240ea7d45bd9c82fbd16d8e63270a69770c3"
+tests = ["tests/test_api.py"]
+test_command = "python -m pytest -q"
+setup = ["uv pip install -e . pytest"]
+goal = """Different behavior for SingleKey and DottedKey with single value
+
+I am building a tomlkit document and want to generate keys dynamically. Sometimes the lengths of my key specifications are only 1 long, but tomlkit still generates a DottedKey out of it. The documentation of `tomlkit.key` is very clear about it: specifying a list will return a DottedKey.
+
+But I think it would be a nice addition if the function checks the length of the list before making that decision.
+
+A minimal example of what goes wrong now:
+
+```py
+import tomlkit
+
+doc = tomlkit.document()
+doc.append(tomlkit.key("my_key"), "value")
+key_in_doc = "my_key" in doc # returns True
+
+doc2 = tomlkit.document()
+doc2.append(tomlkit.key(["my_key"]), "value")
+key_in_doc2 = "my_key" in doc2 # returns False
+
+assert key_in_doc == key_in_doc2 # unfortunately not
+```
+
+The `in` functionality doesn't seem to recognize the DottedKey as equal to a single `str`.
+
+I was able to do a workaround in the code now by:
+
+```py
+doc = tomlkit.document()
+if len(key_spec) == 1:
+    doc.append(tomlkit.key(key_spec[0]), "value")
+else:
+    doc.append(tomlkit.key(key_spec, "value")
+```
+
+Or in whatever way you want to implement it. At least, I really needed to unwrap the key_spec in order to make the `in` function work correctly.
+
+Tested with tomlkit 0.13.3"""
+
+[[case]]
+id = "tomlkit-512"
+repo = "https://github.com/python-poetry/tomlkit"
+issue = "https://github.com/python-poetry/tomlkit/issues/512"
+pr = "https://github.com/python-poetry/tomlkit/pull/514"
+base = "82bb211e031dc50ebf4e25465ee6144b23acd9bf"
+fix = "281ca004386b83bc12d88d79c15b99c714477dc6"
+tests = ["tests/test_items.py"]
+test_command = "python -m pytest -q"
+setup = ["uv pip install -e . pytest"]
+goal = '''comma is appended to comment when adding to multiline inline table
+
+```python
+import tomlkit
+
+text = """\
+tbl = {
+    p = { k = 1 },
+    q = { k = 2 }  # comment
+}
+"""
+doc = tomlkit.loads(text)
+
+doc["tbl"]["added"] = 3
+
+output = tomlkit.dumps(doc)
+print(output)
+```
+result
+```toml
+tbl = {
+    p = { k = 1 },
+    q = { k = 2 }  # comment,
+added = 3}
+```
+in which the added comma is part of the comment'''
+
+[[case]]
+id = "cachetools-387"
+repo = "https://github.com/tkem/cachetools"
+issue = "https://github.com/tkem/cachetools/issues/387"
+pr = "https://github.com/tkem/cachetools/commit/57d2e4813d9801f97034559e22428bac6f7c6c9b"
+base = "8011b71949e8d8d81a71359cca9477d67a2c9c0b"
+fix = "57d2e4813d9801f97034559e22428bac6f7c6c9b"
+tests = ["tests/test_cachedmethod.py"]
+test_command = "python -m pytest -q"
+setup = ["uv pip install -e . pytest"]
+goal = """DeprecationWarnings when creating an autospec mock with @cachedmethod decorations
+
+**Describe the bug**
+When using `unittest.mock.create_autospec` or `unittest.mock.patch(..., autospec=True)` to create autospec mocks of classes that include use of the `@cachedmethod` decorator, DeprecationWarnings get raised along the lines of `No '__dict__' attribute on 'NoneType' instance to cache 'bar' property.`.
+
+I believe that the issue is happening in `cachetools._cachedmethod._DescriptorBase.__get__` where the logic to replace the descriptor instance with a wrapper in the instance dict does not take into account the inspection case where `obj` is passed in as None. I think I have a fix figured out, but haven't quite convinced myself that it is fully logically consistent with the expected behavior so I have not gotten it into a PR just yet, but wanted to get the issue logged before I submitted a PR.
+
+**Expected result**
+No warnings should be raised when autospec is applied to a decorated class.
+
+**Actual result**
+DeprecationWarnings are raised
+
+**Reproduction steps**
+
+```python
+from cachetools import cachedmethod, Cache
+from unittest.mock import create_autospec
+import warnings
+
+warnings.simplefilter("always", DeprecationWarning)
+
+class Foo:
+    _cache = Cache(maxsize=100)
+    @cachedmethod(cache=lambda self: self._cache)
+    def bar(cls, x):
+        print(f"Calculating bar({x})")
+        return x * 2
+    
+mock_foo = create_autospec(spec=Foo, instance=True)
+```"""
+
+[[case]]
+id = "tabulate-180"
+repo = "https://github.com/astanin/python-tabulate"
+issue = "https://github.com/astanin/python-tabulate/issues/180"
+pr = "https://github.com/astanin/python-tabulate/commit/20c6370d5da2dae89b305bfb6c7f12a0f8b7236c"
+base = "90fbd7e5b127bafd0aecfe118798743589b1a60b"
+fix = "20c6370d5da2dae89b305bfb6c7f12a0f8b7236c"
+tests = ["test/test_regression.py"]
+test_command = "python -m pytest -q"
+setup = ["uv pip install -e . pytest"]
+goal = """Exception when tabulating empty data and using maxcolwidths
+
+```
+File "/usr/local/lib/python3.9/site-packages/tabulate.py", line 1585, in tabulate
+   num_cols = len(list_of_lists[0])
+   IndexError: list index out of range
+```"""
+
+[[case]]
+id = "tabulate-190"
+repo = "https://github.com/astanin/python-tabulate"
+issue = "https://github.com/astanin/python-tabulate/issues/190"
+pr = "https://github.com/astanin/python-tabulate/commit/6c48142c0b57ea6108cb1d304b69b90b18748e45"
+base = "bf58e37e6b35e3cc9a0bd740f752abfd32b6e6f8"
+fix = "6c48142c0b57ea6108cb1d304b69b90b18748e45"
+tests = ["test/test_regression.py"]
+test_command = "python -m pytest -q"
+setup = ["uv pip install -e . pytest"]
+goal = '''maxcolwidths does not preserve line breaks
+
+maxcolwidths does not work well with multiline cells. Using the latest v0.8.10 I'm observing this behavior:
+
+```python
+data = [ ["123456789 bbb\nccc"] ]
+print(tabulate.tabulate(data, tablefmt="fancy_grid", maxcolwidths=10))
+print(tabulate.tabulate(data, tablefmt="fancy_grid"))
+```
+
+```
+╒═══════════╕
+│ 123456789 │
+│ bbb ccc   │
+╘═══════════╛
+╒═══════════════╕
+│ 123456789 bbb │
+│ ccc           │
+╘═══════════════╛
+```
+Note that the first one does not have a line break between `bbb` and `ccc`. The expected result is:
+```
+╒═══════════╕
+│ 123456789 │
+│ bbb       │
+│ ccc       │
+╘═══════════╛
+```
+
+This can be fixed by changing the `_wrap_text_to_colwidths` from:
+```python
+                wrapper = _CustomTextWrap(width=width)
+                wrapped = wrapper.wrap(cell)
+```
+
+to:
+```python
+                wrapper = _CustomTextWrap(width=width)
+                wrapped = ['\n'.join(wrapper.wrap(line)) for line in cell.splitlines() if line.strip() != '']
+```
+
+As described https://stackoverflow.com/a/26538082.
+
+I can send a PR if such change would be accepted.'''
+
+[[case]]
+id = "tabulate-231"
+repo = "https://github.com/astanin/python-tabulate"
+issue = "https://github.com/astanin/python-tabulate/issues/231"
+pr = "https://github.com/astanin/python-tabulate/pull/232"
+base = "83fd4fb98926c8a6fdf45caa1b91ee8913b64dcb"
+fix = "af40a322d6b889c9c1c2e5161a004c389401e754"
+tests = ["test/test_output.py"]
+test_command = "python -m pytest -q"
+setup = ["uv pip install -e . pytest"]
+goal = """SEPARATING_LINE feature doesn't work when the requested format pads columns
+
+Code to reproduce:
+```python
+from tabulate import tabulate, SEPARATING_LINE
+
+table = [[\"1\", \"one\"],   # \"1\" as a str on purpose
+         [1_000, \"one K\"],
+         SEPARATING_LINE,
+         [1_000_000, \"one M\"]]
+
+print(tabulate(table, tablefmt=\"psql\"))
+```
+Generates (note the weird 3rd line instead of an expected separating line)
+```
++---------+-------+
+|       1 | one   |
+|    1000 | one K |
+| \u0001 |
+| 1000000 | one M |
++---------+-------+
+```
+Instead of the expected:
+```
++---------+-------+
+|       1 | one   |
+|    1000 | one K |
+|---------+-------|
+| 1000000 | one M |
++---------+-------+
+```"""
+
+[[case]]
+id = "boltons-319"
+repo = "https://github.com/mahmoud/boltons"
+issue = "https://github.com/mahmoud/boltons/issues/319"
+pr = "https://github.com/mahmoud/boltons/commit/8ba3a7fa0d99b73f7f43c1aed82c571b941eecea"
+base = "6c7fa3e05659fac6515f661153c89d4ad02df168"
+fix = "8ba3a7fa0d99b73f7f43c1aed82c571b941eecea"
+tests = ["tests/test_timeutils.py"]
+test_command = "python -m pytest -q"
+setup = ["uv pip install -e . \"pytest<9\""]
+goal = """boltons.timeutils when start with 12 month and step=(1, 0, 0), result is wrong. because date.month start with 1, not 0
+
+start_day = date(year=2012, month=12, day=25)
+end_day = date(year=2023, month=1,  day=1)
+for day in daterange(start_day, end_day, step=(1, 0, 0), inclusive=False):
+    print(repr(day))"""
+
+[[case]]
+id = "boltons-337"
+repo = "https://github.com/mahmoud/boltons"
+issue = "https://github.com/mahmoud/boltons/issues/337"
+pr = "https://github.com/mahmoud/boltons/pull/338"
+base = "475462811ea4f9dea23c8af4cc2b6ead2dc03845"
+fix = "0341ab3d79e6430c0e6a4149df9c92679988a534"
+tests = ["tests/test_dictutils.py"]
+test_command = "python -m pytest -q"
+setup = ["uv pip install -e . \"pytest<9\""]
+goal = """Non-empty `dictutils.OMD` cannot be loaded from `pickle`
+
+A non-empty `OrderedMultiDict` can be serialized, but cannot be deserialized.
+A empty `OrderedMultiDict` can be both serialized and deserialized.
+
+
+* Python `3.11.3`
+* Version `23.0.0`
+
+```python
+In [1]: import pickle
+
+In [2]: import boltons.dictutils
+
+In [3]: pickle.loads(pickle.dumps(boltons.dictutils.OMD()))
+Out[3]: OrderedMultiDict([])
+
+In [4]: pickle.loads(pickle.dumps(boltons.dictutils.OMD({'a': 1})))
+---------------------------------------------------------------------------
+AttributeError                            Traceback (most recent call last)
+Cell In[4], line 1
+----> 1 pickle.loads(pickle.dumps(boltons.dictutils.OMD({'a': 1})))
+
+File /usr/local/lib/python3.11/site-packages/boltons/dictutils.py:333, in OrderedMultiDict.__setitem__(self, k, v)
+    331 if super(OrderedMultiDict, self).__contains__(k):
+    332     self._remove_all(k)
+--> 333 self._insert(k, v)
+    334 super(OrderedMultiDict, self).__setitem__(k, [v])
+
+File /usr/local/lib/python3.11/site-packages/boltons/dictutils.py:198, in OrderedMultiDict._insert(self, k, v)
+    197 def _insert(self, k, v):
+--> 198     root = self.root
+    199     cells = self._map.setdefault(k, [])
+    200     last = root[PREV]
+
+AttributeError: 'OrderedMultiDict' object has no attribute 'root'
+```"""
+
+[[case]]
+id = "boltons-348"
+repo = "https://github.com/mahmoud/boltons"
+issue = "https://github.com/mahmoud/boltons/issues/348"
+pr = "https://github.com/mahmoud/boltons/pull/349"
+base = "46599bc0d498dd8adc3aea833ce1445feed349dd"
+fix = "4815fc8dd1768da5f2d903846d2ab994aa57b0cf"
+tests = ["tests/test_cacheutils.py"]
+test_command = "python -m pytest -q"
+setup = ["uv pip install -e . \"pytest<9\""]
+goal = """LRU .values() and dict return old entries
+
+Hi,
+
+First of all thanks for the excellent library!
+
+I'm seeing strange results when using `LRU`: after replacing an existing entry with a new value, seems like the `keys()` and `values()` methods return the old value, instead of the new one. Using `__getitem__` and `.get` we have the expected behavior.
+
+Here is a test showing this behavior:
+
+```python
+def test_lru():
+    from boltons.cacheutils import LRU
+
+    cache = LRU()
+
+    # Add an entry.
+    cache['a'] = 1
+    
+    # Normal __getitem__ access. 
+    assert cache['a'] == 1  # passes.
+    # Convert to dict.
+    assert dict(cache) == {'a': 1}  # passes.
+    # Another way to access the only value.
+    assert list(cache.values())[0] == 1  # passes.
+
+    # Replace the existing 'a' entry with a new value.
+    cache['a'] = 200
+
+    # __getitem__ works as expected.
+    assert cache['a'] == 200  # passes.
+
+    # Both dict and accessing via values() return the old entry: 1.
+    assert dict(cache) == {'a': 200}  # fails.
+    assert list(dict(cache).values())[0] == 200  # fails.
+```
+
+This test fails in the last asserts (of course to see the 2nd failure one needs to comment the first):
+
+(pytest output trimmed: `assert dict(cache) == {'a': 200}` fails with `{'a': 1} != {'a': 200}`)
+
+At first it seems like a bug? Or perhaps this usage is not meant to be supported?"""
+
+[[case]]
+id = "humanize-174"
+repo = "https://github.com/python-humanize/humanize"
+issue = "https://github.com/python-humanize/humanize/issues/174"
+pr = "https://github.com/python-humanize/humanize/pull/272"
+base = "38c99686b9c9e211a3e27c5e1ad99bfdc8e82f04"
+fix = "6d89dfa96779eeca96654c48a3d6106942cf1a6c"
+tests = ["tests/test_time.py"]
+test_command = "python -m pytest -q"
+setup = ["uv pip install -e . pytest freezegun"]
+goal = """`humanize.naturaldelta()` always rounds down
+
+### What did you do?
+```py
+import humanize
+humanize.naturaldelta(10799)
+```
+Note that this is exactly one second below 3 hours.
+
+### What did you expect to happen?
+It should say 3 hours.
+
+### What actually happened?
+It says 2 hours.
+
+### What versions are you using?
+
+* OS: Debian 12
+* Python: 3.11.2
+* Humanize: 4.9.0```python
+import humanize
+print(humanize.naturaldelta(10800))  # "3 hours"
+print(humanize.naturaldelta(10799))  # "2 hours"
+```"""

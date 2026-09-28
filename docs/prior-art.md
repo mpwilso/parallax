@@ -66,7 +66,9 @@ From toryo:
 - A law is enforced in code when a policy rule can express it, and is prose in `mission.md` otherwise.
 - Parallax writes approved changes itself. Each edit is verified by parsing before it's written and recorded as `rules.changed` (hash before and after) first, so a running gate can tell a change you approved from tampering.
 
-**M5 onward:** evals against merged OSS PRs, visual inbox. SQLite only as a rebuildable index over the ledger if JSONL gets slow, never as a second source of truth.
+**M5: evals.** The setup (issue text in, hidden tests from the merged PR out) follows SWE-bench. Parallax uses a small curated set that runs natively on Windows instead of SWE-bench's Docker harness, and adds what SWE-bench doesn't measure: the blind checker's catches, misses, and false alarms, and how much would have reached a human. The maker's copy of the repo holds no history past the base commit, so the fix can't be looked up.
+
+**M6 onward:** visual inbox. SQLite only as a rebuildable index over the ledger if JSONL gets slow, never as a second source of truth.
 
 ## Sources
 
@@ -78,3 +80,4 @@ From toryo:
 - claude-code-permissions-hook: https://github.com/kornysietsma/claude-code-permissions-hook
 - claude-squad: https://github.com/smtg-ai/claude-squad
 - container-use: https://github.com/dagger/container-use
+- SWE-bench: https://www.swebench.com

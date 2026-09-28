@@ -36,12 +36,14 @@ PermissionFn = Callable[[str, str, list[str]], Permission]
 class AgentResult:
     status: str  # "done" | "gave_up" | "error"
     summary: str
+    cost_usd: float | None = None
 
 
 @dataclass
 class Verdict:
     verdict: str  # one of VERDICTS
     findings: list[str] = field(default_factory=list)
+    cost_usd: float | None = None
 
 
 class ConductorError(Exception):
@@ -81,6 +83,7 @@ class Report:
     proposals: list[Proposal] = field(default_factory=list)
     recommendations: list[Recommendation] = field(default_factory=list)
     laws: list[Law] = field(default_factory=list)
+    cost_usd: float | None = None
 
 
 class Conductor(Protocol):

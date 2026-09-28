@@ -190,7 +190,8 @@ def _load_sdk():
     try:
         import claude_agent_sdk
     except ImportError as err:
-        raise AgentUnavailable("claude-agent-sdk not installed. pip install -e .[claude]") from err
+        raise AgentUnavailable("the claude adapter isn't installed. from the parallax folder run: "
+                               'uv tool install --editable ".[claude]"') from err
     return claude_agent_sdk
 
 
@@ -205,10 +206,12 @@ async def _final_result(sdk, options, prompt: str):
 
 
 class ClaudeAgent:
-    def __init__(self, model: str = DEFAULT_MODEL, max_turns: int | None = None):
+    def __init__(self, model: str = DEFAULT_MODEL, max_turns: int | None = None,
+                 max_budget_usd: float | None = None):
         self.sdk = _load_sdk()
         self.model = model
         self.max_turns = max_turns
+        self.max_budget_usd = max_budget_usd
 
     def run(self, goal: str, cwd: Path, permission_fn: PermissionFn, stage: str = "build",
             env: dict[str, str] | None = None) -> AgentResult:
@@ -236,21 +239,25 @@ class ClaudeAgent:
             can_use_tool=no_ruling,
             setting_sources=[],
             max_turns=self.max_turns,
+            max_budget_usd=self.max_budget_usd,
             env=env,  # marks the maker's shell as inside a task (spawn depth 1)
         )
         result = await _final_result(sdk, options, goal)
         if result is None:
             return AgentResult("error", "agent ended without a result")
-        text = result.result or ""
+        text, cost = result.result or "", getattr(result, "total_cost_usd", None)
+        if "budget" in str(result.subtype):
+            return AgentResult("error", f"stopped at the budget cap (${self.max_budget_usd})", cost)
         if result.is_error:
-            return AgentResult("error", text or str(result.subtype))
+            return AgentResult("error", text or str(result.subtype), cost)
         if text.strip().lower().startswith("gave up"):
-            return AgentResult("gave_up", text)
-        return AgentResult("done", text)
+            return AgentResult("gave_up", text, cost)
+        return AgentResult("done", text, cost)
 
 
-async def _structured(sdk, model: str, system: str, prompt: str, schema: dict, error: type) -> dict:
-    """One tool-less turn with a JSON reply. Used by the checker and the conductor."""
+async def _structured(sdk, model: str, system: str, prompt: str, schema: dict, error: type,
+                      max_budget_usd: float | None = None) -> tuple[dict, float | None]:
+    """One tool-less turn with a JSON reply, and what it cost. Used by the checker and the conductor."""
 
     async def no_tools(tool_name, tool_input, context):
         return sdk.PermissionResultDeny(message="no tools here")
@@ -265,6 +272,7 @@ async def _structured(sdk, model: str, system: str, prompt: str, schema: dict, e
             can_use_tool=no_tools,
             setting_sources=[],
             output_format={"type": "json_schema", "schema": schema},
+            max_budget_usd=max_budget_usd,
         )
         result = await _final_result(sdk, options, prompt)
     if result is None or result.is_error:
@@ -272,19 +280,22 @@ async def _structured(sdk, model: str, system: str, prompt: str, schema: dict, e
     data = getattr(result, "structured_output", None) or _parse_json(result.result or "", error)
     if not isinstance(data, dict):
         raise error(f"reply had the wrong shape: {str(data)[:120]!r}")
-    return data
+    return data, getattr(result, "total_cost_usd", None)
 
 
 class ClaudeChecker:
-    def __init__(self, model: str = DEFAULT_MODEL):
+    def __init__(self, model: str = DEFAULT_MODEL, max_budget_usd: float | None = None):
         self.sdk = _load_sdk()
         self.model = model
+        self.max_budget_usd = max_budget_usd
 
     def review(self, goal: str, material: str, kind: str) -> Verdict:
         prompt = f"task goal:\n{goal}\n\n{kind} to review:\n{material or '(empty)'}"
-        data = asyncio.run(_structured(self.sdk, self.model, CHECKER_PROMPT.format(kind=kind), prompt,
-                                       VERDICT_SCHEMA, CheckerError))
-        return _to_verdict(data)
+        data, cost = asyncio.run(_structured(self.sdk, self.model, CHECKER_PROMPT.format(kind=kind), prompt,
+                                             VERDICT_SCHEMA, CheckerError, self.max_budget_usd))
+        v = _to_verdict(data)
+        v.cost_usd = cost
+        return v
 
 
 class ClaudeConductor:
@@ -293,13 +304,15 @@ class ClaudeConductor:
         self.model = model
 
     def review(self, mission: str, snapshot: str) -> Report:
-        data = asyncio.run(_structured(self.sdk, self.model, CONDUCTOR_PROMPT.format(mission=mission),
-                                       f"snapshot:\n{snapshot}", REPORT_SCHEMA, ConductorError))
-        return _to_report(data)
+        data, cost = asyncio.run(_structured(self.sdk, self.model, CONDUCTOR_PROMPT.format(mission=mission),
+                                             f"snapshot:\n{snapshot}", REPORT_SCHEMA, ConductorError))
+        report = _to_report(data)
+        report.cost_usd = cost
+        return report
 
     def split(self, mission: str, goal: str) -> list[Proposal]:
-        data = asyncio.run(_structured(self.sdk, self.model, SPLIT_PROMPT.format(mission=mission or "(none)"),
-                                       f"goal:\n{goal}", SPLIT_SCHEMA, ConductorError))
+        data, _ = asyncio.run(_structured(self.sdk, self.model, SPLIT_PROMPT.format(mission=mission or "(none)"),
+                                          f"goal:\n{goal}", SPLIT_SCHEMA, ConductorError))
         return _to_report({"proposals": data.get("proposals", [])}).proposals
 
 

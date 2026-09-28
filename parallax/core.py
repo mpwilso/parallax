@@ -89,7 +89,7 @@ class Project:
         for path in [Path(start).resolve(), *Path(start).resolve().parents]:
             if (path / POLICY_FILE).exists() and (path / STATE_DIR).exists():
                 return cls(path)
-        raise ParallaxError("not a parallax project (run `parallax init`)")
+        raise ParallaxError("not a parallax project here. run `parallax init` in your repo's folder")
 
     # tasks ---------------------------------------------------------------
     def new_task(self, goal: str, actor: str = "human", *, profile: str = DEFAULT_PROFILE,

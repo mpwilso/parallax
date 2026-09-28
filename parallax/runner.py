@@ -51,21 +51,22 @@ def _check_cap(project: Project, task_id: str) -> None:
 
 
 def _make(project: Project, task_id: str, maker: Agent, goal: str, stage: str, fn,
-          keep_summary: bool = True) -> AgentResult:
+          keep_summary: bool = True, extra_env: dict[str, str] | None = None) -> AgentResult:
     project.ledger.append("maker.started", "parallax", "", task=task_id, stage=stage)
-    env = {TASK_ENV: task_id, ROOT_ENV: str(project.root)}
+    env = {**(extra_env or {}), TASK_ENV: task_id, ROOT_ENV: str(project.root)}
     try:
         res = maker.run(goal, Path(project.task(task_id)["worktree"]), fn, stage=stage, env=env)
     except Exception as err:  # an adapter crash is recorded, not hidden
         res = AgentResult("error", f"{type(err).__name__}: {err}")
     summary = res.summary if keep_summary else ""  # plans and reports get their own entries
-    project.ledger.append("maker.finished", "maker", summary, task=task_id, stage=stage, status=res.status)
+    project.ledger.append("maker.finished", "maker", summary, task=task_id, stage=stage, status=res.status,
+                          cost_usd=res.cost_usd)
     return res
 
 
 def run_task(project: Project, task_id: str, maker: Agent, checker: Checker, *, plan: bool | None = None,
              poll: float = 1.0, on_wait: Callable[[dict], None] | None = None,
-             say: Callable[[str], None] = _quiet) -> str:
+             say: Callable[[str], None] = _quiet, env: dict[str, str] | None = None) -> str:
     t = ensure_can_run(project, task_id)
     _check_cap(project, task_id)
     wt, goal = Path(t["worktree"]), t["goal"]
@@ -78,7 +79,7 @@ def run_task(project: Project, task_id: str, maker: Agent, checker: Checker, *, 
     if plan:
         say("maker planning (read-only)")
         fn = make_permission_fn(project, task_id, wt, read_only=True, poll=poll, on_wait=on_wait)
-        res = _make(project, task_id, maker, goal + laws, "plan", fn, keep_summary=False)
+        res = _make(project, task_id, maker, goal + laws, "plan", fn, keep_summary=False, extra_env=env)
         if res.status != "done" or project.task(task_id)["status"] == "stuck":
             return project.task(task_id)["status"]
         p = project.ledger.append("plan.recorded", "maker", "", task=task_id, text=res.summary)
@@ -97,7 +98,7 @@ def run_task(project: Project, task_id: str, maker: Agent, checker: Checker, *, 
     say("maker building")
     before = guard.fingerprint(project.root)
     fn = make_permission_fn(project, task_id, wt, poll=poll, on_wait=on_wait)
-    res = _make(project, task_id, maker, build_goal, "build", fn, keep_summary=not readonly)
+    res = _make(project, task_id, maker, build_goal, "build", fn, keep_summary=not readonly, extra_env=env)
     say(f"maker: {res.status}")
 
     # backstop for invariant 9: whatever got past the gate, the human hears about it
