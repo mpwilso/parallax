@@ -42,7 +42,7 @@ def derive(entries: list[dict]) -> dict[str, dict]:
         elif kind == "decision.resolved":
             about, approved = d.get("about"), d["outcome"] == "approved"
             if about == "disagreement.raised":
-                won = {"plan": "plan approved", "scope": "risk accepted"}.get(d.get("stage"), "ready")
+                won = {"plan": "plan approved", "scope": "risk accepted", "conflict": "risk accepted"}.get(d.get("stage"), "ready")
                 t["status"] = won if approved else "needs work"
             elif about == "stuck.raised":
                 t["status"] = "open" if approved else "closed"

@@ -62,6 +62,8 @@ review rules (REVIEW.md), and the diff. Nothing else, on purpose: not the author
 notes. Judge the change on its merits.
 Follow REVIEW.md's passes. Give each finding one of its severities, and where it is (path:line from the
 diff, or "" for the whole change). Findings are about the diff; don't restate the rules.
+Give each finding a kind: "scope" if the problem is that the change does something the outcome or the
+constraints don't allow (or leaves out something they require); "defect" for anything else.
 - pass: it achieves the outcome within the constraints.
 - fail: it doesn't, or it has a problem.
 - no_finding: you found nothing wrong, but can't confirm the outcome from the diff alone.
@@ -79,10 +81,11 @@ BLIND_SCHEMA = {
             "type": "object",
             "properties": {
                 "severity": {"type": "string", "enum": ["blocker", "major", "minor", "nit"]},
+                "kind": {"type": "string", "enum": ["defect", "scope"]},
                 "where": {"type": "string"},
                 "text": {"type": "string"},
             },
-            "required": ["severity", "where", "text"],
+            "required": ["severity", "kind", "where", "text"],
             "additionalProperties": False,
         }},
         "not_looked_at": {"type": "string"},
@@ -204,6 +207,8 @@ class ClaudeAgent:
             return AgentResult("error", f"stopped at the budget cap (${self.max_budget_usd})", cost)
         if result.is_error:
             return AgentResult("error", text or str(result.subtype), cost)
+        if text.strip().lower().startswith("conflict:"):
+            return AgentResult("conflict", text, cost)
         if text.strip().lower().startswith(("gave up", "blocked:")):
             return AgentResult("gave_up", text, cost)
         return AgentResult("done", text, cost)
@@ -248,7 +253,7 @@ class ClaudeChecker:
         data, cost = asyncio.run(_structured(self.sdk, self.model, BLIND_PROMPT, brief, BLIND_SCHEMA,
                                              CheckerError, self.max_budget_usd))
         try:
-            findings = [Finding(str(f["severity"]), str(f.get("where", "")), str(f["text"]))
+            findings = [Finding(str(f["severity"]), str(f.get("where", "")), str(f["text"]), str(f.get("kind", "defect")))
                         for f in data.get("findings", [])]
         except (KeyError, TypeError) as err:
             raise CheckerError(f"checker reply had the wrong shape: {err}") from err

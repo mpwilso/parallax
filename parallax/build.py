@@ -176,6 +176,11 @@ def run_build(project: Project, task_id: str, maker_for: Callable[[float, str], 
         status = "stuck"
     elif costs.budget(project, task_id, p.plan)[1] <= 0 or "budget cap" in (res.summary or ""):
         status = "over budget"  # recorded below, and it comes to you
+    elif res.status == "conflict":
+        status = "disputed"
+        project.ledger.append("disagreement.raised", "parallax",
+                              f"the maker says a finding goes against your approved plan: {res.summary.strip()[:300]}",
+                              task=task_id, stage="conflict")
     elif res.status == "done":
         status = "built"
     else:

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import asdict
+from pathlib import Path
 from typing import Callable
 
 from . import build, costs, lifecycle, review, testrun, tree
@@ -34,6 +35,23 @@ def accepted_risk(project: Project, task_id: str, tree_hash: str) -> bool:
               and e["data"].get("stage") == "scope" and e["data"].get("tree") == tree_hash}
     return any(e["kind"] == "decision.resolved" and e["data"].get("decision") in raised
                and e["data"]["outcome"] == "approved" for e in project.ledger.entries())
+
+
+def plan_wins(project: Project, task_id: str) -> bool:
+    """Did you settle an intent-versus-plan conflict on this task in the plan's favour?"""
+    raised = {e["id"] for e in project.ledger.entries()
+              if e["kind"] == "disagreement.raised" and e["data"].get("task") == task_id
+              and e["data"].get("stage") == "conflict"}
+    return any(e["kind"] == "decision.resolved" and e["data"].get("decision") in raised
+               and e["data"]["outcome"] == "approved" for e in project.ledger.entries())
+
+
+def planned_paths(plan: dict) -> set[str]:
+    return set(plan["files"]) | {t.split("::", 1)[0] for t in plan["tests"]}
+
+
+def _path(where: str) -> str:
+    return where.split(":", 1)[0].strip()
 
 
 def rework_cycles(project: Project, task_id: str) -> int:
@@ -88,12 +106,23 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
 
     blocking = review.blocking(review_text)
     blockers = [f for f in rv.findings if f.severity in blocking]
+    # a scope finding on a file your approved plan lists: intent and plan disagree. that's yours,
+    # never the maker's to settle, since fixing it would change approved scope
+    against_plan = [f for f in blockers if f.kind == "scope" and _path(f.where) in planned_paths(plan)]
+    if against_plan and plan_wins(project, task_id):
+        blockers = [f for f in blockers if f not in against_plan]
+        against_plan = []
     verdict = "fail" if blockers else ("pass" if rv.verdict == "pass" else "no_finding")
     project.ledger.append("verdict.recorded", "checker", "; ".join(f.text for f in rv.findings), task=task_id,
                           stage="check", tree=s.tree, verdict=verdict, checker_verdict=rv.verdict,
                           findings=[asdict(f) for f in rv.findings], not_looked_at=rv.not_looked_at,
                           model=rv.model or settings["model"], cost_usd=rv.cost_usd,
                           brief_sha=hashlib.sha256(brief.encode()).hexdigest())
+    if against_plan:
+        f = against_plan[0]
+        return _to_you(project, task_id, "conflict",
+                       f"intent and plan disagree: the checker says {f.where} goes against the intent "
+                       f"({' '.join(f.text.split())}), but your approved plan lists {_path(f.where)}", tree=s.tree), []
     if results.ok and not blockers:
         project.ledger.append("check.finished", "parallax", "", task=task_id, status="ready", tree=s.tree)
         return "ready", []
@@ -129,10 +158,21 @@ def run_check(project: Project, task_id: str, checker_for: CheckerFor, maker_for
                                   task=task_id)
             return "stuck"
         project.ledger.append("rework.started", "parallax", "\n".join(fix), task=task_id, cycle=cycles + 1)
-        extra = "The check found problems. Fix them, then stop:\n" + "\n".join(f"- {line}" for line in fix)
+        extra = ("The check found problems. Fix them, then stop:\n" + "\n".join(f"- {line}" for line in fix)
+                 + "\n\nIf a finding can only be fixed by going against the approved plan (removing or not "
+                   "doing something it lists), don't fix it: start your final reply with \"conflict:\" and "
+                   "name the finding. That's for the human to decide.")
+        before = project.ledger.entries()
+        reviewed = [e for e in before if e["kind"] == "check.staged" and e["data"].get("task") == task_id][-1]["data"]["tree"]
         status = build.run_build(project, task_id, maker_for, extra=extra)
         if status != "built":
             return status
+        wt = Path(project.task(task_id)["worktree"])
+        had = set(tree.files_in(wt, reviewed))
+        gone = sorted(f for f in planned_paths(p.plan) if f in had and not (wt / f).exists())
+        if gone:  # the backstop: a rework may never drop what you approved
+            return _to_you(project, task_id, "conflict",
+                           f"the rework removed {', '.join(gone)}, which your approved plan lists")
 
 
 def can_check(project: Project, task_id: str) -> None:

@@ -34,7 +34,7 @@ PermissionFn = Callable[[str, str, list[str]], Permission]
 
 @dataclass
 class AgentResult:
-    status: str  # "done" | "gave_up" | "error"
+    status: str  # "done" | "gave_up" | "error" | "conflict" (a finding goes against the approved plan)
     summary: str
     cost_usd: float | None = None
 
@@ -51,6 +51,7 @@ class Finding:
     severity: str  # one of REVIEW.md's severities: blocker, major, minor, nit
     where: str     # path:line, or "" when it's about the whole change
     text: str
+    kind: str = "defect"  # defect: it's wrong. scope: it does something the outcome or constraints don't allow
 
 
 @dataclass

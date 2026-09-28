@@ -38,6 +38,7 @@ Each line says how it's enforced today: a test, a rule in code, or judgment only
 - **Anything that watches for new work starts in dry-run; going live is a recorded decision.** Nothing watches for work today. Judgment only.
 - **One task, one record: retries fold into the task; proposals carry their provenance.** Every draft, failure and gate decision is a ledger entry on its task. The record file comes in M11.
 - **The checker is blind, and the brief is pinned.** It gets exactly the outcome, the constraints, REVIEW.md and the diff, on every review (test: `test_checker_is_blind_to_maker_explanation`). Only REVIEW.md's blocking severities block (test: `test_only_review_md_blocking_severities_block`).
+- **Intent against plan is yours, never the maker's.** A blocking finding that the change goes against the intent, on a file your approved plan lists, comes straight to you with no rework. So does a maker that says a fix would go against the plan, and a rework that removes a file the plan lists (tests: `test_a_finding_against_the_approved_plan_comes_to_you_without_rework`, `test_a_rework_that_drops_an_approved_file_comes_to_you`).
 - **The maker's own report of passing tests doesn't count.** Parallax runs them, with the harness from the base branch (test: `test_the_test_harness_comes_from_the_base_branch`).
 - **One clear next action per inbox item.** Every report has one Next line (rule in lint).
 - **Some steps are human-only on purpose (merge), and the UI says so.** Parallax never merges. The UI marks it in M12.

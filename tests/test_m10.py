@@ -323,3 +323,61 @@ def test_approval_refuses_a_cap_drafting_already_spent(repo):
     assert "Drafting this task has cost an estimated $1.50 so far" in drafter.requests[-1]
     with pytest.raises(Exception, match="isn't above what drafting already spent"):
         lifecycle.approve(proj, tid)
+
+
+# intent versus plan: never the maker's to settle -----------------------------------------------
+
+MKDIR_TESTS = ("call", lambda cwd: (cwd / "tests").mkdir(exist_ok=True))
+SCOPE = Finding("major", "tests/test_readme.py", "the intent says the test suite stays unchanged; this adds a test",
+                kind="scope")
+
+
+def test_a_finding_against_the_approved_plan_comes_to_you_without_rework(repo):
+    """003876's case: the checker says the intent forbids a file the approved plan lists."""
+    proj, tid, wt = approved(repo)
+    maker = built(proj, tid, [("write", "README.md", "ok\n"), MKDIR_TESTS, ("write", "tests/test_readme.py", "def test(): pass\n")])
+    other = Finding("major", "README.md:7", "step 7 is wrong")
+    checker = FakeChecker(reviews=[Review("fail", [SCOPE, other], "nothing")])
+    assert run(proj, tid, maker, checker) == "disputed"
+    assert len(maker.goals) == 1 and not kinds(proj, "rework.started")  # the maker never touched it
+    [item] = proj.inbox()
+    assert item["data"]["stage"] == "conflict"
+    assert item["reason"].startswith("intent and plan disagree") and "your approved plan lists tests/test_readme.py" in item["reason"]
+    assert (wt / "tests" / "test_readme.py").exists()
+
+
+def test_when_the_plan_wins_that_finding_stops_blocking(repo):
+    proj, tid, wt = approved(repo)
+    maker = built(proj, tid, [("write", "README.md", "ok\n"), MKDIR_TESTS, ("write", "tests/test_readme.py", "def test(): pass\n")])
+    checker = FakeChecker(reviews=[Review("fail", [SCOPE], "nothing")])
+    run(proj, tid, maker, checker)
+    proj.resolve(proj.inbox()[0]["id"], True, "the plan wins: the README needs a test")
+    assert proj.task(tid)["status"] == "risk accepted"
+    assert run(proj, tid, maker, checker) == "ready"
+
+
+def test_scope_findings_off_the_plan_and_defects_still_go_to_rework(repo):
+    proj, tid, wt = approved(repo)
+    maker = built(proj, tid, [("write", "README.md", "ok\n")])
+    whole = Finding("major", "", "the change doesn't cover the Linux steps", kind="scope")
+    assert run(proj, tid, maker, FakeChecker(reviews=[Review("fail", [whole], "nothing"), Review("pass")])) == "ready"
+    assert len(kinds(proj, "rework.started")) == 1
+
+
+def test_the_maker_can_say_a_finding_conflicts_with_the_plan(repo):
+    proj, tid, wt = approved(repo)
+    maker = built(proj, tid, [("write", "README.md", "ok\n")])
+    maker.status, maker.summary = "conflict", "conflict: fixing it means dropping a step the plan lists"
+    assert run(proj, tid, maker, FakeChecker(reviews=[blocker()])) == "disputed"
+    [item] = proj.inbox()
+    assert item["data"]["stage"] == "conflict" and "the maker says a finding goes against" in item["reason"]
+
+
+def test_a_rework_that_drops_an_approved_file_comes_to_you(repo):
+    proj, tid, wt = approved(repo)
+    maker = built(proj, tid, [("write", "README.md", "ok\n"), MKDIR_TESTS, ("write", "tests/test_readme.py", "def test(): pass\n")])
+    maker.steps["build"] = [("call", lambda cwd: (cwd / "tests" / "test_readme.py").unlink())]
+    checker = FakeChecker(reviews=[blocker()])
+    assert run(proj, tid, maker, checker) == "disputed"
+    assert len(checker.briefs) == 1  # stopped before the re-check
+    assert proj.inbox()[0]["reason"] == "the rework removed tests/test_readme.py, which your approved plan lists"
