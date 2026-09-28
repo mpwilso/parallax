@@ -21,9 +21,11 @@ start here:
   parallax doctor                       check this machine can run agents in a sandbox
   parallax init                         set up parallax in your repo's folder
   parallax intent new "what you want"   a task: agents draft its intent and plan
-  parallax task new "what you want"     a task run straight from its goal (until m9)
+  parallax task new "what you want"     the old way: run straight from its goal
   parallax approve <task>               approve the task's pending gate
   parallax reject <task> --reason "..." reject it, with a reason
+  parallax preflight <task>             test the sandbox for an approved task
+  parallax build <task>                 build it in the sandbox. parallax stop ends it
   parallax lint <file>                  check a report or task file against the output shape
 
 more: parallax run, inbox, ui, draft, log, verify, eval. `parallax <command> -h` for details.
@@ -60,6 +62,12 @@ def main(argv: list[str] | None = None) -> int:
     dr.add_argument("--model", default=None)
     ln = sub.add_parser("lint", help="check a file against the output shape")
     ln.add_argument("file")
+
+    pf = sub.add_parser("preflight", help="test both sandbox layers for a task, without launching")
+    pf.add_argument("task")
+    bd = sub.add_parser("build", help="build an approved plan in the sandbox, in the background")
+    bd.add_argument("task")
+    sub.add_parser("stop", help="end every running build now")
 
     rn = sub.add_parser("run", help="run the maker on a task, then the blind checker")
     rn.add_argument("task")
@@ -111,7 +119,7 @@ def _run(args) -> int:
         proj = Project.init(cwd)
         print(f"initialized parallax in {proj.root}")
         print("  parallax.policy.toml  what agents may do. anything unlisted is denied.")
-        print('next: parallax task new "what you want done"')
+        print('next: parallax intent new "what you want done"')
         return 0
 
     if args.cmd == "eval":
@@ -153,6 +161,23 @@ def _run(args) -> int:
             lifecycle.draft(proj, args.task, lifecycle.redraft_docs(st), drafter)
         print(f"task {t['task']} on branch {t['branch']}")
         _shaped(proj, lifecycle.report(proj, t["task"]))
+        return 0
+
+    if args.cmd in ("preflight", "build"):
+        from . import build, preflight
+        p = build.prepare(proj, args.task)
+        lines = preflight.report(build.run_preflight(proj, p))
+        if args.cmd == "preflight" or not lines[-1].startswith("ready"):
+            print("\n".join(lines))
+            return 0 if lines[-1].startswith("ready") else 1
+        build.launch(proj, p)
+        print(f"building {args.task}, estimated budget ${p.left:.2f}. parallax stop ends it.")
+        return 0
+
+    if args.cmd == "stop":
+        from . import build
+        stopped = build.stop(proj)
+        print(f"stopped {', '.join(stopped)}." if stopped else "nothing is running.")
         return 0
 
     if args.cmd == "run":
@@ -331,11 +356,7 @@ def _agents(proj: Project, args) -> int:
     model = {"model": args.model} if args.model else {}
     checker = ClaudeChecker(**model)
 
-    def waiting(e: dict) -> None:
-        print(f"waiting on you: {e['data']['action']} {_line(e['reason'], 100)}")
-        print(f"  decide in `parallax ui`, or: parallax approve {e['id']} --reason \"...\"", flush=True)
-
-    status = run_task(proj, args.task, ClaudeAgent(**model), checker, on_wait=waiting, say=print)
+    status = run_task(proj, args.task, ClaudeAgent(**model), checker, say=print)
     print(f"task {args.task}: {status}")
     print(NEXT.get(status, "").format(task=args.task), end="")
     return 0

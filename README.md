@@ -113,13 +113,27 @@ parallax intent new "the install steps are wrong for WSL"
                                                # a task, with its intent and plan drafted in docs/tasks/<id>/
 parallax approve <task-id>                     # approve intent and plan (a large task: intent first, then spec and plan)
 parallax reject <task-id> --reason "..."       # or reject, then edit the files or run parallax draft <task-id>
+parallax preflight <task-id>                   # test both sandbox layers with the build's own rules
+parallax build <task-id>                       # the maker builds the approved plan in the sandbox, in the background
+parallax stop                                  # end every running build now
 parallax lint docs/tasks/<task-id>/plan.md     # check a file against the output shape
 parallax task list                             # every task, its status, and what it cost (estimated)
 parallax log                                   # the ledger
 parallax verify                                # confirm the ledger hasn't been edited
 ```
 
-Read the drafted files before approving, and edit them if needed: the approval records each file's hash and is signed with your approval key. The build from an approved plan lands in M9; until then, `parallax task new "..."` and `parallax run <task-id>` run a task straight from its goal. How the lifecycle, the output shape and the principles fit together is in [docs/parallax.md](docs/parallax.md).
+Read the drafted files before approving, and edit them if needed: the approval records each file's hash and is signed with your approval key.
+
+`parallax build` runs preflight first and refuses to launch if either layer would let a protected path be written. The maker runs in Claude Code's sandbox with rules generated from the plan: writes only in the task's worktree (never the protected files), no reads of your home folder except the worktree and the task's venv, and no network unless the plan names the domains. Nothing waits on you mid-build: an action that needs your approval is refused and recorded. The maker never commits. The build's log is in `~/.local/share/parallax/tasks/`. The check of the result lands in M10.
+
+If your tests need packages, set `[build] setup` in the policy file to a command that makes the task's venv at `$PARALLAX_VENV`. It runs as you, before the build. For example:
+
+```toml
+[build]
+setup = 'uv venv -q --python /usr/bin/python3 "$PARALLAX_VENV" && uv pip install -q --link-mode copy --python "$PARALLAX_VENV" pytest'
+```
+
+`parallax task new "..."` and `parallax run <task-id>` still run a task the old way, straight from its goal. How the lifecycle, the output shape and the principles fit together is in [docs/parallax.md](docs/parallax.md).
 
 Worktrees live outside your repo, in `~/.local/share/parallax/worktrees/`.
 
@@ -129,7 +143,7 @@ Worktrees live outside your repo, in `~/.local/share/parallax/worktrees/`.
 parallax ui --no-open
 ```
 
-This opens every decision waiting on you in a local page. Items are on the left; click one to see what you need to decide it: the change as a colored diff, the checker's findings, the refusals that got a task stuck. Write a reason and click one of two plain choices ("Allow" / "Refuse", "Side with the maker" / "Side with the checker", and so on). New items appear on their own while agents work, the tab shows how many are waiting, and you can turn on a desktop notification for when an agent is paused on you. The Tasks tab shows every task with its status, cost, timeline and change, and for a ready task, the exact commands to merge it yourself.
+This opens every decision waiting on you in a local page. Items are on the left; click one to see what you need to decide it: the change as a colored diff, the checker's findings, the refusals that got a task stuck. Write a reason and click one of two plain choices ("Allow" / "Refuse", "Side with the maker" / "Side with the checker", and so on). New items appear on their own while agents work, the tab shows how many are waiting, and you can turn on a desktop notification for new items. The Tasks tab shows every task with its status, cost, timeline and change, and for a ready task, the exact commands to merge it yourself.
 
 The page runs on your machine only. Every decision still needs a reason and is recorded as yours, and no agent can reach the page to make one.
 
@@ -137,13 +151,12 @@ The page runs on your machine only. Every decision still needs a reason and is r
 
 ```bash
 parallax run <task-id>             # maker works the task, then the blind checker reviews the diff
-parallax run <task-id> --plan      # maker plans first (read-only), a checker reviews the plan
 parallax inbox                     # permission requests and maker/checker disagreements
 parallax approve <id> --reason ".." # on a disagreement: side with the maker
 parallax reject <id> --reason ".."  # on a disagreement: side with the checker
 ```
 
-While the maker runs, any `ask` action pauses it until you approve or reject from another terminal. The checker sees only the task goal and the diff: never the maker's summary, its plan, or commit messages. `pass` and `no_finding` count as agreement and the task becomes `ready`. Anything else goes to your inbox. Agents can't write `parallax.policy.toml`, `mission.md`, or `.parallax/`, whatever the policy says.
+While the maker runs, nothing waits on you: an `ask` action is refused and recorded. The checker sees only the task goal and the diff: never the maker's summary, its plan, or commit messages. `pass` and `no_finding` count as agreement and the task becomes `ready`. Anything else goes to your inbox. Agents can't write the protected paths (CLAUDE.md, `.claude/`, `.git`, `docs/tasks/`, the policy file and the rest), whatever the policy says.
 
 Limits live in the policy file under `[limits]`: `max_parallel` (default 4), `stuck_after` (the same call refused this many times stops the maker and puts it in your inbox, default 3), and `stale_minutes` (a running task silent this long is flagged stuck on your next command, default 60). A task can't create tasks or resolve decisions.
 
@@ -157,7 +170,8 @@ Limits live in the policy file under `[limits]`: `max_parallel` (default 4), `st
 - [x] M6: local visual decision inbox
 - [x] M7: move to WSL2, cut the conductor, pulse, profiles, promotions and laws, add `parallax doctor`
 - [x] M8: intent, spec, plan, and the gates. `parallax lint` and the output shape
-- [ ] M9 to M14: see [docs/plan.md](docs/plan.md)
+- [x] M9: the sandboxed build, preflight, and `parallax stop`
+- [ ] M10 to M14: see [docs/plan.md](docs/plan.md)
 
 ## Evals
 

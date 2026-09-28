@@ -292,9 +292,12 @@ def lint_file(path: Path, root: Path | None = None, ledger_ids: set[str] | None 
     return lint_lifecycle(text, doc) if doc else lint_report(text, root=root, ledger_ids=ledger_ids)
 
 
-def report(type_: str, bottom: str, not_looked_at: str, next_: str, found: list[str] = ()) -> str:
+def report(type_: str, bottom: str, not_looked_at: str, next_: str, found: list[str] = (),
+           details: list[str] = ()) -> str:
     """A report in the output shape. Callers lint it before showing it."""
     lines = [f"Type: {type_}", f"Bottom line: {bottom}", f"Not looked at: {not_looked_at}", f"Next: {next_}"]
     if found:
         lines += ["Found", *[f"- {f}" for f in found]]
+    if details:
+        lines += ["Details", *[f"- {d}" for d in details]]
     return "\n".join(lines)

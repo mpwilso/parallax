@@ -1,10 +1,7 @@
 import asyncio
-import json
 import os
 import subprocess
 import sys
-import threading
-import time
 from pathlib import Path
 
 import pytest
@@ -128,33 +125,6 @@ def test_disagreement_goes_to_inbox_and_needs_a_reason(repo, approve, status):
     proj.resolve(item["id"], approve, "read the diff myself")
     assert proj.task(tid)["status"] == status
     assert proj.inbox() == []
-    assert proj.ledger.verify()[0]
-
-
-def test_maker_waits_for_a_human_on_ask(repo):
-    proj, tid, wt = setup(repo, write="ask")
-    agent = ScriptedAgent(steps=[("write", "a.txt", "yes"), ("write", "b.txt", "no")])
-
-    def human():
-        for approve, reason in [(True, "fine"), (False, "not that one")]:
-            deadline = time.time() + 10
-            while time.time() < deadline:
-                try:
-                    items = proj.inbox()
-                except json.JSONDecodeError:
-                    items = []
-                if items:
-                    proj.resolve(items[0]["id"], approve, reason)
-                    break
-                time.sleep(0.01)
-
-    th = threading.Thread(target=human)
-    th.start()
-    run_task(proj, tid, agent, FakeChecker(), poll=0.01)
-    th.join(10)
-
-    assert (wt / "a.txt").exists() and not (wt / "b.txt").exists()
-    assert agent.results[1][2].message == "rejected by human: not that one"
     assert proj.ledger.verify()[0]
 
 

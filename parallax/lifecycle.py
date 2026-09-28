@@ -279,7 +279,8 @@ def plan_data(project: Project, task_id: str) -> dict | None:
 def status_line(project: Project, task_id: str) -> str:
     st = state(project, task_id)
     if st.gate is None:
-        return "plan approved"
+        status = project.task(task_id)["status"]
+        return "plan approved" if status == "open" else status
     if st.failed:
         return "draft failed"
     return f"awaiting {'+'.join(st.gate)}" if not st.missing else "drafting"
@@ -296,26 +297,66 @@ def _names(docs) -> str:
     return " and ".join(words)
 
 
+def gaps(project: Project, task_id: str, docs) -> list[tuple[str, int, str]]:
+    """(doc, line, text) for each drafted file whose own Not looked at isn't "nothing"."""
+    out = []
+    for doc in docs:
+        for n, line in enumerate(_read(project, task_id, doc).splitlines()[:12], start=1):
+            m = re.match(r"^Not looked at:\s*(.*)$", line.replace("**", "").strip())
+            if m:
+                text = " ".join(m.group(1).replace(lint.EM_DASH, ",").split())
+                if text and text.rstrip(".").lower() != "nothing":
+                    out.append((doc, n, text))
+                break
+    return out
+
+
+def _report(project: Project, task_id: str, docs, type_: str, bottom: str, next_: str,
+            found: list[str] = ()) -> str:
+    """A report that carries the drafted files' own Not looked at, never replaces it.
+
+    Inline in the header when it fits the header cap; otherwise each gap goes under Found,
+    word for word, citing the file and line it came from.
+    """
+    listed = gaps(project, task_id, docs)
+    if not listed:
+        return lint.report(type_, bottom, "nothing", next_, list(found))
+    inline = "; ".join(f"{doc}.md says: {text.rstrip('.')}" for doc, _, text in listed) + "."
+    text = lint.report(type_, bottom, inline, next_, list(found))
+    if not any("header is" in m for _, m in lint.lint_report(text)):
+        return text
+    cited = [f"docs/tasks/{task_id}/{doc}.md:{n} not looked at: {t}" for doc, n, t in listed]
+    text = lint.report(type_, bottom, f"what the drafters list under Found ({len(listed)})", next_,
+                       list(found) + cited)
+    if not any("body is" in m for _, m in lint.lint_report(text)):
+        return text
+    return lint.report(type_, bottom, f"what the drafters list under Details ({len(listed)})", next_,
+                       list(found), cited)
+
+
 def report(project: Project, task_id: str) -> str:
     """Where the task's gate stands, in the output shape. Type is Decision needed while a gate waits."""
     st = state(project, task_id)
     base = f"docs/tasks/{task_id}/"
+    docs = st.gate or ()
     if st.gate is None:
         return lint.report("FYI", f"The plan for {_title(project, task_id)} is approved.", "nothing",
-                           f"parallax builds it from M9; nothing waits on you.")
+                           "you run parallax build " + task_id + ".")
     if st.failed:
         doc, why = st.failed
         why = re.sub(r"(?<=[.!?])\s+", "; ", why).rstrip(".!?")
-        return lint.report("Decision needed", f"Drafting {doc}.md stopped: {why}.", "nothing",
-                           f"you run parallax draft {task_id} to try again, or write {base}{doc}.md yourself.")
+        return _report(project, task_id, docs, "Decision needed", f"Drafting {doc}.md stopped: {why}.",
+                       f"you run parallax draft {task_id} to try again, or write {base}{doc}.md yourself.")
     if st.missing:
         names = " and ".join(f"{d}.md" for d in st.missing)
-        return lint.report("Decision needed", f"{names} {'is' if len(st.missing) == 1 else 'are'} not drafted yet.",
-                           "nothing", f"you run parallax draft {task_id}, or write {base}{st.missing[0]}.md yourself.")
+        return _report(project, task_id, docs, "Decision needed",
+                       f"{names} {'is' if len(st.missing) == 1 else 'are'} not drafted yet.",
+                       f"you run parallax draft {task_id}, or write {base}{st.missing[0]}.md yourself.")
     names, verb = _names(st.gate), "is" if len(st.gate) == 1 else "are"
     problems = lint_problems(project, task_id, st.gate)
     if problems:
-        return lint.report("Decision needed", f"{names} {verb} drafted for {_title(project, task_id)}, but lint found problems.",
-                           "nothing", f"you fix {base}, then run parallax approve {task_id}.", problems)
-    return lint.report("Decision needed", f"{names} {verb} drafted for {_title(project, task_id)}.", "nothing",
-                       f"you read {base}, then run parallax approve {task_id}.")
+        return _report(project, task_id, docs, "Decision needed",
+                       f"{names} {verb} drafted for {_title(project, task_id)}, but lint found problems.",
+                       f"you fix {base}, then run parallax approve {task_id}.", problems)
+    return _report(project, task_id, docs, "Decision needed", f"{names} {verb} drafted for {_title(project, task_id)}.",
+                   f"you read {base}, then run parallax approve {task_id}.")

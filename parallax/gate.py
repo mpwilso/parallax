@@ -1,20 +1,42 @@
-"""The permission function every maker calls before acting.
+"""The permission function every agent calls before acting. This is the tool layer.
 
-Order: guard (invariant 9) -> policy -> wait for a human on `ask`.
-Repeated refusals of the same call mean the maker is stuck: it's stopped and you're told.
+Order: guard (protected paths, reads outside the allowed roots) -> the scope -> record.
+- With a Scope (a build from an approved plan), routine work inside the worktree is allowed, and
+  anything that crosses the boundary must be in the plan: reads outside the worktree only in the
+  plan's roots, network only to the plan's domains, any other tool refused.
+- Without one (drafters, `parallax run`, evals), the policy file rules. "ask" means deny and
+  record: nothing waits on a human mid-run.
+Repeated refusals of the same call mean the agent is stuck: it's stopped and you're told.
 """
 from __future__ import annotations
 
-import json
-import time
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from urllib.parse import urlparse
 
 from . import guard
 from .agents.base import Permission, PermissionFn
 from .core import Project
-from .policy import ALLOW, DENY
+from .policy import ALLOW
+
+ROUTINE = ("fs.read", "fs.write", "shell.run")
+
+
+@dataclass(frozen=True)
+class Scope:
+    """What an approved plan lets cross the boundary."""
+    reads: tuple[Path, ...] = ()   # read roots besides the worktree: the task's venv, the plan's reads
+    domains: tuple[str, ...] = ()  # network domains; empty means none
+
+
+def host_allowed(url: str, domains: tuple[str, ...]) -> bool:
+    host = (urlparse(url if "//" in url else f"//{url}").hostname or "").lower()
+    for d in domains:
+        d = d.lower()
+        if host == d or (d.startswith("*.") and host.endswith(d[1:])):
+            return True
+    return False
 
 
 def make_permission_fn(
@@ -23,8 +45,7 @@ def make_permission_fn(
     worktree: Path,
     *,
     read_only: bool = False,
-    poll: float = 1.0,
-    on_wait: Callable[[dict], None] | None = None,
+    scope: Scope | None = None,
 ) -> PermissionFn:
     snapshot = guard.fingerprint(project.root)
     stuck_after = project.policy.limits["stuck_after"]
@@ -43,15 +64,14 @@ def make_permission_fn(
 
         if read_only and action != "fs.read":
             project.ledger.append("action.refused", "agent", detail, task=task_id, action=action,
-                                  why="plan stage is read-only")
-            return Permission(False, "refused: plan stage is read-only")
-        if read_only:
+                                  why="read-only stage")
+            return Permission(False, "refused: this stage is read-only")
+        if action == "fs.read" and (read_only or scope):
             for target in paths or [detail]:
-                why = guard.check_read(target, worktree)
+                why = guard.check_read(target, worktree, scope.reads if scope else ())
                 if why:
                     return refuse(action, target, why)
-
-        if action == "fs.write":
+        elif action == "fs.write":
             if not paths or not all(paths):
                 return refuse(action, detail, "write with no path")
             for p in paths:
@@ -63,20 +83,12 @@ def make_permission_fn(
             if why:
                 return refuse(action, detail, why)
 
-        res = project.check(task_id, action, detail)
-        entry = res["entry"]
+        if scope is not None:
+            return _rule_by_scope(project, task_id, scope, action, detail)
+        res = project.check(task_id, action, detail, defer_asks=True)
         if res["ruling"] == ALLOW:
             return Permission(True)
-        if res["ruling"] == DENY:
-            return Permission(False, f"refused: {entry['data']['why']}")
-
-        if on_wait:
-            on_wait(entry)
-        while (outcome := _outcome(project, entry["id"])) is None:
-            time.sleep(poll)
-        if outcome["data"]["outcome"] == "approved":
-            return Permission(True)
-        return Permission(False, f"rejected by human: {outcome['reason']}")
+        return Permission(False, f"refused: {res['entry']['data']['why']}")
 
     def permission_fn(action: str, detail: str = "", paths: list[str] | None = None) -> Permission:
         nonlocal stopped
@@ -97,8 +109,12 @@ def make_permission_fn(
     return permission_fn
 
 
-def _outcome(project: Project, decision_id: str) -> dict | None:
-    try:
-        return project.decision_outcome(decision_id)
-    except json.JSONDecodeError:
-        return None  # another process is mid-append; read again next poll
+def _rule_by_scope(project: Project, task_id: str, scope: Scope, action: str, detail: str) -> Permission:
+    if action in ROUTINE or (action == "net.fetch" and host_allowed(detail, scope.domains)):
+        project.ledger.append("action.granted", "agent", detail, task=task_id, action=action, key=detail)
+        return Permission(True)
+    why = ("not in the plan's network domains" if action == "net.fetch"
+           else "not in the approved plan, so it's refused")
+    project.ledger.append("action.refused", "agent", detail, task=task_id, action=action, key=detail, why=why)
+    return Permission(False, f"refused: {why}")
+

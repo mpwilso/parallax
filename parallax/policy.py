@@ -49,6 +49,12 @@ stale_minutes = 60   # a running task silent this long is flagged stuck
 [budget]
 # estimated US dollars at API list prices, as Claude Code computes them. not a charge.
 drafting_usd = 2.00  # the most one drafting call (intent, spec or plan) may use
+
+[build]
+# a shell command that makes the task's Python environment before the build. it runs as you,
+# outside the sandbox, in the task's worktree, with $PARALLAX_VENV set to where the venv goes.
+# the maker gets the venv on its PATH and can read it, nothing more. empty: no venv.
+setup = ""
 """
 
 
@@ -78,7 +84,8 @@ def _check_table(where: str, table: dict[str, str]) -> None:
 
 class Policy:
     def __init__(self, actions: dict[str, str], limits: dict[str, int] | None = None,
-                 exact: dict[str, dict[str, str]] | None = None, budget: dict[str, float] | None = None):
+                 exact: dict[str, dict[str, str]] | None = None, budget: dict[str, float] | None = None,
+                 build: dict[str, str] | None = None):
         _check_table("[actions]", actions)
         self.exact = {action: dict(table) for action, table in (exact or {}).items() if table}
         if "git.merge" in self.exact:
@@ -101,12 +108,17 @@ class Policy:
         self.actions = actions
         self.limits = {**DEFAULT_LIMITS, **limits}
         self.budget = {**DEFAULT_BUDGET, **budget}
+        build = dict(build or {})
+        if set(build) - {"setup"} or not isinstance(build.get("setup", ""), str):
+            raise ValueError("[build] takes one setting: setup, a shell command")
+        self.build = {"setup": build.get("setup", "")}
 
     @classmethod
     def from_dict(cls, data: dict) -> "Policy":
         if "profiles" in data:
             raise ValueError("profiles are gone. every task uses [actions]; remove [profiles]")
-        return cls(data.get("actions", {}), data.get("limits", {}), data.get("exact", {}), data.get("budget", {}))
+        return cls(data.get("actions", {}), data.get("limits", {}), data.get("exact", {}), data.get("budget", {}),
+                   data.get("build", {}))
 
     @classmethod
     def load(cls, path: Path) -> "Policy":

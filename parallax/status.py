@@ -19,8 +19,12 @@ def derive(entries: list[dict]) -> dict[str, dict]:
             t["cost_usd"] = t.get("cost_usd", 0.0) + d["cost_usd"]
         if kind == "task.closed":
             t["status"] = d["outcome"]
-        elif kind == "maker.started":
+        elif kind in ("build.started", "maker.started"):
             t["status"] = "running"
+        elif kind == "build.finished":
+            t["status"] = d["status"]
+        elif kind == "task.stopped":
+            t["status"] = "stopped"
         elif kind == "maker.finished" and d["status"] != "done" and t["status"] == "running":
             t["status"] = "maker failed"
         elif kind == "verdict.recorded" and d["stage"] == "diff" and d["verdict"] in AGREE:

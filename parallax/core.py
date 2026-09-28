@@ -140,8 +140,13 @@ class Project:
         return _git(wt, "diff", *args, t["base"])
 
     # policy checks ---------------------------------------------------------
-    def check(self, task_id: str, action: str, detail: str = "", actor: str = "agent") -> dict:
-        """An agent asks to take an action. Returns the ruling and logs it."""
+    def check(self, task_id: str, action: str, detail: str = "", actor: str = "agent", *,
+              defer_asks: bool = False) -> dict:
+        """An agent asks to take an action. Returns the ruling and logs it.
+
+        defer_asks: during a run nothing waits on a human, so "ask" is refused and recorded
+        instead of raising an inbox item.
+        """
         t = self.task(task_id)
         key = normalize_detail(action, detail, t["worktree"])
         ruling = self.policy.ruling(action, key)
@@ -152,6 +157,10 @@ class Project:
             listed = self.policy.listed(action, key)
             why = "denied by policy" if listed else "not in policy, denied by default"
             e = self.ledger.append("action.refused", actor, detail, **refs, why=why)
+        elif defer_asks:
+            e = self.ledger.append("action.refused", actor, detail, **refs, asked=True,
+                                   why="needs your approval, so it's refused and recorded. nothing waits mid-run")
+            ruling = DENY
         else:
             e = self.ledger.append("decision.requested", actor, detail, **refs)
         return {"ruling": ruling, "entry": e}

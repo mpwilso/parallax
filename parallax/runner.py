@@ -65,7 +65,6 @@ def _make(project: Project, task_id: str, maker: Agent, goal: str, stage: str, f
 
 
 def run_task(project: Project, task_id: str, maker: Agent, checker: Checker, *, plan: bool | None = None,
-             poll: float = 1.0, on_wait: Callable[[dict], None] | None = None,
              say: Callable[[str], None] = _quiet, env: dict[str, str] | None = None) -> str:
     t = ensure_can_run(project, task_id)
     _check_cap(project, task_id)
@@ -75,7 +74,7 @@ def run_task(project: Project, task_id: str, maker: Agent, checker: Checker, *, 
 
     if plan:
         say("maker planning (read-only)")
-        fn = make_permission_fn(project, task_id, wt, read_only=True, poll=poll, on_wait=on_wait)
+        fn = make_permission_fn(project, task_id, wt, read_only=True)
         res = _make(project, task_id, maker, goal, "plan", fn, keep_summary=False, extra_env=env)
         if res.status != "done" or project.task(task_id)["status"] == "stuck":
             return project.task(task_id)["status"]
@@ -94,7 +93,7 @@ def run_task(project: Project, task_id: str, maker: Agent, checker: Checker, *, 
 
     say("maker building")
     before = guard.fingerprint(project.root)
-    fn = make_permission_fn(project, task_id, wt, poll=poll, on_wait=on_wait)
+    fn = make_permission_fn(project, task_id, wt)
     res = _make(project, task_id, maker, build_goal, "build", fn, extra_env=env)
     say(f"maker: {res.status}")
 
@@ -131,14 +130,22 @@ def flag_stale_runs(project: Project, now: datetime | None = None) -> list[str]:
 
     Runs on every command, in place of the old pulse.
     """
+    from .build import _alive, running_builds
+
     now = now or datetime.now(timezone.utc)
     minutes = project.policy.limits["stale_minutes"]
     waiting_on_you = {e["data"].get("task") for e in project.inbox()}
+    builds = running_builds(project)
     flagged = []
     for tid, t in project.tasks().items():
-        if (t["status"] == "running" and tid not in waiting_on_you
-                and datetime.fromisoformat(t["last"]) < now - timedelta(minutes=minutes)):
+        if t["status"] != "running" or tid in waiting_on_you:
+            continue
+        if tid in builds and not _alive(builds[tid]):
+            why = "the build process ended without finishing"
+        elif datetime.fromisoformat(t["last"]) < now - timedelta(minutes=minutes):
             why = f"no activity for {minutes} minutes, the run may have died"
-            project.ledger.append("stuck.raised", "parallax", why, task=tid)
-            flagged.append(tid)
+        else:
+            continue
+        project.ledger.append("stuck.raised", "parallax", why, task=tid)
+        flagged.append(tid)
     return flagged

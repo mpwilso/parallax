@@ -26,11 +26,14 @@ PLAN_TOOLS = ["Read", "Glob", "Grep"]
 
 MAKER_PROMPT = """\
 You are the maker for one task. Your working directory is the task's own git worktree; stay inside it.
-Every action is checked against a policy. Some need a human's approval, so a call may pause while they decide.
-If a call is refused, don't retry the same thing. Adapt, or stop.
-Never edit parallax.policy.toml, mission.md, or anything under .parallax/.
-When you finish, reply with a short summary of what you changed.
-If you can't finish, start your final reply with "gave up:" and say why."""
+Every call is checked, and shell commands run in a sandbox: writes outside the worktree, protected files,
+and network beyond the plan's domains fail. Nothing waits for a human. A refused call stays refused, so
+don't retry it: adapt, or stop.
+Never edit CLAUDE.md, REVIEW.md, .claude/, .mcp.json, .git, parallax.policy.toml, mission.md, .parallax/,
+docs/parallax.md or docs/tasks/. Don't commit: Parallax records your work from the worktree.
+When you finish, reply with a short summary of what you changed and which tests you ran.
+If a refusal makes the task impossible, start your final reply with "blocked:" and say what you needed.
+If you can't finish for another reason, start your final reply with "gave up:" and say why."""
 
 PLAN_PROMPT = """\
 You are the maker for one task, in the planning stage. You can read files but not change anything.
@@ -119,11 +122,14 @@ async def _final_result(sdk, options, prompt: str):
 
 class ClaudeAgent:
     def __init__(self, model: str = DEFAULT_MODEL, max_turns: int | None = None,
-                 max_budget_usd: float | None = None):
+                 max_budget_usd: float | None = None, settings: str | None = None):
+        """settings: a settings file written outside the worktree (the build's sandbox and rules).
+        Passed as a path and never with the SDK's typed `sandbox`, which would replace its sandbox key."""
         self.sdk = _load_sdk()
         self.model = model
         self.max_turns = max_turns
         self.max_budget_usd = max_budget_usd
+        self.settings = settings
 
     def run(self, goal: str, cwd: Path, permission_fn: PermissionFn, stage: str = "build",
             env: dict[str, str] | None = None) -> AgentResult:
@@ -150,6 +156,7 @@ class ClaudeAgent:
                                                   timeout=HUMAN_WAIT_SECONDS)]},
             can_use_tool=no_ruling,
             setting_sources=[],
+            settings=self.settings,
             max_turns=self.max_turns,
             max_budget_usd=self.max_budget_usd,
             env=env,  # marks the maker's shell as inside a task (spawn depth 1)
@@ -162,7 +169,7 @@ class ClaudeAgent:
             return AgentResult("error", f"stopped at the budget cap (${self.max_budget_usd})", cost)
         if result.is_error:
             return AgentResult("error", text or str(result.subtype), cost)
-        if text.strip().lower().startswith("gave up"):
+        if text.strip().lower().startswith(("gave up", "blocked:")):
             return AgentResult("gave_up", text, cost)
         return AgentResult("done", text, cost)
 
