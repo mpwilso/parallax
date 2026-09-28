@@ -1,11 +1,13 @@
 """The permission function every maker calls before acting.
 
 Order: guard (invariant 9) -> policy -> wait for a human on `ask`.
+Repeated refusals of the same call mean the maker is stuck: it's stopped and you're told.
 """
 from __future__ import annotations
 
 import json
 import time
+from collections import Counter
 from pathlib import Path
 from typing import Callable
 
@@ -25,17 +27,19 @@ def make_permission_fn(
     on_wait: Callable[[dict], None] | None = None,
 ) -> PermissionFn:
     snapshot = guard.fingerprint(project.root)
-    tripped = False
+    stuck_after = project.policy.limits["stuck_after"]
+    refusals: Counter = Counter()
+    stopped: str | None = None
 
     def refuse(action: str, detail: str, why: str) -> Permission:
         project.ledger.append("guard.tripped", "parallax", detail, task=task_id, action=action, why=why)
         return Permission(False, f"refused: {why}")
 
-    def permission_fn(action: str, detail: str = "", paths: list[str] | None = None) -> Permission:
-        nonlocal tripped
-        if tripped or guard.fingerprint(project.root) != snapshot:
-            tripped = True
-            return refuse(action, detail, "protected files changed during the run, all actions stopped")
+    def decide(action: str, detail: str, paths: list[str] | None) -> Permission:
+        nonlocal stopped
+        if guard.fingerprint(project.root) != snapshot:
+            stopped = "protected files changed during the run, all actions stopped"
+            return refuse(action, detail, stopped)
 
         if read_only and action != "fs.read":
             project.ledger.append("action.refused", "agent", detail, task=task_id, action=action,
@@ -68,6 +72,22 @@ def make_permission_fn(
         if outcome["data"]["outcome"] == "approved":
             return Permission(True)
         return Permission(False, f"rejected by human: {outcome['reason']}")
+
+    def permission_fn(action: str, detail: str = "", paths: list[str] | None = None) -> Permission:
+        nonlocal stopped
+        if stopped:
+            return Permission(False, f"stopped: {stopped}", stop=True)
+        p = decide(action, detail, paths)
+        if stopped:
+            return Permission(False, p.message, stop=True)
+        if p.allowed:
+            return p
+        refusals[(action, detail)] += 1
+        if refusals[(action, detail)] >= stuck_after:
+            stopped = f"the same call was refused {stuck_after} times: {action} {detail}".rstrip()
+            project.ledger.append("stuck.raised", "parallax", stopped, task=task_id, action=action)
+            return Permission(False, f"stopped: {stopped}", stop=True)
+        return p
 
     return permission_fn
 

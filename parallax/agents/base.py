@@ -25,6 +25,7 @@ class CheckerError(Exception):
 class Permission:
     allowed: bool
     message: str = ""
+    stop: bool = False  # the task is stuck or tripped a guard: end the agent now
 
 
 # (action, detail, paths) -> Permission
@@ -44,7 +45,8 @@ class Verdict:
 
 
 class Agent(Protocol):
-    def run(self, goal: str, cwd: Path, permission_fn: PermissionFn, stage: str = "build") -> AgentResult: ...
+    def run(self, goal: str, cwd: Path, permission_fn: PermissionFn, stage: str = "build",
+            env: dict[str, str] | None = None) -> AgentResult: ...
 
 
 class Checker(Protocol):

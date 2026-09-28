@@ -1,25 +1,42 @@
 """Project state: tasks in isolated worktrees, policy checks, and the decision inbox.
 
-State lives in the ledger. The inbox is just decisions requested and not yet resolved.
+State lives in the ledger. The inbox is just items raised and not yet resolved.
 """
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import uuid
 from pathlib import Path
 
-from .agents.base import AGREE
+from . import status
 from .ledger import Ledger
-from .policy import ALLOW, ASK, DEFAULT_POLICY, DENY, Policy
+from .policy import ALLOW, ASK, DEFAULT_POLICY, DEFAULT_PROFILE, DENY, Policy
 
 STATE_DIR = ".parallax"
 POLICY_FILE = "parallax.policy.toml"
-INBOX_KINDS = {"decision.requested", "disagreement.raised"}
+INBOX_KINDS = {"decision.requested", "disagreement.raised", "stuck.raised", "proposal.raised"}
+TASK_ENV, ROOT_ENV = "PARALLAX_TASK", "PARALLAX_ROOT"  # set for every maker process
 
 
 class ParallaxError(Exception):
     pass
+
+
+def inside_task(root: Path) -> str | None:
+    """The task id if this process was started by a maker working on this project."""
+    task, task_root = os.environ.get(TASK_ENV), os.environ.get(ROOT_ENV)
+    if not (task and task_root):
+        return None
+    same = os.path.normcase(str(Path(task_root).resolve())) == os.path.normcase(str(Path(root).resolve()))
+    return task if same else None
+
+
+def refuse_inside_task(root: Path) -> None:
+    """Spawn depth 1 and invariant 5: a task can't create tasks or make decisions."""
+    if inside_task(root):
+        raise ParallaxError("tasks can't create tasks or make decisions")
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -38,18 +55,22 @@ class Project:
         self.root = Path(root).resolve()
         self.state = self.root / STATE_DIR
         self.ledger = Ledger(self.state / "ledger.jsonl")
-        self.policy = Policy.load(self.root / POLICY_FILE)
+        try:
+            self.policy = Policy.load(self.root / POLICY_FILE)
+        except ValueError as err:
+            raise ParallaxError(f"bad policy: {err}") from err
 
     # setup ---------------------------------------------------------------
     @classmethod
     def init(cls, root: Path, actor: str = "human") -> "Project":
         root = Path(root).resolve()
+        refuse_inside_task(root)
         _git(root, "rev-parse", "--is-inside-work-tree")
         policy_path = root / POLICY_FILE
         if not policy_path.exists():
             policy_path.write_text(DEFAULT_POLICY)
         (root / STATE_DIR).mkdir(exist_ok=True)
-        (root / STATE_DIR / ".gitignore").write_text("worktrees/\n")
+        (root / STATE_DIR / ".gitignore").write_text("worktrees/\nruns/\nledger.jsonl.lock\n")
         project = cls(root)
         if not project.ledger.entries():
             project.ledger.append("project.init", actor, "initialized", policy=project.policy.actions)
@@ -63,7 +84,11 @@ class Project:
         raise ParallaxError("not a parallax project (run `parallax init`)")
 
     # tasks ---------------------------------------------------------------
-    def new_task(self, goal: str, actor: str = "human") -> dict:
+    def new_task(self, goal: str, actor: str = "human", *, profile: str = DEFAULT_PROFILE,
+                 plan: bool = False, queue: bool = False, **refs) -> dict:
+        refuse_inside_task(self.root)
+        if profile not in self.policy.profiles:
+            raise ParallaxError(f"unknown profile {profile!r}")
         task_id = uuid.uuid4().hex[:6]
         branch = f"parallax/{task_id}-{_slug(goal)}"
         worktree = self.state / "worktrees" / task_id
@@ -72,36 +97,21 @@ class Project:
         self.ledger.append(
             "task.created", actor, goal,
             task=task_id, branch=branch, worktree=str(worktree), base=base,
+            profile=profile, plan=plan, **refs,
         )
+        if queue:
+            self.queue_task(task_id, actor)
         return self.task(task_id)
 
+    def queue_task(self, task_id: str, actor: str = "human") -> dict:
+        refuse_inside_task(self.root)
+        t = self.task(task_id)
+        if t["status"] in ("queued", "launched", "running", "disputed", "stuck", "closed"):
+            raise ParallaxError(f"task {task_id} is {t['status']}, can't queue it")
+        return self.ledger.append("task.queued", actor, "", task=task_id)
+
     def tasks(self) -> dict[str, dict]:
-        """Task status is derived from the ledger, never stored separately."""
-        out: dict[str, dict] = {}
-        for e in self.ledger.entries():
-            kind, d = e["kind"], e["data"]
-            if kind == "task.created":
-                out[d["task"]] = {"goal": e["reason"], "status": "open", **d}
-                continue
-            t = out.get(d.get("task"))
-            if t is None:
-                continue
-            if kind == "task.closed":
-                t["status"] = d["outcome"]
-            elif kind == "maker.started":
-                t["status"] = "running"
-            elif kind == "maker.finished" and d["status"] != "done":
-                t["status"] = "maker failed"
-            elif kind == "verdict.recorded" and d["stage"] == "diff" and d["verdict"] in AGREE:
-                t["status"] = "ready"
-            elif kind == "disagreement.raised":
-                t["status"] = "disputed"
-            elif kind == "decision.resolved" and d.get("about") == "disagreement.raised":
-                if d["outcome"] == "rejected":
-                    t["status"] = "needs work"
-                else:
-                    t["status"] = "plan approved" if d.get("stage") == "plan" else "ready"
-        return out
+        return status.derive(self.ledger.entries())
 
     def task(self, task_id: str) -> dict:
         tasks = self.tasks()
@@ -119,13 +129,12 @@ class Project:
     # policy checks ---------------------------------------------------------
     def check(self, task_id: str, action: str, detail: str = "", actor: str = "agent") -> dict:
         """An agent asks to take an action. Returns the ruling and logs it."""
-        self.task(task_id)
-        ruling = self.policy.ruling(action)
+        table = self.policy.table(self.task(task_id)["profile"])
+        ruling = table.get(action, DENY)
         if ruling == ALLOW:
             e = self.ledger.append("action.granted", actor, detail, task=task_id, action=action)
         elif ruling == DENY:
-            listed = action in self.policy.actions
-            why = "denied by policy" if listed else "not in policy, denied by default"
+            why = "denied by policy" if action in table else "not in policy, denied by default"
             e = self.ledger.append("action.refused", actor, detail, task=task_id, action=action, why=why)
         else:
             e = self.ledger.append("decision.requested", actor, detail, task=task_id, action=action)
@@ -147,6 +156,7 @@ class Project:
 
     def resolve(self, decision_id: str, approve: bool, reason: str, actor: str = "human") -> dict:
         """For a disagreement, approve sides with the maker and reject sides with the checker."""
+        refuse_inside_task(self.root)
         if not reason.strip():
             raise ParallaxError("a decision needs a reason")
         pending = {e["id"]: e for e in self.inbox()}
@@ -156,6 +166,6 @@ class Project:
         context = {k: req["data"][k] for k in ("action", "stage") if k in req["data"]}
         return self.ledger.append(
             "decision.resolved", actor, reason,
-            decision=decision_id, task=req["data"]["task"], about=req["kind"], **context,
+            decision=decision_id, task=req["data"].get("task"), about=req["kind"], **context,
             outcome="approved" if approve else "rejected",
         )

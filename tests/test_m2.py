@@ -76,8 +76,8 @@ def test_changed_policy_file_stops_every_later_action(repo):
     agent = ScriptedAgent(steps=[("read", "a"), ("call", edit), ("read", "b"), ("write", "ok.txt", "x")])
     checker = FakeChecker()
     assert run_task(proj, tid, agent, checker) == "disputed"
-    assert [p.allowed for _, _, p in agent.results] == [True, False, False]
-    assert not (wt / "ok.txt").exists()
+    assert [(p.allowed, p.stop) for _, _, p in agent.results] == [(True, False), (False, True)]
+    assert not (wt / "ok.txt").exists()  # the agent was stopped before it got there
     assert checker.calls == []
 
 

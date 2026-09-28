@@ -19,12 +19,14 @@ class ScriptedAgent:
         self.summary, self.plan, self.status = summary, plan, status
         self.goals: list[tuple[str, str]] = []
         self.results: list[tuple[str, str, object]] = []  # (action, detail, Permission)
+        self.envs: list[dict] = []
 
-    def run(self, goal, cwd, permission_fn, stage="build"):
+    def run(self, goal, cwd, permission_fn, stage="build", env=None):
         self.goals.append((stage, goal))
+        self.envs.append(dict(env or {}))
         cwd = Path(cwd)
         for step in self.steps[stage]:
-            kind = step[0]
+            kind, p = step[0], None
             if kind == "write":
                 p = permission_fn("fs.write", step[1], [step[1]])
                 if p.allowed:
@@ -32,7 +34,8 @@ class ScriptedAgent:
                     target.write_text(step[2])
                 self.results.append(("fs.write", step[1], p))
             elif kind == "read":
-                self.results.append(("fs.read", step[1], permission_fn("fs.read", step[1], [])))
+                p = permission_fn("fs.read", step[1], [])
+                self.results.append(("fs.read", step[1], p))
             elif kind == "shell":
                 p = permission_fn("shell.run", " ".join(step[1]), [])
                 if p.allowed:
@@ -40,6 +43,8 @@ class ScriptedAgent:
                 self.results.append(("shell.run", " ".join(step[1]), p))
             elif kind == "call":
                 step[1](cwd)
+            if p is not None and p.stop:  # like the SDK ending the agent from the hook
+                return AgentResult("error", p.message)
         return AgentResult(self.status, self.plan if stage == "plan" else self.summary)
 
 

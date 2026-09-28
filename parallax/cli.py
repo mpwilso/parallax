@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from .agents.base import AgentUnavailable
-from .core import ParallaxError, Project
+from .core import ParallaxError, Project, refuse_inside_task
 
 MARK = {"allow": "ALLOWED", "ask": "NEEDS YOU", "deny": "REFUSED"}
 LOG_FIELDS = ("task", "action", "stage", "status", "verdict", "outcome", "why")
@@ -22,6 +22,11 @@ def main(argv: list[str] | None = None) -> int:
     tsub = t.add_subparsers(dest="tcmd", required=True)
     tn = tsub.add_parser("new", help="create a task in its own worktree")
     tn.add_argument("goal")
+    tn.add_argument("--profile", default="default", help="policy profile, e.g. readonly")
+    tn.add_argument("--plan", action="store_true", help="plan first when it runs")
+    tn.add_argument("--queue", action="store_true", help="queue it for the next pulse")
+    tq = tsub.add_parser("queue", help="queue a task for the next pulse")
+    tq.add_argument("task")
     tsub.add_parser("list", help="list tasks")
     td = tsub.add_parser("diff", help="show a task's diff against its base")
     td.add_argument("task")
@@ -34,7 +39,7 @@ def main(argv: list[str] | None = None) -> int:
 
     rn = sub.add_parser("run", help="run the maker on a task, then the blind checker")
     rn.add_argument("task")
-    rn.add_argument("--plan", action="store_true", help="plan first and have the plan checked")
+    rn.add_argument("--plan", action="store_true", default=None, help="plan first and have the plan checked")
     rn.add_argument("--model", default=None)
     rv = sub.add_parser("review", help="run the blind checker on a task's current diff")
     rv.add_argument("task")
@@ -71,8 +76,13 @@ def _run(args) -> int:
 
     if args.cmd == "task":
         if args.tcmd == "new":
-            t = proj.new_task(args.goal)
-            print(f"task {t['task']}  {t['goal']}\n  branch   {t['branch']}\n  worktree {t['worktree']}")
+            t = proj.new_task(args.goal, profile=args.profile, plan=args.plan, queue=args.queue)
+            print(f"task {t['task']}  [{t['status']}]  {t['goal']}\n  branch   {t['branch']}\n  worktree {t['worktree']}")
+            if t["profile"] != "default":
+                print(f"  profile  {t['profile']}")
+        elif args.tcmd == "queue":
+            proj.queue_task(args.task)
+            print(f"task {args.task} queued for the next pulse")
         elif args.tcmd == "list":
             tasks = proj.tasks()
             if not tasks:
@@ -92,6 +102,7 @@ def _run(args) -> int:
         return 0 if res["ruling"] == "allow" else 2
 
     if args.cmd in ("run", "review"):
+        refuse_inside_task(proj.root)
         return _agents(proj, args)
 
     if args.cmd == "inbox":
@@ -128,12 +139,12 @@ def _run(args) -> int:
 def _agents(proj: Project, args) -> int:
     from .agents.claude import ClaudeAgent, ClaudeChecker
     from .checker import diff_material, review
-    from .runner import ensure_not_disputed, run_task
+    from .runner import ensure_can_run, run_task
 
     model = {"model": args.model} if args.model else {}
     checker = ClaudeChecker(**model)
     if args.cmd == "review":
-        ensure_not_disputed(proj, args.task)
+        ensure_can_run(proj, args.task)
         ve, dis = review(proj, args.task, checker, "diff", diff_material(proj, args.task))
         print(f"checker: {ve['data']['verdict']}  {ve['reason']}".rstrip())
         if dis:

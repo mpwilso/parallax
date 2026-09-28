@@ -77,11 +77,14 @@ async def rule_on_tool_call(permission_fn: PermissionFn, tool_name: str, tool_in
     """PreToolUse hook output for one tool call, decided by the parallax gate."""
     action, detail, paths = tool_to_action(tool_name, tool_input)
     p: Permission = await asyncio.to_thread(permission_fn, action, detail, paths)
-    return {"hookSpecificOutput": {
+    out: dict = {"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "allow" if p.allowed else "deny",
         "permissionDecisionReason": p.message or ("allowed by parallax policy" if p.allowed else "refused"),
     }}
+    if p.stop:
+        out.update({"continue_": False, "stopReason": p.message})
+    return out
 
 
 def _load_sdk():
@@ -108,10 +111,12 @@ class ClaudeAgent:
         self.model = model
         self.max_turns = max_turns
 
-    def run(self, goal: str, cwd: Path, permission_fn: PermissionFn, stage: str = "build") -> AgentResult:
-        return asyncio.run(self._run(goal, cwd, permission_fn, stage))
+    def run(self, goal: str, cwd: Path, permission_fn: PermissionFn, stage: str = "build",
+            env: dict[str, str] | None = None) -> AgentResult:
+        return asyncio.run(self._run(goal, cwd, permission_fn, stage, env or {}))
 
-    async def _run(self, goal: str, cwd: Path, permission_fn: PermissionFn, stage: str) -> AgentResult:
+    async def _run(self, goal: str, cwd: Path, permission_fn: PermissionFn, stage: str,
+                   env: dict[str, str]) -> AgentResult:
         sdk = self.sdk
 
         async def pre_tool_use(input_data, tool_use_id, context):
@@ -132,6 +137,7 @@ class ClaudeAgent:
             can_use_tool=no_ruling,
             setting_sources=[],
             max_turns=self.max_turns,
+            env=env,  # marks the maker's shell as inside a task (spawn depth 1)
         )
         result = await _final_result(sdk, options, goal)
         if result is None:

@@ -7,7 +7,7 @@ from typing import Callable
 from . import guard
 from .agents.base import AGREE, Agent, AgentResult, Checker
 from .checker import diff_material, review
-from .core import ParallaxError, Project
+from .core import ROOT_ENV, TASK_ENV, ParallaxError, Project
 from .gate import make_permission_fn
 
 
@@ -33,35 +33,50 @@ def approved_plan(project: Project, task_id: str) -> str | None:
     return text if ok else None
 
 
-def ensure_not_disputed(project: Project, task_id: str) -> dict:
+def ensure_can_run(project: Project, task_id: str) -> dict:
     t = project.task(task_id)
-    if t["status"] == "disputed":
-        raise ParallaxError(f"task {task_id} has an open disagreement. resolve it in the inbox first")
+    if t["status"] in ("disputed", "stuck"):
+        raise ParallaxError(f"task {task_id} is {t['status']}. resolve it in the inbox first")
+    if t["status"] == "closed":
+        raise ParallaxError(f"task {task_id} is closed")
     return t
 
 
-def _make(project: Project, task_id: str, maker: Agent, goal: str, stage: str, fn) -> AgentResult:
+def _check_cap(project: Project, task_id: str) -> None:
+    limit = project.policy.limits["max_parallel"]
+    busy = [i for i, t in project.tasks().items() if t["status"] in ("running", "launched") and i != task_id]
+    if len(busy) >= limit:
+        raise ParallaxError(f"{len(busy)} tasks already running (max_parallel = {limit})")
+
+
+def _make(project: Project, task_id: str, maker: Agent, goal: str, stage: str, fn,
+          keep_summary: bool = True) -> AgentResult:
     project.ledger.append("maker.started", "parallax", "", task=task_id, stage=stage)
+    env = {TASK_ENV: task_id, ROOT_ENV: str(project.root)}
     try:
-        res = maker.run(goal, Path(project.task(task_id)["worktree"]), fn, stage=stage)
+        res = maker.run(goal, Path(project.task(task_id)["worktree"]), fn, stage=stage, env=env)
     except Exception as err:  # an adapter crash is recorded, not hidden
         res = AgentResult("error", f"{type(err).__name__}: {err}")
-    summary = "" if stage == "plan" else res.summary  # the plan text goes in plan.recorded
+    summary = res.summary if keep_summary else ""  # plans and reports get their own entries
     project.ledger.append("maker.finished", "maker", summary, task=task_id, stage=stage, status=res.status)
     return res
 
 
-def run_task(project: Project, task_id: str, maker: Agent, checker: Checker, *, plan: bool = False,
+def run_task(project: Project, task_id: str, maker: Agent, checker: Checker, *, plan: bool | None = None,
              poll: float = 1.0, on_wait: Callable[[dict], None] | None = None,
              say: Callable[[str], None] = _quiet) -> str:
-    t = ensure_not_disputed(project, task_id)
+    t = ensure_can_run(project, task_id)
+    _check_cap(project, task_id)
     wt, goal = Path(t["worktree"]), t["goal"]
+    readonly = t["profile"] == "readonly"
+    if plan is None:
+        plan = t["plan"]
 
     if plan:
         say("maker planning (read-only)")
         fn = make_permission_fn(project, task_id, wt, read_only=True, poll=poll, on_wait=on_wait)
-        res = _make(project, task_id, maker, goal, "plan", fn)
-        if res.status != "done":
+        res = _make(project, task_id, maker, goal, "plan", fn, keep_summary=False)
+        if res.status != "done" or project.task(task_id)["status"] == "stuck":
             return project.task(task_id)["status"]
         p = project.ledger.append("plan.recorded", "maker", "", task=task_id, text=res.summary)
         say("checker reviewing plan")
@@ -79,7 +94,7 @@ def run_task(project: Project, task_id: str, maker: Agent, checker: Checker, *, 
     say("maker building")
     before = guard.fingerprint(project.root)
     fn = make_permission_fn(project, task_id, wt, poll=poll, on_wait=on_wait)
-    res = _make(project, task_id, maker, build_goal, "build", fn)
+    res = _make(project, task_id, maker, build_goal, "build", fn, keep_summary=not readonly)
     say(f"maker: {res.status}")
 
     # backstop for invariant 9: whatever got past the gate, the human hears about it
@@ -96,7 +111,13 @@ def run_task(project: Project, task_id: str, maker: Agent, checker: Checker, *, 
         say(f"{why}. disagreement {dis['id']} is in your inbox")
         return project.task(task_id)["status"]
 
+    if project.task(task_id)["status"] == "stuck":
+        say("maker stuck. it's in your inbox")
+        return "stuck"
     if res.status != "done":
+        return project.task(task_id)["status"]
+    if readonly:  # an investigator: its report is the result, there's no diff to check
+        project.ledger.append("report.recorded", "maker", "", task=task_id, text=res.summary)
         return project.task(task_id)["status"]
 
     say("checker reviewing diff")
