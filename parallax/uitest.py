@@ -8,9 +8,11 @@ task whose plan changes a UI (a planned file matches [ui_tester] paths), at the 
 2. The tester (a Claude model) gets the intent's numbered outcomes and the app's URL. Nothing
    else: not the diff, the plan, or the maker's notes, and no shell. It walks each outcome's flow
    and writes one Playwright test per flow, in its own empty folder.
-3. Parallax copies the tests into the worktree, records each file's hash (a changed one stops the
-   check and comes to you, and the maker's sandbox can't write them), and runs every flow test
-   itself at every check, with no model. On accept they join the repo, so later checks rerun them.
+3. Parallax runs its tests once on that build (one failing for a flow it said works is dropped),
+   keeps the rest in docs/tasks/<task>/ui_flows/ with each file's hash (a changed one comes to
+   you), and runs every flow test itself at every check, with no model. docs/tasks/ is Parallax's
+   alone: no agent can write it, and the checker's diff leaves it out (invariant 3). Accept commits
+   it, so later checks rerun every accepted task's flows too.
 4. Its screenshots are the card's evidence. It fails closed: an app that won't start is a finding
    for the maker; a browser that can't run, or a tester that wrote no tests, comes to you.
 """
@@ -140,21 +142,20 @@ def removed(project: Project, task_id: str) -> set[str]:
 
 
 def guarded(project: Project, task_id: str) -> list[str]:
-    """The tester's test files in the worktree: the maker may never write them."""
+    """The tester's kept tests for this attempt, as paths from the project's root."""
     rec = recorded(project, task_id)
     return sorted(set(rec["data"]["files"]) - removed(project, task_id)) if rec else []
 
 
 def remove(project: Project, task_id: str, files: list[str], reason: str) -> None:
     """Your call that a test is wrong: it leaves the worktree, recorded with your reason."""
-    wt = Path(project.task(task_id)["worktree"])
     mine = [f for f in files if f in set(guarded(project, task_id))]
     for f in mine:
-        (wt / f).unlink(missing_ok=True)
+        (project.root / f).unlink(missing_ok=True)
     project.ledger.append("uitest.removed", "human", reason, task=task_id, files=mine)
 
 
-def tampered(project: Project, task_id: str, worktree: Path) -> list[str]:
+def tampered(project: Project, task_id: str) -> list[str]:
     rec = recorded(project, task_id)
     if not rec:
         return []
@@ -162,15 +163,22 @@ def tampered(project: Project, task_id: str, worktree: Path) -> list[str]:
     for rel, sha in rec["data"]["files"].items():
         if rel in gone:
             continue
-        path = Path(worktree) / rel
+        path = project.root / rel
         if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != sha:
             out.append(rel)
     return out
 
 
-def flow_files(project: Project, worktree: Path, tree_hash: str) -> list[str]:
-    prefix = settings(project)["tests"].rstrip("/") + "/"
-    return [f for f in tree.files_in(worktree, tree_hash) if f.startswith(prefix) and f.endswith(".spec.js")]
+FLOWS = re.compile(r"^docs/tasks/[^/]+/ui_flows/[^/]+\.spec\.js$")
+
+
+def specs(project: Project, task_id: str, worktree: Path, base: str) -> dict[str, bytes]:
+    """Every flow test to run: this task's kept ones, and every accepted task's in the base commit."""
+    out = {f: tree.show_file(worktree, base, f) for f in tree.files_in(worktree, base) if FLOWS.match(f)}
+    for rel in guarded(project, task_id):
+        if (project.root / rel).is_file():
+            out[rel] = (project.root / rel).read_bytes()
+    return out
 
 
 def evidence(project: Project, task_id: str) -> Path:
@@ -378,14 +386,14 @@ def test(project: Project, task_id: str, p, tester_for) -> tuple[str, str]:
             return "you", "none of the UI tester's tests passed on the build it described: " + lint.one_sentence(
                 "; ".join(common["dropped"]))
         return "you", f"the UI tester wrote no tests ({result.status}): {lint.one_sentence(text or 'no reply')}"
-    dest = Path(cfg["tests"]) / task_id
+    dest = lifecycle.task_dir(project, task_id) / "ui_flows"
+    shutil.rmtree(dest, ignore_errors=True)
     files = {}
     for src in written:
-        rel = (dest / src.name).as_posix()
-        target = p.worktree / rel
+        target = dest / src.name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(src.read_bytes())
-        files[rel] = hashlib.sha256(target.read_bytes()).hexdigest()
+        files[target.relative_to(project.root).as_posix()] = hashlib.sha256(target.read_bytes()).hexdigest()
     ev = evidence(project, task_id)
     ev.mkdir(parents=True, exist_ok=True)
     pngs = []
@@ -454,16 +462,22 @@ def _run_specs(project: Project, tools: Tools, home: Path, copy: Path, specs: Pa
 
 def run_flows(project: Project, task_id: str, p, reviewed: str, runner=None) -> Flows | None:
     """Every flow test in the reviewed tree, against the app built from it. None: there are none."""
-    cfg = settings(project)
-    if not cfg["enabled"] or not flow_files(project, p.worktree, reviewed):
+    if not settings(project)["enabled"]:
+        return None
+    found = specs(project, task_id, p.worktree, p.task["base"])
+    if not found:
         return None
     tools = ensure_tools()
-    project.ledger.append("flows.started", "parallax", "", task=task_id, tree=reviewed)
+    project.ledger.append("flows.started", "parallax", "", task=task_id, tree=reviewed, specs=sorted(found))
     home = p.home / "flows"
     shutil.rmtree(home, ignore_errors=True)
     home.mkdir(parents=True)
     tree.export(p.worktree, reviewed, home / "app")
-    return _run_specs(project, tools, home, home / "app", home / "app" / cfg["tests"], p.venv, runner)
+    for rel, data in found.items():  # laid out by task, so two tasks' files never collide
+        target = home / "specs" / rel.split("/")[2] / Path(rel).name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+    return _run_specs(project, tools, home, home / "app", home / "specs", p.venv, runner)
 
 
 def usable(specs: list[Path], flows: Flows, said: dict[str, bool]) -> tuple[list[Path], list[str]]:

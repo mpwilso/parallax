@@ -97,7 +97,6 @@ def test_off_by_default_and_needs_its_settings_when_on():
     for bad, says in ((dict(enabled=True, url="http://127.0.0.1:1/", paths=["a"]), "start"),
                       (dict(enabled=True, start="x", url="https://example.com/", paths=["a"]), "on this machine"),
                       (dict(enabled=True, start="x", url="http://127.0.0.1:1/", paths=[]), "paths"),
-                      (dict(tests="docs/tasks/x"), "inside the repo"), (dict(tests="../out"), "inside the repo"),
                       (dict(max_usd=0), "above 0"), (dict(nope=1), "unknown")):
         with pytest.raises(ValueError, match=says):
             Policy({}, ui_tester=bad)
@@ -137,11 +136,10 @@ def test_the_tester_is_blind_sandboxed_and_its_tests_are_hashed_and_run(proj, mo
     assert tester.limit <= proj.policy.ui_tester["max_usd"]
 
     rec = kinds(proj, "uitest.recorded", tid)[-1]["data"]
-    rel = f"tests/ui_flows/{tid}/opens.spec.js"
-    wt = Path(proj.task(tid)["worktree"])
-    assert rel in rec["files"] and (wt / rel).read_text() == SPEC
+    rel = f"docs/tasks/{tid}/ui_flows/opens.spec.js"  # Parallax's alone, and out of the checker's diff
+    assert rel in rec["files"] and (proj.root / rel).read_text() == SPEC
     staged = kinds(proj, "check.staged", tid)[-1]["data"]
-    assert rel in staged["files"] and staged["problems"] == []  # its tests count as planned
+    assert rel not in staged["files"] and staged["problems"] == []
     ran = kinds(proj, "flows.recorded", tid)[-1]["data"]
     assert (ran["passed"], ran["total"]) == (1, 1) and runner.calls
     assert costs.spent(proj, tid) >= 0.3  # its cost counts against the task's cap
@@ -168,24 +166,22 @@ def test_a_failing_flow_is_reworked_and_the_tester_runs_once(proj, monkeypatch):
 def test_the_maker_cant_write_its_tests_and_a_change_comes_to_you(proj, monkeypatch):
     monkeypatch.setattr(uitest, "TESTER", FakeTester())
     monkeypatch.setattr(uitest, "FLOW_RUNNER", flow_runner([[("opens", True)], [("opens", False)]]))
-    rel = None
 
-    def sneaky(cwd):
-        spec = next(Path(cwd).glob("tests/ui_flows/*/opens.spec.js"))
+    def tamper(cwd):  # anything that changes a kept test between checks
+        spec = next(proj.root.glob("docs/tasks/*/ui_flows/opens.spec.js"))
         spec.write_text(SPEC.replace("opens", "skipped"))
-    maker = ScriptedAgent(steps=[("write", "README.md", "ok\n"), ("call", sneaky)])
     from parallax import pilot as p
     tid = p.intake(proj, "fix the README")["task"]
-    first = ScriptedAgent(steps=[("write", "README.md", "ok\n")])
-    makers = iter([first, maker])
+    makers = iter([ScriptedAgent(steps=[("write", "README.md", "ok\n")]),
+                   ScriptedAgent(steps=[("write", "README.md", "ok again\n"), ("call", tamper)])])
     status = build.run_mode(proj, tid, "pilot", FakeDrafter(docs()), lambda left, s: next(makers), FakeChecker(),
                             test_runner=junit_runner(), preflight_runner=good_probe)
     assert status == "disputed"
     raised = kinds(proj, "disagreement.raised", tid)[-1]
     assert raised["data"]["stage"] == "guard" and "the UI tester's tests changed" in raised["reason"]
-    rel = f"tests/ui_flows/{tid}/opens.spec.js"
+    assert not list(Path(proj.task(tid)["worktree"]).glob("docs/tasks/**/*.spec.js"))  # never in the maker's reach
     prepared = build.prepare(proj, tid, setup=False, launching=False)
-    assert str(prepared.worktree / rel) in prepared.rules.deny_write  # both layers deny it to the maker
+    assert any(d.endswith("/docs/tasks") for d in prepared.rules.deny_write)
 
 
 def test_an_app_that_wont_start_is_the_makers_to_fix(proj, monkeypatch):
@@ -301,10 +297,24 @@ def test_a_tester_test_that_still_fails_after_a_rework_comes_to_you(proj, monkey
     from parallax import decide
     dec = decide.decision(proj, tid)
     assert dec.kind == "flows" and [o.name for o in dec.options] == ["remove", "reject", "drop"]
-    rel = f"tests/ui_flows/{tid}/opens.spec.js"
+    rel = f"docs/tasks/{tid}/ui_flows/opens.spec.js"
     assert dec.item["data"]["files"] == [rel]
     with pytest.raises(Exception, match="needs a reason"):
         decide.apply(proj, tid, "remove", spawn=lambda *a: 9)
     decide.apply(proj, tid, "remove", "it counts <article> rows; the page has none", spawn=lambda *a: 9)
-    assert not (Path(proj.task(tid)["worktree"]) / rel).exists()
-    assert uitest.guarded(proj, tid) == [] and uitest.tampered(proj, tid, Path(proj.task(tid)["worktree"])) == []
+    assert not (proj.root / rel).exists()
+    assert uitest.guarded(proj, tid) == [] and uitest.tampered(proj, tid) == []
+
+
+def test_every_accepted_tasks_flows_rerun_on_later_tasks(proj):
+    import subprocess
+    old = proj.root / "docs" / "tasks" / "aaa111" / "ui_flows" / "old.spec.js"
+    old.parent.mkdir(parents=True)
+    old.write_text(SPEC)
+    subprocess.run(["git", "-C", str(proj.root), "add", "-A", "docs/tasks"], check=True)
+    subprocess.run(["git", "-C", str(proj.root), "commit", "-qm", "an accepted task"], check=True)
+    from parallax import pilot as p
+    tid = p.intake(proj, "fix the README")["task"]
+    t = proj.task(tid)
+    found = uitest.specs(proj, tid, Path(t["worktree"]), t["base"])
+    assert list(found) == ["docs/tasks/aaa111/ui_flows/old.spec.js"] and found["docs/tasks/aaa111/ui_flows/old.spec.js"] == SPEC.encode()

@@ -56,8 +56,7 @@ def _path(where: str) -> str:
 
 def _staged(project: Project, task_id: str, p, plan: dict, settings: dict) -> tree.Staged:
     """Stage the worktree and check it against the plan. The UI tester's tests count as planned."""
-    return tree.conform(tree.stage(p.worktree, p.task["base"], p.home / "check.index"), plan, settings["diff_cap"],
-                        verifier=set(uitest.guarded(project, task_id)))
+    return tree.conform(tree.stage(p.worktree, p.task["base"], p.home / "check.index"), plan, settings["diff_cap"])
 
 
 def _still_failing(project: Project, task_id: str, flows) -> list[dict]:
@@ -101,8 +100,7 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
             return "rework", [f"blocker: {why}"]
         if outcome == "you":
             return _to_you(project, task_id, "check", why, tree=s.tree), []
-        s = _staged(project, task_id, p, plan, settings)  # now with its tests
-    changed = uitest.tampered(project, task_id, p.worktree)
+    changed = uitest.tampered(project, task_id)
     if changed:
         return _to_you(project, task_id, "guard", f"the UI tester's tests changed after it wrote them: {', '.join(changed)}",
                        tree=s.tree), []
@@ -148,9 +146,8 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
                                f"{c['message']}. Either the test or the app is wrong", tree=s.tree, files=files), []
 
     # code findings first: they go straight back to the maker, and the checker isn't paid to spot them
-    guarded = set(uitest.guarded(project, task_id))  # the UI tester's tests aren't the maker's to fix
     dashes = [f"blocker {path}:{line}: an em dash was added; use a comma or a colon"
-              for path, line, text in tree.added_lines(s.diff) if lint.EM_DASH in text and path not in guarded]
+              for path, line, text in tree.added_lines(s.diff) if lint.EM_DASH in text]
     if dashes:
         project.ledger.append("check.found", "parallax", "; ".join(dashes), task=task_id, tree=s.tree, findings=dashes)
         return "rework", dashes + flow_fix + ([] if results.ok else [f"tests failed (exit {results.exit})"])

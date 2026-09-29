@@ -128,8 +128,6 @@ def prepare(project: Project, task_id: str, setup: bool = True, launching: bool 
     reads = [str(Path(r).expanduser()) for r in plan["outside_reads"]]
     scope = Scope(reads=tuple(Path(p) for p in reads) + ((venv,) if venv else ()), domains=tuple(plan["domains"]))
     targets = sandbox.protected_targets(wt)
-    from . import uitest
-    targets += [wt / f for f in uitest.guarded(project, task_id)]  # the UI tester's tests: never the maker's
     sandbox.prepare_mount_points(targets)
     r = sandbox.rules(wt, targets, git_dir=sandbox.shared_git_dir(wt), venv=venv,
                       reads=reads, domains=plan["domains"])
