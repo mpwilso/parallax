@@ -41,6 +41,10 @@ def main(port: int) -> None:
     import test_m8
 
     build._spawn = lambda argv, env, cwd, log: 9  # nothing runs in the background
+    import random
+    import uuid
+    ids = random.Random(7)  # the same task ids every start: the UI tester's tests may name them (a42589)
+    uuid.uuid4 = lambda: uuid.UUID(int=ids.getrandbits(128), version=4)
 
     repo = root / "calc"
     repo.mkdir()
