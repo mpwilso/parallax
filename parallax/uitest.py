@@ -69,7 +69,8 @@ test('<what a person does and sees>', async ({{ page }}) => {{
   // role and text locators; expect() on what the person should see; no fixed waits
 }});
 
-Write the test for how the app should behave. If a flow doesn't work, still write its test: it fails
+Find elements only by the roles, labels and text you saw in the page's snapshot: never guess tags,
+classes or ids you haven't seen. Write the test for how the app should behave. If a flow doesn't work, still write its test: it fails
 now and passes once the app is fixed. Each test is something a person can do from the page as it is:
 no waiting for changes you can't make through the page, no skipping itself, no em dashes. Parallax runs
 every test right away on the app you just used; one that fails on a flow you said works is dropped.
@@ -132,18 +133,35 @@ def recorded(project: Project, task_id: str) -> dict | None:
     return hits[-1] if hits else None
 
 
+def removed(project: Project, task_id: str) -> set[str]:
+    """Tests you took out of this attempt, judging them wrong."""
+    return {f for e in status.attempt(project.ledger.entries(), task_id) if e["kind"] == "uitest.removed"
+            for f in e["data"]["files"]}
+
+
 def guarded(project: Project, task_id: str) -> list[str]:
     """The tester's test files in the worktree: the maker may never write them."""
     rec = recorded(project, task_id)
-    return sorted(rec["data"]["files"]) if rec else []
+    return sorted(set(rec["data"]["files"]) - removed(project, task_id)) if rec else []
+
+
+def remove(project: Project, task_id: str, files: list[str], reason: str) -> None:
+    """Your call that a test is wrong: it leaves the worktree, recorded with your reason."""
+    wt = Path(project.task(task_id)["worktree"])
+    mine = [f for f in files if f in set(guarded(project, task_id))]
+    for f in mine:
+        (wt / f).unlink(missing_ok=True)
+    project.ledger.append("uitest.removed", "human", reason, task=task_id, files=mine)
 
 
 def tampered(project: Project, task_id: str, worktree: Path) -> list[str]:
     rec = recorded(project, task_id)
     if not rec:
         return []
-    out = []
+    out, gone = [], removed(project, task_id)
     for rel, sha in rec["data"]["files"].items():
+        if rel in gone:
+            continue
         path = Path(worktree) / rel
         if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != sha:
             out.append(rel)

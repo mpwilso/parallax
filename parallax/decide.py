@@ -94,6 +94,11 @@ def decision(project: Project, task_id: str) -> Decision | None:
         return Decision("scope", question,
                         [Option("accept", "accepts the risk for this exact change, and the check goes on", True),
                          REJECT, DROP], "reject", "the check", item)
+    if stage == "flows":
+        return Decision("flows", "A UI tester test still fails after a rework: is the test wrong, or the app?",
+                        [Option("remove", "the test is wrong: it's taken out of this task, and the check goes on", True),
+                         Option("reject", "the app is wrong: the drafters redraft the intent and plan from your reason", True),
+                         DROP], "reject", "Ready", item)
     if stage == "check" and why.startswith("the check still fails after"):
         return Decision("rework", "The check kept failing after every rework: redraft, or accept it as it is?",
                         [REJECT, Option("accept", "accepts the risk and makes it Ready", True), DROP],
@@ -153,6 +158,10 @@ def apply(project: Project, task_id: str, name: str, reason: str = "", spawn: Ca
     elif name == "raise":
         project.ledger.append("budget.raised", "human", said, task=task_id,
                               amount_usd=round(dec.extra["to"] - costs.budget(project, task_id, lifecycle.plan_data(project, task_id))[0], 2))
+        project.resolve(dec.item["id"], True, said)
+    elif name == "remove":
+        from . import uitest
+        uitest.remove(project, task_id, dec.item["data"].get("files") or [], said)
         project.resolve(dec.item["id"], True, said)
     elif name == "accept":
         project.resolve(dec.item["id"], True, said)

@@ -289,3 +289,22 @@ def test_its_own_em_dash_is_not_the_makers_finding(proj, monkeypatch):
 
 def test_a_fenced_reply_is_read():
     assert uitest._reply('done.\n```json\n{"flows": [{"name": "a", "works": true}]}\n```')["flows"][0]["works"] is True
+
+
+def test_a_tester_test_that_still_fails_after_a_rework_comes_to_you(proj, monkeypatch):
+    """2da12f: the tester's test counted <article> rows the page never had; no rework could fix it."""
+    monkeypatch.setattr(uitest, "TESTER", FakeTester(works=False))
+    monkeypatch.setattr(uitest, "FLOW_RUNNER", flow_runner([[("opens", False)], [("opens", False)], [("opens", False)],
+                                                            [("opens", True)]]))
+    tid, status = pilot(proj, None, None)
+    assert status == "disputed" and len(kinds(proj, "rework.started", tid)) == 1
+    from parallax import decide
+    dec = decide.decision(proj, tid)
+    assert dec.kind == "flows" and [o.name for o in dec.options] == ["remove", "reject", "drop"]
+    rel = f"tests/ui_flows/{tid}/opens.spec.js"
+    assert dec.item["data"]["files"] == [rel]
+    with pytest.raises(Exception, match="needs a reason"):
+        decide.apply(proj, tid, "remove", spawn=lambda *a: 9)
+    decide.apply(proj, tid, "remove", "it counts <article> rows; the page has none", spawn=lambda *a: 9)
+    assert not (Path(proj.task(tid)["worktree"]) / rel).exists()
+    assert uitest.guarded(proj, tid) == [] and uitest.tampered(proj, tid, Path(proj.task(tid)["worktree"])) == []

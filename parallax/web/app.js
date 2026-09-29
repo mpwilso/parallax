@@ -5,7 +5,7 @@
 const KINDS = {
   ready: "Ready", scope: "Outside the plan", guard: "Protected file", conflict: "Intent vs plan",
   cap: "Cap reached", rework: "Kept failing", checker: "Checker failed", tests: "Tests couldn't run",
-  error: "Error", stuck: "Stopped", drafting: "Drafting failed", launch: "Over your launch limit", review: "Plan review",
+  error: "Error", stuck: "Stopped", flows: "UI test or app?", drafting: "Drafting failed", launch: "Over your launch limit", review: "Plan review",
 };
 const DONE = { accepted: "accepted, the merge is yours", merged: "merged", rejected: "dropped", stopped: "stopped", closed: "closed" };
 const READY_OPTIONS = [
@@ -13,7 +13,7 @@ const READY_OPTIONS = [
   { name: "reject", does: "the drafters redraft the intent and plan from your reason", needs_reason: true },
   { name: "drop", does: "ends the task; it leaves the queue", needs_reason: true },
 ];
-const SEND = { reject: "Reject and redraft", drop: "Drop it", accept: "Accept the risk", intent: "Redraft to the intent" };
+const SEND = { reject: "Reject and redraft", drop: "Drop it", accept: "Accept the risk", intent: "Redraft to the intent", remove: "Remove the test" };
 const LIVE_EVERY = 15000;  // working lines carry a clock: refresh them even when nothing new happened
 
 const state = {

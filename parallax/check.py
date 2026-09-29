@@ -60,6 +60,15 @@ def _staged(project: Project, task_id: str, p, plan: dict, settings: dict) -> tr
                         verifier=set(uitest.guarded(project, task_id)))
 
 
+def _still_failing(project: Project, task_id: str, flows) -> list[dict]:
+    """The flow tests failing now that failed at the last check too, with a rework between."""
+    runs = [e for e in status.attempt(project.ledger.entries(), task_id) if e["kind"] == "flows.recorded"]
+    if len(runs) < 2:
+        return []
+    before = {(Path(c["file"]).name, c["name"]) for c in runs[-2]["data"].get("failed") or []}
+    return [c for c in flows.failed if (Path(c["file"]).name, c["name"]) in before]
+
+
 def rework_cycles(project: Project, task_id: str) -> int:
     """Rework cycles in this attempt."""
     return sum(e["kind"] == "rework.started" for e in status.attempt(project.ledger.entries(), task_id))
@@ -130,6 +139,13 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
                            tree=s.tree), []
         else:
             flow_fix = [f"blocker {c['file']}: the UI flow \"{c['name']}\" fails: {c['message']}" for c in flows.failed]
+            still = _still_failing(project, task_id, flows)
+            if still:  # after a rework the test still fails: it or the app is wrong, and only you can say which
+                c = still[0]
+                files = sorted({g for g in uitest.guarded(project, task_id) for x in still if Path(g).name == Path(x["file"]).name})
+                return _to_you(project, task_id, "flows",
+                               f"the UI tester's test \"{c['name']}\" ({Path(c['file']).name}) still fails after a rework: "
+                               f"{c['message']}. Either the test or the app is wrong", tree=s.tree, files=files), []
 
     # code findings first: they go straight back to the maker, and the checker isn't paid to spot them
     guarded = set(uitest.guarded(project, task_id))  # the UI tester's tests aren't the maker's to fix
