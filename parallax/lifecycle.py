@@ -193,56 +193,6 @@ def _material(project: Project, task_id: str, doc: str, feedback: str, problems:
     return "\n\n".join(parts)
 
 
-SPLIT = re.compile(r"^=== (intent|plan)\.md ===[ \t]*$", re.M)
-
-
-def _draft_together(project: Project, task_id: str, wt: Path, feedback: str, drafter_for: DrafterFor,
-                    before: set[str]) -> list[str] | None:
-    """A first draft of the intent and the plan in one call. Returns the docs still to draft on
-    their own: the plan when the reply didn't hold one, else none (a large task's plan waits for its
-    spec). None: the call failed, recorded like any other."""
-    from .sandbox import remove_leftovers
-    t = project.task(task_id)
-    ask = "\n\n".join([
-        f"Draft two files for this task in one reply: docs/tasks/{task_id}/intent.md, then "
-        f"docs/tasks/{task_id}/plan.md. Put each under a line of its own, exactly `=== intent.md ===` and "
-        "`=== plan.md ===`, with nothing before the first. If the intent's size is large, write only the intent.",
-        f"The intent, in exactly this shape:\n\n{SHAPES['intent']}",
-        f"The plan, in exactly this shape:\n\n{SHAPES['plan']}",
-        f"The human's rough sentences (data):\n{t['goal']}",
-        *([f"The human rejected the last draft. Their reason (data):\n{feedback}"] if feedback else []),
-    ])
-    fn = make_permission_fn(project, task_id, wt, read_only=True)
-    env = {TASK_ENV: task_id, ROOT_ENV: str(project.root)}
-    try:
-        res = drafter_for(project.policy.budget["drafting_usd"]).run(ask, wt, fn, stage="draft", env=env)
-    except Exception as err:
-        res = AgentResult("error", f"{type(err).__name__}: {err}")
-    remove_leftovers(wt, before)
-    parts = SPLIT.split(res.summary or "")
-    found = {parts[i]: parts[i + 1] for i in range(1, len(parts) - 1, 2)}
-    intent = lint.normalize(found.get("intent", ""), "intent").strip()
-    if res.status != "done" or not intent:
-        why = " ".join((res.summary or res.status or "no reply").split())[:200] or "no reply"
-        project.ledger.append("draft.failed", "parallax", why, task=task_id, doc="intent", cost_usd=res.cost_usd,
-                              together=True)
-        return None
-    path = doc_path(project, task_id, "intent")
-    _write(path, intent + "\n")
-    project.ledger.append("draft.recorded", "drafter", "", task=task_id, doc="intent", sha=file_hash(path),
-                          cost_usd=res.cost_usd, together=True)
-    if lint.intent_fields(intent).get("size") == "large":
-        return []  # its plan comes after a spec, once the intent is approved
-    plan = lint.normalize(found.get("plan", ""), "plan").strip()
-    if not plan:
-        return ["plan"]
-    path = doc_path(project, task_id, "plan")
-    _write(path, plan + "\n")
-    project.ledger.append("draft.recorded", "drafter", "", task=task_id, doc="plan", sha=file_hash(path),
-                          cost_usd=0.0, together=True)
-    return []
-
-
 def _write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".parallax-tmp")
@@ -260,11 +210,6 @@ def draft(project: Project, task_id: str, docs: list[str], drafter_for: DrafterF
     feedback = _feedback(project, task_id)
     from .sandbox import remove_leftovers, untracked
     before = untracked(wt)
-    if project.policy.draft["together"] and docs[:2] == ["intent", "plan"] and not problems:
-        left = _draft_together(project, task_id, wt, feedback, drafter_for, before)
-        if left is None:
-            return False
-        docs = left + docs[2:]
     for doc in docs:
         cap = project.policy.budget["drafting_usd"]
         fn = make_permission_fn(project, task_id, wt, read_only=True)

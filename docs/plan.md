@@ -250,6 +250,18 @@ Human touches for a normal small task when this is done: **one**, the accept or 
 - **The UI tester.** Off by default; `[ui_tester]` in the policy turns it on with the start command and URL. On a task whose plan names `user_flows` (the outcomes a person goes through in the UI; touching a UI file isn't enough), at the start of the check, Parallax starts the app from a copy of the built tree with the pinned MCP server in one sandbox. The tester gets those outcomes and the URL, no shell, and writes files only in its own empty folder. Parallax runs its tests once on the build it used (a test failing for a flow it said works is dropped), keeps the rest in `docs/tasks/<task>/ui_flows/` with their hashes, and runs every flow test at every check with no model, with every accepted task's flows from the base commit. `docs/tasks/` is Parallax's alone: no agent can write it, and the checker's diff leaves it out, as invariant 3 says. Failing flows go to rework like the checker's findings; one still failing after a rework comes to you (test or app?); a changed test comes to you. Screenshots are on the card. It fails closed: an app that won't start is the maker's to fix; tools or a browser that can't run, or a tester that wrote nothing, come to you. Its cost counts against the task's cap, up to `max_usd` a run.
 - **You confirm it:** see the step 7 runs in `docs/ui-runs/`.
 
+#### The drafting cost experiment (2026-09-29)
+
+Drafting was the largest share of a small task (run 3: drafters $1.51 of $4.44). Drafting only (intake to a plan that fits, no build), on the run 1 and run 3 tasks, twice each, one change at a time:
+
+| Setup | Run 1 | Run 3 | Misfits | Time |
+|---|---|---|---|---|
+| Opus 5, a call per file (before) | $0.34, $0.39 | $0.79, $0.61 | 1 of 4 | 79s to 156s |
+| (a) Sonnet 5.5, a call per file | $0.05, $0.06 | $0.12, $0.15 | 0 of 4 | 14s to 91s |
+| (b) Opus 5, intent and plan in one call | $0.23, $0.18 | $0.91, $0.30 | 0 of 4 | 44s to 121s |
+
+Kept (a): the drafters' default is Sonnet 5.5, `[draft] model` in the policy. (b) was cut. Its first run 3 went stuck on a bug it exposed: code raised a cap past the $5 small-task limit to reserve the UI tester's whole $1.50 ceiling. Now code never raises past the limit, the drafter is told the most it may estimate, and the reserve is $0.50.
+
 #### M15: the light conductor
 
 - `do` may split work into tasks, each with its own worktree, sandbox, budget and inbox item, run in parallel up to `max_parallel`; tasks whose plans share files run one after another, the later based on the earlier's accepted commit. The split shows on the board; a confirm only if the total cap is over `auto_launch_usd`.

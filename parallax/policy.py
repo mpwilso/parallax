@@ -20,7 +20,7 @@ DEFAULT_LIMITS = {
 }
 DEFAULT_BUDGET = {"drafting_usd": 2.0, "small_cap_usd": 5.0, "large_cap_usd": 20.0}  # estimated dollars
 DEFAULT_LAUNCH = {"auto_launch_usd": 3.0, "review_paths": [], "review_plans": False}
-DEFAULT_DRAFT = {"model": "claude-opus-5", "together": False}
+DEFAULT_DRAFT = {"model": "claude-sonnet-5-5"}  # a fifth of Opus's drafting cost, no more redrafts (docs/plan.md)
 DEFAULT_UI_TESTER = {
     "enabled": False, "start": "", "url": "",
     "model": "claude-sonnet-5-5", "max_usd": 1.5,
@@ -77,8 +77,7 @@ review_plans = false    # true: every plan waits for you
 setup = ""
 
 [draft]
-model = "claude-opus-5"  # the drafters: they write the intent, the spec and the plan
-together = false         # true: a first draft writes the intent and the plan in one call
+model = "claude-sonnet-5-5"  # the drafters: they write the intent, the spec and the plan
 
 [check]
 model = "claude-sonnet-5-5"  # the blind checker, a different Claude model from the maker
@@ -204,8 +203,6 @@ class Policy:
             raise ValueError(f"unknown [draft] settings: {sorted(set(draft) - set(DEFAULT_DRAFT))}")
         if not isinstance(draft.get("model", "x"), str) or not draft.get("model", "x").strip():
             raise ValueError("[draft] model must be a Claude model name")
-        if not isinstance(draft.get("together", False), bool):
-            raise ValueError("[draft] together must be true or false")
         self.draft = {**DEFAULT_DRAFT, **draft}
 
     @classmethod

@@ -336,45 +336,20 @@ def test_the_background_process_runs_the_installed_parallax_never_the_repos(proj
     assert seen[0][1:4] == ["-P", "-u", "-m"]  # -P: the working folder never goes on sys.path
 
 
-class TogetherDrafter(FakeDrafter):
-    """Answers the one-call request with both files, marked the way Parallax asks."""
 
-    def run(self, goal, cwd, permission_fn, stage="build", env=None):
-        if "Draft two files for this task in one reply" in goal:
-            self.requests.append(goal)
-            from parallax.agents.base import AgentResult
-            return AgentResult("done", f"=== intent.md ===\n{self.docs['intent']}\n=== plan.md ===\n{self.docs['plan']}", 0.3)
-        return super().run(goal, cwd, permission_fn, stage, env)
-
-
-def test_the_drafter_model_and_one_call_drafting_are_settings(repo, monkeypatch):
-    (repo / POLICY_FILE).write_text('[actions]\n[draft]\nmodel = "claude-sonnet-5-5"\ntogether = true\n')
+def test_the_drafter_model_is_a_setting(repo, monkeypatch):
     make_key()
-    monkeypatch.setattr(build, "_spawn", lambda *a: 9)
     proj = Project.init(repo)
-    assert proj.policy.draft == {"model": "claude-sonnet-5-5", "together": True}
-    tid = pilot.intake(proj, WANT)["task"]
-    drafter = TogetherDrafter(docs())
-    assert pilot.draft_until_fit(proj, tid, drafter) == "fit"
-    assert len(drafter.requests) == 1  # one call wrote both
-    recorded = [e for e in kinds(proj, "draft.recorded") if e["actor"] == "drafter"]
-    assert [e["data"]["doc"] for e in recorded] == ["intent", "plan"] and all(e["data"]["together"] for e in recorded)
-    assert "Rewrite the install section for WSL." in lifecycle.doc_path(proj, tid, "plan").read_text()
-    with pytest.raises(ValueError, match="true or false"):
-        from parallax.policy import Policy
-        Policy({}, draft={"together": "yes"})
-
-
-def test_one_call_drafting_leaves_a_large_tasks_plan_for_after_its_spec(repo, monkeypatch):
-    (repo / POLICY_FILE).write_text('[actions]\n[draft]\ntogether = true\n')
-    make_key()
-    monkeypatch.setattr(build, "_spawn", lambda *a: 9)
-    proj = Project.init(repo)
-    tid = pilot.intake(proj, WANT)["task"]
-    drafter = TogetherDrafter(docs(size="large"))
-    lifecycle.draft(proj, tid, ["intent", "plan"], drafter)
-    assert [e["data"]["doc"] for e in kinds(proj, "draft.recorded")] == ["intent"]
-
+    assert proj.policy.draft == {"model": "claude-sonnet-5-5"}  # the experiment's winner
+    (repo / POLICY_FILE).write_text('[actions]\n[draft]\nmodel = "claude-opus-5"\n')
+    assert Project(repo).policy.draft["model"] == "claude-opus-5"
+    from parallax.policy import Policy
+    with pytest.raises(ValueError, match="unknown"):
+        Policy({}, draft={"together": True})
+    seen = []
+    monkeypatch.setattr("parallax.agents.claude.ClaudeAgent", lambda **kw: seen.append(kw) or kw, raising=False)
+    build._drafter(1.0, "claude-sonnet-5-5")
+    assert seen[0]["model"] == "claude-sonnet-5-5"
 
 def test_a_cap_is_never_raised_past_the_size_limit_and_the_drafter_hears_what_fits(proj, monkeypatch):
     """42b54a: code raised the cap to $5.60, over the $5 small-task limit, and three redrafts couldn't fix it."""
