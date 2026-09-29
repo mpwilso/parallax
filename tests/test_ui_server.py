@@ -65,15 +65,15 @@ def test_the_board_holds_every_task_by_state(proj):
     assert [t["task"] for t in b["columns"]["ready"]] == [ready]
     assert [t["task"] for t in b["columns"]["drafting"]] == [working]
     assert b["count"] == 1 and [t["task"] for t in b["waiting"]] == [ready]
-    assert b["waiting"][0]["line"].startswith("the checker passed") and b["waiting"][0]["kind"] == "ready"
-    assert [t["task"] for t in b["working"]] == [working] and b["working"][0]["line"].startswith("drafters writing")
+    assert b["waiting"][0]["line"].startswith("Second Eye passed") and b["waiting"][0]["kind"] == "ready"
+    assert [t["task"] for t in b["working"]] == [working] and b["working"][0]["line"].startswith("Focus writing")
 
 
 def test_the_card_is_exactly_parallax_show(proj):
     tid = ready_task(proj)
     c = views.card(proj, tid)
     text = show.report(proj, tid)
-    assert c["report"]["bottom"] in text and c["report"]["bottom"].startswith("Ready: the checker passed")
+    assert c["report"]["bottom"] in text and c["report"]["bottom"].startswith("Ready: Second Eye passed")
     assert c["report"]["sections"]["Found"] == [line[2:] for line in text.split("Found\n", 1)[1].splitlines() if line.startswith("- ")]
     assert c["actions"] == {"kind": "ready"} and c["docs"] == ["intent", "plan"]
     assert "+ok" in views.document(proj, tid, "diff")

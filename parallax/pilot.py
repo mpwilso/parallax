@@ -169,7 +169,7 @@ def redraft(project: Project, task_id: str, reason: str, spawn: Callable | None 
     as well as the plan; the worktree goes back to its base; the pilot runs again, with a fresh cap."""
     refuse_inside_task(project.root)
     if not reason.strip():
-        raise ParallaxError("a reject needs a reason: it's what the drafters redraft from")
+        raise ParallaxError("a reject needs a reason: it's what Focus redrafts from")
     if task_id in build.running_builds(project):
         raise ParallaxError(f"task {task_id} is working right now. parallax stop ends it first")
     t = lifecycle.lifecycle_task(project, task_id)

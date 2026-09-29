@@ -41,8 +41,8 @@ def board(project: Project) -> dict:
         item["secret"] = bool(dec and dec.item and any(f.get("secret") and f.get("size") for f in dec.item["data"].get("files") or []))
         waiting.append(item)
     waiting.sort(key=lambda i: (not i["secret"], RISK.get(i["kind"], 5), i["last"] or ""))
-    working = [dict(i, line=live.line(project, i["task"])) for s in ("drafting", "building", "checking")
-               for i in columns[s]]
+    working = [dict(i, line=live.line(project, i["task"]), agent=live.agent_of(live.doing(status.attempt(project.ledger.entries(), i["task"]))[0]))
+               for s in ("drafting", "building", "checking") for i in columns[s]]
     done = sorted(columns["done"], key=lambda i: i["last"] or "", reverse=True)
     for item in done:
         item["merge"] = item["status"] == "accepted"  # accepted, and the merge is still yours
@@ -124,6 +124,7 @@ def card(project: Project, task_id: str) -> dict:
             "details": [_cited(i) for i in report["sections"].get("Details", [])],
             "actions": actions, "merge": merge, "files": files,
             "live": live.line(project, task_id) if state in ("drafting", "building", "checking") else "",
+            "stages": live.stages(status.attempt(entries, task_id), waiting=state not in ("drafting", "building", "checking")),
             "has_change": any(e["kind"] == "check.staged" for e in entries) or t["status"] in ("accepted", "merged"),
             "shots": shots(project, task_id),
             "docs": [d for d in ("intent", "spec", "plan", "record") if lifecycle.found_doc(project, task_id, d)]}

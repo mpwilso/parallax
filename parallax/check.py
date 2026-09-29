@@ -102,13 +102,13 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
         s = _staged(project, task_id, p, plan, settings)
     if not s.problems and uitest.applies(project, plan) and not uitest.recorded(project, task_id):
         if costs.budget(project, task_id, plan)[1] <= 0:
-            return costs.stop_at_cap(project, task_id, p.cap, "the UI tester was about to use the app"), []
+            return costs.stop_at_cap(project, task_id, p.cap, "Field was about to use the app"), []
         try:  # the UI tester, once per attempt, before anything else is paid for
             outcome, why = uitest.test(project, task_id, p, uitest.TESTER)
         except uitest.UITestError as err:
-            return _to_you(project, task_id, "check", f"the UI tester couldn't run: {err}", tree=s.tree), []
+            return _to_you(project, task_id, "check", f"Field (the UI tester) couldn't run: {err}", tree=s.tree), []
         if costs.budget(project, task_id, plan)[1] <= 0:  # its spend reached the cap: nothing more runs
-            return costs.stop_at_cap(project, task_id, p.cap, "the UI tester was using the app"), []
+            return costs.stop_at_cap(project, task_id, p.cap, "Field was using the app"), []
         if outcome == "app":
             project.ledger.append("check.found", "parallax", why, task=task_id, tree=s.tree, findings=[f"blocker: {why}"])
             return "rework", [f"blocker: {why}"]
@@ -116,7 +116,7 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
             return _to_you(project, task_id, "check", why, tree=s.tree), []
     changed = uitest.tampered(project, task_id)
     if changed:
-        return _to_you(project, task_id, "guard", f"the UI tester's tests changed after it wrote them: {', '.join(changed)}",
+        return _to_you(project, task_id, "guard", f"Field's tests changed after it wrote them: {', '.join(changed)}",
                        tree=s.tree), []
     risk = bool(s.problems) and accepted_risk(project, task_id, s.tree)
     project.ledger.append("check.staged", "parallax", "", task=task_id, tree=s.tree, base=s.base,
@@ -160,7 +160,7 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
                 c = still[0]
                 files = sorted({g for g in uitest.guarded(project, task_id) for x in still if Path(g).name == Path(x["file"]).name})
                 return _to_you(project, task_id, "flows",
-                               f"the UI tester's test \"{c['name']}\" ({Path(c['file']).name}) still fails after a rework: "
+                               f"Field's test \"{c['name']}\" ({Path(c['file']).name}) still fails after a rework: "
                                f"{c['message']}. Either the test or the app is wrong", tree=s.tree, files=files), []
 
     # code findings first: they go straight back to the maker, and the checker isn't paid to spot them
@@ -185,13 +185,13 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
             break
         except Exception as err:
             project.ledger.append("verdict.recorded", "checker", str(err), task=task_id, stage="check", tree=s.tree,
-                                  verdict="error", findings=[], not_looked_at="everything: the checker failed",
+                                  verdict="error", findings=[], not_looked_at="everything: Second Eye failed",
                                   brief_sha=hashlib.sha256(brief.encode()).hexdigest())
             if attempt_no == 1 and not _retried_checker(project, task_id):
                 project.ledger.append("check.retried", "parallax",
-                                      f"the checker gave no usable verdict ({err}), so it was asked once more", task=task_id)
+                                      f"Second Eye gave no usable verdict ({err}), so it was asked once more", task=task_id)
                 continue
-            return _to_you(project, task_id, "check", f"checker error: {err}", tree=s.tree), []
+            return _to_you(project, task_id, "check", f"Second Eye error: {err}", tree=s.tree), []
 
     blocking = review.blocking(review_text)
     blockers = [f for f in rv.findings if f.severity in blocking]
@@ -210,7 +210,7 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
     if against_plan:
         f = against_plan[0]
         return _to_you(project, task_id, "conflict",
-                       f"intent and plan disagree: the checker says {f.where} goes against the intent "
+                       f"intent and plan disagree: Second Eye says {f.where} goes against the intent "
                        f"({' '.join(f.text.split())}), but your approved plan lists {_path(f.where)}", tree=s.tree), []
     if results.ok and not blockers and not flow_fix:
         project.ledger.append("check.finished", "parallax", "", task=task_id, status="ready", tree=s.tree)

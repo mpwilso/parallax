@@ -26,12 +26,14 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import views
+from . import brand, views
 from .core import ParallaxError, Project, refuse_inside_task
 
 WEB = Path(__file__).with_name("web")
 STATIC = {"/": ("index.html", "text/html; charset=utf-8"), "/app.js": ("app.js", "text/javascript; charset=utf-8"),
           "/app.css": ("app.css", "text/css; charset=utf-8")}
+COMPUTED = {"/brand.json": (lambda: brand.bundle_json(), "application/json; charset=utf-8"),  # the logo and portraits, rendered once here
+            "/favicon.svg": (lambda: brand.logo_svg().encode("utf-8"), "image/svg+xml")}
 TOKEN_HEADER = "X-Parallax-Token"
 MAX_BODY = 1_000_000  # a request body is a few words of work or a reason, never more
 CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' blob:; "
@@ -191,6 +193,11 @@ def _handler(ui: UI):
                 if self._allowed(needs_token=False):
                     name, ctype = STATIC[path]
                     self._send(200, (WEB / name).read_bytes(), ctype)
+                return
+            if path in COMPUTED:
+                if self._allowed(needs_token=False):
+                    render, ctype = COMPUTED[path]
+                    self._send(200, render(), ctype)
                 return
             if not self._allowed(needs_token=True):
                 return

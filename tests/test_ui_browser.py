@@ -130,7 +130,7 @@ def test_typing_work_in_starts_a_task_you_can_see(page, proj):
     expect(page.locator("#status")).to_contain_text("on it")
     expect(page.locator("#work")).to_have_value("")
     tid = next(iter(proj.tasks()))
-    expect(row(page, tid)).to_contain_text("drafters writing the intent")
+    expect(row(page, tid)).to_contain_text("Focus writing the intent")
     assert proj.task(tid)["status"] == "drafting"
 
 
@@ -146,10 +146,10 @@ def test_empty_work_is_not_sent(page, proj):
 def test_a_task_moves_through_every_state_live_and_says_who_has_it(page, proj):
     tid = launched(proj, "adding a usage example")
     expect(row(page, tid)).to_contain_text("preparing the build", timeout=WAIT)
-    steps = [("maker.started", {"stage": "build"}, "maker building"),
+    steps = [("maker.started", {"stage": "build"}, "Maker building"),
              ("check.started", {}, "running the plan's tests"),
-             ("tests.recorded", {"passed": 3, "total": 3, "exit": 0, "per_file": {}, "tree": "", "harness_reset": []}, "checker reviewing the change"),
-             ("rework.started", {"cycle": 1}, "maker reworking (1 of 3)")]
+             ("tests.recorded", {"passed": 3, "total": 3, "exit": 0, "per_file": {}, "tree": "", "harness_reset": []}, "Second Eye reviewing the change"),
+             ("rework.started", {"cycle": 1}, "Maker reworking (1 of 3)")]
     for kind, data, says in steps:
         proj.ledger.append(kind, "parallax", "the link points at a missing file" if kind == "rework.started" else "",
                            task=tid, **data)
@@ -157,7 +157,7 @@ def test_a_task_moves_through_every_state_live_and_says_who_has_it(page, proj):
     expect(row(page, tid)).to_contain_text("The link points at a missing file")
     expect(row(page, tid)).to_contain_text("of $2.00")  # spent against the cap
     open_card(page, tid)
-    expect(page.locator("#card .live")).to_contain_text("maker reworking (1 of 3)")
+    expect(page.locator("#card .live")).to_contain_text("Maker reworking (1 of 3)")
 
 
 def test_several_tasks_at_once_riskiest_first_and_ready_last(page, proj):
@@ -183,7 +183,7 @@ def test_a_ready_card_reads_in_one_pass(page, proj):
     open_card(page, tid)
     card = page.locator("#card")
     expect(page.locator("#card-title")).to_have_text("fixing the README")
-    expect(card.locator(".bottom")).to_have_text("The checker passed and 3 of 3 plan tests pass.")
+    expect(card.locator(".bottom")).to_have_text("Second Eye passed and 3 of 3 plan tests pass.")
     expect(card).to_contain_text("whether pip is on PATH in a fresh WSL distro")  # the gap itself, not a pointer
     expect(card).not_to_contain_text("see Found")
     expect(card).not_to_contain_text("the work:")
@@ -203,7 +203,7 @@ def test_a_needs_you_card_shows_the_files_and_whether_a_secret_has_content(page,
     expect(card.locator("tr.risky")).to_contain_text("has content, 13 bytes")
     expect(card.locator(".files")).not_to_contain_text("notes.txt")  # empty and outside the plan: removed by code, not asked
     expect(card).to_contain_text("Whose call: security.")
-    expect(card).to_contain_text("the plan's tests and the blind checker haven't run")
+    expect(card).to_contain_text("the plan's tests and Second Eye (the blind checker) haven't run")
     expect(card.locator("#opt-reject")).to_have_class(re.compile("primary"))
 
 
@@ -259,7 +259,7 @@ def test_reject_needs_a_reason_survives_live_updates_then_redrafts_and_comes_bac
     expect(page.locator("#reason")).to_have_value("also name the shell")
     expect(page.locator("#reason")).to_be_focused()
     page.keyboard.press("Enter")
-    expect(row(page, tid)).to_contain_text("drafters writing the intent", timeout=WAIT)
+    expect(row(page, tid)).to_contain_text("Focus writing the intent", timeout=WAIT)
     assert [e["reason"] for e in proj.ledger.entries() if e["kind"] == "task.redraft"] == ["also name the shell"]
     maker = ScriptedAgent(steps=[("write", "README.md", "# calc\n\nA calculator, in bash.\n")])  # the redraft runs
     assert build.run_mode(proj, tid, "pilot", FakeDrafter(titled("fixing the README")), lambda left, s: maker,
@@ -411,3 +411,48 @@ def test_agent_text_is_never_html(page, proj):
     tid, _ = run_to_ready(proj, "<img src=x onerror=alert(1)> title")
     expect(row(page, tid)).to_contain_text("<img src=x onerror=alert(1)> title", timeout=WAIT)
     assert page.locator("#queue img").count() == 0
+
+
+# the agents' portraits: motion means status --------------------------------------------------------------
+
+def test_motion_follows_state_and_portraits_only_move_while_working(page, proj):
+    """Working animates, waiting and done are still, a stage that just finished hops once; hover hops once."""
+    assert page.evaluate("[window.parallaxMotion(null,'working'), window.parallaxMotion('working','done'), "
+                         "window.parallaxMotion('done','done'), window.parallaxMotion(null,'waiting'), window.parallaxMotion('working','waiting')]") \
+        == ["working", "hop", "still", "still", "hop"]
+    expect(page.locator("#logo svg")).to_have_count(1)  # the pixel P, inlined from /brand.json
+    assert page.evaluate("document.querySelectorAll('#logo .layer').length") == 2
+    tid = launched(proj, "adding a badge")
+    proj.ledger.append("maker.started", "parallax", "", task=tid, stage="build")
+    working = row(page, tid).locator(".portrait.working")
+    expect(working).to_have_count(1, timeout=WAIT)
+    expect(working).to_have_attribute("title", "Maker, builds in the sandbox")
+    assert page.evaluate("getComputedStyle(document.querySelector('.portrait.working .bust')).animationName") == "bob"
+    assert page.evaluate("getComputedStyle(document.querySelector('.portrait.working .glow')).animationName") == "pulse"
+    open_card(page, tid)
+    stages = page.locator("#card .stages .stage")
+    expect(stages).to_have_count(3)
+    expect(stages.nth(0)).to_have_class(re.compile("done")) and expect(stages.nth(0)).to_contain_text("Focus")
+    expect(stages.nth(1)).to_have_class(re.compile("working")) and expect(stages.nth(1)).to_contain_text("Maker")
+    expect(stages.nth(2)).to_have_class(re.compile("waiting")) and expect(stages.nth(2)).to_contain_text("Second Eye")
+    assert page.evaluate("getComputedStyle(document.querySelector('.stage.waiting .bust')).animationName") == "none"
+    # the stage finishes: Maker hops once, then is still; nothing loops on a task that waits on you
+    proj.ledger.append("build.finished", "parallax", "", task=tid, status="built")
+    proj.ledger.append("check.started", "parallax", "", task=tid)
+    proj.ledger.append("tests.recorded", "parallax", "", task=tid, passed=3, total=3, exit=0, per_file={}, tree="", harness_reset=[])
+    expect(page.locator("#card .stage.done .portrait").nth(1)).to_have_class(re.compile("hop|still"), timeout=WAIT)
+    expect(page.locator("#card .stage.done .portrait").nth(1)).to_have_class(re.compile("still"), timeout=WAIT)
+    expect(page.locator("#card .stage.working")).to_contain_text("Second Eye")
+    assert page.evaluate("document.querySelectorAll('#card .portrait.working').length") == 1
+
+
+def test_reduced_motion_keeps_every_portrait_still(browser, server, proj):
+    ctx = browser.new_context(viewport={"width": 1280, "height": 860}, reduced_motion="reduce")
+    pg = ctx.new_page()
+    pg.goto(server.url)
+    tid = launched(proj, "adding a badge")
+    proj.ledger.append("maker.started", "parallax", "", task=tid, stage="build")
+    expect(row(pg, tid).locator(".portrait.working")).to_have_count(1, timeout=WAIT)
+    assert pg.evaluate("getComputedStyle(document.querySelector('.portrait.working .bust')).animationName") == "none"
+    assert pg.evaluate("getComputedStyle(document.querySelector('.portrait.working .glow')).animationName") == "none"
+    ctx.close()

@@ -10,7 +10,7 @@ The whole input was one paragraph in the intake box (ledger `26bf1e3d`, 00:03):
 
 > Fix all five WSL install problems in the README: no su - <you> after adduser; uv and claude not found until source ~/.local/bin/env; apt's Node 18 too old for sandbox-runtime, use NodeSource setup_22.x after removing apt nodejs and npm; clone origin points at /mnt/c and breaks after drives are off; safe.directory needed for both the repo path and its .git path. Add a test that pins the README's doctor sample to parallax doctor. Budget cap 4.00.
 
-## 2. Focus drafts the intent and the plan
+## 2. Focus (which drafts the intent and plan) writes both
 
 The intent drafter read the repo and wrote [intent.md](tasks/e9a55a/intent.md) (ledger `bbc8fa37`, $0.36): a problem statement citing `README.md` by line, five numbered outcomes, constraints (don't change `doctor.py` or `cli.py`, keep the `#harden-wsl` anchor, a $4.00 cap) and a `scope` of the two files the work may touch. The plan drafter then wrote [plan.md](tasks/e9a55a/plan.md) (ledger `ff8a37df`, $0.44): steps by file and line, the tests that prove it, risks, and the `toml` block code reads: `files`, `tests`, `covers`, no domains, no outside reads, an estimate of $2.60 under the $4.00 cap.
 

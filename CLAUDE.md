@@ -1,6 +1,6 @@
 # Parallax
 
-Agents do the work. You make the calls. Read README.md for the thesis, docs/direction.md for the brief, and docs/plan.md for the build order.
+Agents do the work. You make the calls. The agents, wherever a person sees them: Focus (drafts the intent and plan), Maker (builds in the sandbox), Second Eye (the blind checker; sees only the result, never the making), Field (the UI tester). Scope is reserved for a future read-only investigator. Module and ledger names stay as they are. Read README.md for the thesis, docs/direction.md for the brief, and docs/plan.md for the build order.
 
 The test for every feature: "Parallax is hands-free. Execution happens without me. I only make judgment calls, and when I make them, I have everything I need to make them well. Any feature that adds work for me instead of removing it is wrong."
 

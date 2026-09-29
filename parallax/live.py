@@ -1,6 +1,6 @@
 """What a working task is doing right now, in one line, from the ledger.
 
-Which agent has it (the drafters, the maker, the checker, or Parallax itself running tests),
+Which agent has it (Focus, Maker, Second Eye, Field, or Parallax itself running tests),
 for how long, and what this attempt has spent against its cap. For the UI's working list.
 """
 from __future__ import annotations
@@ -33,33 +33,33 @@ def doing(entries: list[dict]) -> tuple[str, str, str]:
         if k in ("pilot.started", "task.redraft", "check.started"):
             why = ""  # a new stage: the rework's finding no longer describes it
         if k in ("pilot.started", "task.redraft", "task.created"):
-            what, since, drafted = "drafters writing the intent", e["ts"], set()
+            what, since, drafted = "Focus writing the intent", e["ts"], set()
         elif k == "draft.recorded":
             drafted.add(d.get("doc", ""))
-            what = "drafters writing the plan" if "plan" not in drafted else "checking the plan against the intent"
+            what = "Focus writing the plan" if "plan" not in drafted else "checking the plan against the intent"
             since = e["ts"]
         elif k in ("draft.misfit", "draft.failed"):
-            what, since = "drafters redrafting", e["ts"]
+            what, since = "Focus redrafting", e["ts"]
         elif k == "gate.approved":
             what, since = "preparing the build", e["ts"]
         elif k == "maker.started":
-            what, since = "maker building", e["ts"]
+            what, since = "Maker building", e["ts"]
         elif k == "rework.started":
             why = lint.one_sentence(e["reason"].splitlines()[0] if e["reason"] else "").rstrip(".")
-            what, since = f"maker reworking ({d.get('cycle', 1)} of {REWORK_CAP})", e["ts"]
+            what, since = f"Maker reworking ({d.get('cycle', 1)} of {REWORK_CAP})", e["ts"]
         elif k == "check.started":
             what, since = "running the plan's tests", e["ts"]
         elif k == "uitest.started":
-            what, since = "UI tester using the app", e["ts"]
+            what, since = "Field using the app", e["ts"]
         elif k == "flows.started":
             what, since = "running the UI flow tests", e["ts"]
         elif k in ("tests.recorded", "flows.recorded"):
-            what, since = "checker reviewing the change", e["ts"]
+            what, since = "Second Eye reviewing the change", e["ts"]
     return what, why, since
 
 
 def line(project: Project, task_id: str, now: datetime | None = None) -> str:
-    """e.g. "maker building, 2m, $0.40 of $2.00". A rework adds what it's fixing, last."""
+    """e.g. "Maker building, 2m, $0.40 of $2.00". A rework adds what it's fixing, last."""
     now = now or datetime.now(timezone.utc)
     what, why, since = doing(status.attempt(project.ledger.entries(), task_id))
     parts = [what]
@@ -72,3 +72,34 @@ def line(project: Project, task_id: str, now: datetime | None = None) -> str:
     elif spent:
         parts.append(f"${spent:.2f} spent")
     return ", ".join(parts) + (f". {why[0].upper()}{why[1:]}" if why else "")
+
+
+WHO = {"Focus": "focus", "Maker": "maker", "Second Eye": "second_eye", "Field": "field"}
+STAGES = ("focus", "maker", "second_eye", "field")
+
+
+def agent_of(what: str) -> str | None:
+    """The agent named by a live line, or None when Parallax itself has the task."""
+    return next((key for name, key in WHO.items() if what.startswith(name)), None)
+
+
+def stages(entries: list[dict], waiting: bool) -> list[dict]:
+    """Each agent's state on this attempt, in order: working, done, or waiting (not started, or the task
+    waits on you). Field appears only on a task the UI tester ran for. Motion follows from this."""
+    what, _, _ = doing(entries)
+    working = None if waiting else agent_of(what)
+    kinds = [e["kind"] for e in entries]
+    done = {
+        "focus": any(e["kind"] == "gate.approved" for e in entries) or "draft.misfit" in kinds and "gate.approved" in kinds,
+        "maker": "build.finished" in kinds,
+        "second_eye": any(e["kind"] == "verdict.recorded" and e["data"].get("stage") == "check" for e in entries),
+        "field": "uitest.recorded" in kinds or "uitest.failed" in kinds,
+    }
+    seen_field = "uitest.started" in kinds or working == "field"
+    out = []
+    for key in STAGES:
+        if key == "field" and not seen_field:
+            continue
+        state = "working" if working == key else "done" if done[key] else "waiting"
+        out.append({"agent": key, "state": state})
+    return out

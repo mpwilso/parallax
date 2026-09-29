@@ -4,13 +4,13 @@
 
 const KINDS = {
   ready: "Ready", scope: "Outside the plan", guard: "Protected file", conflict: "Intent vs plan",
-  cap: "Cap reached", rework: "Kept failing", checker: "Checker failed", tests: "Tests couldn't run",
+  cap: "Cap reached", rework: "Kept failing", checker: "Second Eye failed", tests: "Tests couldn't run", turns: "Out of turns",
   error: "Error", stuck: "Stopped", flows: "UI test or app?", drafting: "Drafting failed", launch: "Over your launch limit", review: "Plan review",
 };
 const DONE = { accepted: "accepted, the merge is yours", merged: "merged", rejected: "dropped", stopped: "stopped", closed: "closed" };
 const READY_OPTIONS = [
   { name: "accept", does: "commits the reviewed change to its branch; merging stays yours" },
-  { name: "reject", does: "the drafters redraft the intent and plan from your reason", needs_reason: true },
+  { name: "reject", does: "Focus redrafts the intent and plan from your reason", needs_reason: true },
   { name: "drop", does: "ends the task; it leaves the queue", needs_reason: true },
 ];
 const SEND = { reject: "Reject and redraft", drop: "Drop it", accept: "Accept the risk", intent: "Redraft to the intent", remove: "Remove the test" };
@@ -20,7 +20,10 @@ const state = {
   token: "", board: null, boardKey: "", open: null, card: null, cardKey: "",
   doc: null, docText: null, version: "", busy: false, pending: null, lastLive: 0,
   drafts: {},  // reasons you started typing, per task, kept until you send one
+  seen: {},    // each agent's last state per task, so a stage that just finished hops once
 };
+const brand = { logo: null, agents: {} };  // rendered by the server from one data file; the page only places it
+const SVG_NS = "http://www.w3.org/2000/svg";
 
 // ---------- plumbing ----------
 
@@ -80,6 +83,63 @@ function restoreFocus(key) {
   if (n && document.activeElement !== n) n.focus({ preventScroll: true });
 }
 
+// ---------- brand: the logo and the agents' portraits ----------
+// Motion means status: a portrait moves only while its agent is working on that task, hops once
+// when its stage finishes, and is still otherwise. With prefers-reduced-motion nothing moves.
+
+function svgFrom(body, label) {
+  const doc = new DOMParser().parseFromString(`<svg xmlns="${SVG_NS}" viewBox="0 0 16 16"><g class="bust">${body}</g></svg>`, "image/svg+xml");
+  const svg = document.importNode(doc.documentElement, true);
+  svg.setAttribute("shape-rendering", "crispEdges");
+  svg.setAttribute("focusable", "false");
+  if (label) { svg.setAttribute("role", "img"); svg.setAttribute("aria-label", label); } else svg.setAttribute("aria-hidden", "true");
+  return svg;
+}
+
+function motionFor(prev, now) {
+  if (now === "working") return "working";
+  if (prev === "working") return "hop";
+  return "still";
+}
+window.parallaxMotion = motionFor;  // the mapping the browser test checks
+
+function portrait(key, now, prev) {
+  const a = brand.agents[key];
+  if (!a) return null;
+  const m = motionFor(prev, now);
+  const node = el("span", { class: "portrait " + m, "data-agent": key, title: `${a.name}, ${a.role}` },
+    svgFrom(a.svg, `${a.name}, ${a.role}`));
+  if (m === "hop") node.addEventListener("animationend", () => { node.classList.remove("hop"); node.classList.add("still"); }, { once: true });
+  return node;
+}
+
+function stageStrip(c) {
+  if (!c.stages || !c.stages.length) return null;
+  const prev = state.seen[c.task] || {};
+  const strip = el("ol", { class: "stages", "aria-label": "Stages" }, c.stages.map(s => {
+    const a = brand.agents[s.agent] || { name: s.agent, short: "" };
+    return el("li", { class: "stage " + s.state }, portrait(s.agent, s.state, prev[s.agent]),
+      el("span", { class: "who" }, a.name), el("span", { class: "what" }, a.short),
+      el("span", { class: "vh" }, `: ${s.state}`));
+  }));
+  state.seen[c.task] = Object.fromEntries(c.stages.map(s => [s.agent, s.state]));
+  return strip;
+}
+
+async function loadBrand() {
+  try {
+    const res = await fetch("/brand.json");
+    const data = await res.json();
+    brand.agents = data.agents || {};
+    const doc = new DOMParser().parseFromString(`<svg xmlns="${SVG_NS}" viewBox="0 0 14 16">${data.logo}</svg>`, "image/svg+xml");
+    const svg = document.importNode(doc.documentElement, true);
+    svg.setAttribute("shape-rendering", "crispEdges");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    document.getElementById("logo").replaceChildren(svg);
+  } catch (err) { /* the page works without its pictures */ }
+}
+
 // ---------- the queue ----------
 
 function allTasks() {
@@ -89,11 +149,14 @@ function allTasks() {
 
 function row(t, line, tag) {
   const open = state.open === t.task;
+  const who = t.agent ? portrait(t.agent, "working") : null;  // only the agent working on it right now
   return el("li", {},
-    el("button", { class: "row" + (open ? " open" : ""), "data-task": t.task, "data-focus": "task-" + t.task,
+    el("button", { class: "row" + (open ? " open" : "") + (who ? " with-portrait" : ""), "data-task": t.task, "data-focus": "task-" + t.task,
       "aria-current": open ? "true" : null, onclick: () => openCard(t.task, true) },
-      el("span", { class: "row-top" }, el("span", { class: "title" }, t.title), tag),
-      line ? el("span", { class: "line" }, line) : null));
+      who,
+      el("span", { class: "row-body" },
+        el("span", { class: "row-top" }, el("span", { class: "title" }, t.title), tag),
+        line ? el("span", { class: "line" }, line) : null)));
 }
 
 function kindTag(t) {
@@ -224,6 +287,7 @@ function renderCard() {
       el("p", { class: "meta" }, el("span", { class: "tag " + chip }, cap(c.state)), " ",
         el("span", { class: "mono" }, c.task), c.cost_usd ? ` $${c.cost_usd.toFixed(2)} spent` : ""),
       el("h2", { id: "card-title", tabindex: "-1" }, c.title)),
+    stageStrip(c),
     c.live ? el("p", { class: "live" }, c.live) : null,
     c.redraft ? el("p", { class: "redraft" }, "Redrafted after you rejected it") : null,
     el("p", { class: "bottom" }, bottom),
@@ -248,7 +312,7 @@ function renderCard() {
 const shotURLs = {};
 function shotsSection(c) {
   if (!c.shots || !c.shots.length) return null;
-  return [el("h3", {}, "What the UI tester saw"),
+  return [el("h3", {}, "What Field, the UI tester, saw"),
     el("div", { class: "shots" }, c.shots.map(s => {
       const img = el("img", { alt: s.caption, loading: "lazy" });
       loadShot(img, c.task, s.name);
@@ -309,7 +373,7 @@ function actions(c) {
         o.name === recommend ? el("span", { class: "tag rec" }, "Recommended") : null),
       el("kbd", { "aria-hidden": "true" }, o.name === "accept" && a.kind === "ready" ? "a" : String(i + 1))))),
     p ? el("div", { class: "reason" },
-      el("label", { for: "reason" }, p.option === "reject" ? "Why? The drafters redraft from this." : `Why ${p.option}?`),
+      el("label", { for: "reason" }, p.option === "reject" ? "Why? Focus redrafts from this." : `Why ${p.option}?`),
       el("textarea", { id: "reason", "data-focus": "reason", rows: "3",
         oninput: e => { p.text = e.target.value; state.drafts[p.task] = p.text; },
         onkeydown: e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } } }),
@@ -505,4 +569,4 @@ async function poll() {
 // the link stays in the address bar so you can bookmark it; the fragment never reaches a server
 state.token = location.hash.slice(1) || sessionStorage.getItem("parallax-token") || "";
 if (location.hash) sessionStorage.setItem("parallax-token", state.token);
-if (!state.token) lock(); else poll();
+if (!state.token) lock(); else { loadBrand(); poll(); }

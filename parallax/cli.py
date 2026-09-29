@@ -15,6 +15,9 @@ LOG_FIELDS = ("task", "action", "stage", "status", "verdict", "outcome", "why")
 GUIDE = """\
 parallax: agents do the work. you make the calls.
 
+the agents: Focus drafts the intent and plan. Maker builds in the sandbox. Second Eye checks blind,
+seeing only the result. Field tests the UI. which one runs next is decided by code, never by a model.
+
 start here:
   parallax do "the work"                describe it once. drafting, building and checking run without you
   parallax inbox                        what waits on you: one item per task
@@ -61,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
     bd = sub.add_parser("build", help="build an approved plan in the sandbox, in the background")
     bd.add_argument("task")
     sub.add_parser("stop", help="end every running build now")
-    rc = sub.add_parser("recheck", help="check a built task again, in the background: code checks, tests, the blind checker")
+    rc = sub.add_parser("recheck", help="check a built task again, in the background: code checks, tests, Second Eye (the blind checker)")
     rc.add_argument("task")
     ac = sub.add_parser("accept", help="commit exactly what was reviewed, for you to merge")
     ac.add_argument("task")
@@ -76,9 +79,9 @@ def main(argv: list[str] | None = None) -> int:
     ui.add_argument("--no-open", action="store_true", help="don't open the browser, just print the link")
     for name in ("approve", "reject"):
         r = sub.add_parser(name, help="approve a plan that waits for you" if name == "approve" else
-                           "send a task back to the drafters with your reason (--drop ends it instead)")
+                           "send a task back to Focus with your reason (--drop ends it instead)")
         r.add_argument("items", nargs="+", metavar="task")
-        r.add_argument("--reason", default="", help="why. a reject needs one: it's what the drafters redraft from")
+        r.add_argument("--reason", default="", help="why. a reject needs one: it's what Focus redrafts from")
         if name == "reject":
             r.add_argument("--drop", action="store_true", help="end the task instead of redrafting it")
     dc = sub.add_parser("decide", help="answer the one decision a task is waiting on")
@@ -111,7 +114,7 @@ def _run(args) -> int:
         proj = Project.init(cwd, confirm_setup=_confirm_setup)
         print(f"initialized parallax in {proj.root}")
         print("  parallax.policy.toml  what agents may do. anything unlisted is denied.")
-        print("  REVIEW.md             how the blind checker reviews, and what blocks ready. you own it.")
+        print("  REVIEW.md             how Second Eye (the blind checker) reviews, and what blocks ready. you own it.")
         print('next: parallax do "what you want done"')
         return 0
 

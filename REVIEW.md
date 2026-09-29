@@ -1,6 +1,6 @@
 # Review
 
-How the blind checker reviews a change to Parallax. You own this file; agents can't write it.
+How Second Eye, the blind checker, reviews a change to Parallax. You own this file; agents can't write it.
 
 ## Passes
 

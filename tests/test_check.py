@@ -209,14 +209,14 @@ def test_show_at_ready_is_the_plans_shape(repo, monkeypatch, capsys):
     assert main(["show", tid]) == 0
     assert capsys.readouterr().out == (
         "Type: Decision needed\n"
-        "Bottom line: Ready: the checker passed and 3 of 3 plan tests pass.\n"
+        "Bottom line: Ready: Second Eye passed and 3 of 3 plan tests pass.\n"
         "Not looked at: nothing\n"
         f"Next: you run parallax accept {tid}, or reject it with a reason.\n"
         "Found\n"
         f"- the work: fixing the README install steps (docs/tasks/{tid}/intent.md:1)\n"
         f"- changed: README.md, 1 line; parallax diff {tid} shows it (ledger {kinds(proj, 'check.staged')[-1]['id']})\n"
         f"- tests: 3 of 3 passed (ledger {t['id']})\n"
-        f"- checker: pass, no findings (ledger {v['id']})\n"
+        f"- Second Eye, the blind checker: pass, no findings (ledger {v['id']})\n"
         f"- outcome 1: tests/test_readme.py (ledger {t['id']})\n"
         f"- preflight: passed (ledger {kinds(proj, 'preflight.recorded')[-1]['id']})\n"
         f"- no harness files were reset (ledger {t['id']})\n")
@@ -251,7 +251,7 @@ def test_show_after_rework_says_what_changed_and_carries_the_checkers_gaps(repo)
     assert run(proj, tid, maker, FakeChecker(reviews=[blocker(), passed])) == "ready"
     text = show.report(proj, tid)
     assert "Changed since last time\n- rework 1 changed README.md (ledger " in text
-    assert "Not looked at: the checker says: how it renders on GitHub." in text
+    assert "Not looked at: Second Eye says: how it renders on GitHub." in text
     assert "README.md:1 minor: could be clearer (ledger " in text
     assert lint.lint_report(text, root=proj.root, ledger_ids={e["id"] for e in proj.ledger.entries()}, revisit=True) == []
 
@@ -430,7 +430,7 @@ def test_the_maker_can_say_a_finding_conflicts_with_the_plan(repo):
     maker.status, maker.summary = "conflict", "conflict: fixing it means dropping a step the plan lists"
     assert run(proj, tid, maker, FakeChecker(reviews=[blocker()])) == "disputed"
     [item] = proj.inbox()
-    assert item["data"]["stage"] == "conflict" and "the maker says a finding goes against" in item["reason"]
+    assert item["data"]["stage"] == "conflict" and "Maker says a finding goes against" in item["reason"]
 
 
 def test_a_rework_that_drops_an_approved_file_comes_to_you(repo):

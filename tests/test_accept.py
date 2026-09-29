@@ -150,11 +150,11 @@ def test_the_record_is_generated_from_the_ledger_and_lints(repo):
     shutil.copytree(acc["docs_moved_to"], lifecycle.task_dir(proj, tid))  # lint cites need the files in place
     assert lint.lint_report(text, root=proj.root, ledger_ids=ids) == []
     for want in ("Files changed: README.md.", f"Why: docs/tasks/{tid}/intent.md, docs/tasks/{tid}/plan.md.",
-                 "signed with the approval key", "Written by: the maker (claude-opus-5), in 1 run in the sandbox.",
+                 "signed with the approval key", "Written by: Maker, which builds in the sandbox (claude-opus-5), in 1 run in the sandbox.",
                  "Verified by: Parallax ran the plan's tests in the sandbox (3 of 3 passed)",
                  f"Rollback: revert the commit whose message has Parallax-Task: {tid}",
-                 "Known risks (agent-written, from the checker): README.md:1 minor: could say which shell",
-                 "Not looked at: the checker says: the rendered page."):
+                 "Known risks (agent-written, from Second Eye): README.md:1 minor: could say which shell",
+                 "Not looked at: Second Eye says: the rendered page."):
         assert want in text, want
 
 

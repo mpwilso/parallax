@@ -21,7 +21,7 @@ DEFAULT_BLOCKING = ("blocker", "major")
 TEMPLATE = """\
 # Review
 
-How the blind checker reviews a change. You own this file; agents can't write it.
+How Second Eye, the blind checker, reviews a change. You own this file; agents can't write it.
 
 ## Passes
 

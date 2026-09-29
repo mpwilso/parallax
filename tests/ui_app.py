@@ -40,7 +40,7 @@ def main(port: int) -> None:
     from parallax.core import Project
     import test_lifecycle_gates as test_m8
 
-    build._spawn = lambda argv, env, cwd, log: 9  # nothing runs in the background
+    build._spawn = lambda argv, env, cwd, log: os.getpid()  # nothing runs in the background; a live pid keeps the board's stale check off it
     import random
     import uuid
     ids = random.Random(7)  # the same task ids every start: the UI tester's tests may name them (a42589)

@@ -150,7 +150,7 @@ def test_every_kind_of_decision_is_one_lint_clean_question(proj):
     cases = [
         ("disagreement.raised", {"stage": "scope"}, "extra.py changed but isn't in the plan's files", "scope", "reject"),
         ("disagreement.raised", {"stage": "check"}, "the check still fails after 3 rework cycles: tests", "rework", "reject"),
-        ("disagreement.raised", {"stage": "check"}, "checker error: garbled reply", "checker", "retry"),
+        ("disagreement.raised", {"stage": "check"}, "Second Eye error: garbled reply", "checker", "retry"),
         ("disagreement.raised", {"stage": "check"}, "the plan's tests couldn't run (exit 4): no module", "tests", "retry"),
         ("disagreement.raised", {"stage": "guard"}, "diff touches protected files: CLAUDE.md", "guard", "reject"),
         ("stuck.raised", {}, "drafting still failed after 2 redrafts: the plan lists setup.py", "drafting", "reject"),

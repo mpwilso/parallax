@@ -38,7 +38,7 @@ def write(project: Project, task_id: str, files: list[str], plan: dict) -> str:
     found = show._tests(tests[-1] if tests else None) + head
     found += [f"approved {g['data']['gate'].replace('+', ' and ')} (ledger {g['id']})" for g in gates]
     if makers:
-        found.append(f"built by the maker, {makers[-1]['data'].get('model') or 'model not recorded'} (ledger {makers[-1]['id']})")
+        found.append(f"built by Maker, {makers[-1]['data'].get('model') or 'model not recorded'} (ledger {makers[-1]['id']})")
     found += [f"you accepted a risk: {' '.join(r['reason'].split())} (ledger {r['id']})" for r in risks]
 
     docs = ", ".join(f"{base}/{d}.md" for d in ("intent", "spec", "plan") if lifecycle.doc_path(project, task_id, d).exists())
@@ -51,20 +51,20 @@ def write(project: Project, task_id: str, files: list[str], plan: dict) -> str:
         f"Why: {docs}.",
         *[f"Gate: {g['data']['gate'].replace('+', ' and ')} approved by {who} at {stamp(g['ts'])}, "
           f"signed with the approval key (ledger {g['id']})." for g in gates],
-        f"Written by: the maker ({makers[-1]['data'].get('model') or 'model not recorded'}), in {len(makers)} run"
+        f"Written by: Maker, which builds in the sandbox ({makers[-1]['data'].get('model') or 'model not recorded'}), in {len(makers)} run"
         f"{'s' if len(makers) != 1 else ''} in the sandbox." if makers else "Written by: nobody recorded.",
         f"Verified by: Parallax ran the plan's tests in the sandbox ({t['passed']} of {t['total']} passed); "
-        f"the blind checker ({checker_model or 'model not recorded'}) said {verdicts[-1]['data']['verdict'] if verdicts else 'nothing'}.",
+        f"Second Eye, the blind checker ({checker_model or 'model not recorded'}), said {verdicts[-1]['data']['verdict'] if verdicts else 'nothing'}.",
         f"Cost: an estimated ${cap - left:.2f} of the ${cap:.2f} cap.",
         f"Rollback: revert the commit whose message has Parallax-Task: {task_id} "
         f"(find it with git log --grep 'Parallax-Task: {task_id}').",
     ]
-    details += [f"Known risks (agent-written, from the checker): {f}" for f in findings]
+    details += [f"Known risks (agent-written, from Second Eye): {f}" for f in findings]
 
     title = lint.intent_fields(lifecycle.doc_path(project, task_id, "intent").read_text(encoding="utf-8")).get("title", "")
-    bottom = lint.one_sentence(f"Task {task_id}, {title}, was accepted as the exact tree the checker reviewed")
+    bottom = lint.one_sentence(f"Task {task_id}, {title}, was accepted as the exact tree Second Eye reviewed")
     if len(bottom.split()) > 20:
-        bottom = f"Task {task_id} was accepted as the exact tree the checker reviewed."
+        bottom = f"Task {task_id} was accepted as the exact tree Second Eye reviewed."
     text = lint.shaped("FYI", bottom, gaps, "you merge it yourself; nothing else waits on you.", found,
                        who="the checker")
     return _with_details(text, details)

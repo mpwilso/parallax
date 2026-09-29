@@ -293,7 +293,7 @@ def test_the_cap_leaves_room_for_one_rework(proj):
     assert found == ["the cap ($0.60) leaves no room for a rework round: make it at least $1.32 "
                      "(drafting so far, plus twice the estimate)"]
     assert planfit.problems(docs()["intent"], {**plan, "budget_cap_usd": 1.32}, 0.22, proj.policy.budget) == []
-    assert "UI tester" in planfit.problems(docs()["intent"], {**plan, "budget_cap_usd": 1.32}, 0.22,
+    assert "Field" in planfit.problems(docs()["intent"], {**plan, "budget_cap_usd": 1.32}, 0.22,
                                            proj.policy.budget, reserve=1.5)[0]
 
 
@@ -393,7 +393,7 @@ def test_the_makers_turn_cap_comes_to_you_the_way_a_cap_hit_does(proj, monkeypat
     assert dec.kind == "turns" and dec.recommend == "retry" and [o.name for o in dec.options] == ["retry", "reject", "drop"]
     assert proj.policy.limits["maker_turns"] == 150
     card = show.report(proj, tid)
-    assert "Whose call: you, as the engineer." in card and "Why a human: the maker used every turn" in card
+    assert "Whose call: you, as the engineer." in card and "Why a human: Maker used every turn" in card
     assert lint.lint_report(card, root=proj.root, ledger_ids={e["id"] for e in proj.ledger.entries()}) == []
 
 

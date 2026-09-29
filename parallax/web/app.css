@@ -4,6 +4,8 @@
   --line: #e2e1db; --edge: #85847c;
   --accent: #1f5fbf; --on-accent: #ffffff; --accent-bg: #e7effb;
   --wait: #954400; --wait-bg: #fcefe0; --good: #1b7437; --good-bg: #e3f2e7; --bad: #b3261e; --bad-bg: #fbe8e6;
+  --brand-violet: #a47cf0; --brand-cyan: #5ef2ff; --brand-tile: #313859;
+  --halo-focus: #5ef2ff; --halo-maker: #ff7a3d; --halo-second-eye: #a47cf0; --halo-field: #f2c94c;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
@@ -52,8 +54,34 @@ kbd {
   display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.75rem 1.25rem; align-items: center;
   padding: 0.875rem 1.25rem; background: var(--panel); border-bottom: 1px solid var(--line);
 }
-.top h1 { font-size: 1rem; font-weight: 650; display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.625rem; min-width: 0; }
-#project { overflow-wrap: anywhere; }
+.top h1 { font-size: 1rem; font-weight: 650; display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.5rem; min-width: 0; }
+.top .word { font-family: var(--mono); font-weight: 600; letter-spacing: 0.01em; }
+.top .sep { color: var(--muted); font-weight: 400; }
+#project { overflow-wrap: anywhere; font-weight: 500; }
+#project:empty { display: none; }
+#project:empty + .count, #project:empty ~ .sep { display: none; }
+
+/* ---- brand: the pixel P, and the agents' portraits ---- */
+.logo { display: inline-block; width: 1.3125rem; height: 1.5rem; }
+.logo svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.top h1:hover .logo .l1 { animation: apart-violet 0.3s steps(2) 1; }
+.top h1:hover .logo .l2 { animation: apart-cyan 0.3s steps(2) 1; }
+@keyframes apart-violet { 0% { transform: translate(0, 0); } 50% { transform: translate(-1px, 1px); } 100% { transform: translate(0, 0); } }
+@keyframes apart-cyan { 0% { transform: translate(0, 0); } 50% { transform: translate(1px, -1px); } 100% { transform: translate(0, 0); } }
+.portrait { display: inline-block; width: 2rem; height: 2rem; flex: none; }
+.portrait svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.portrait.working .bust { animation: bob 1.2s steps(2) infinite; }
+.portrait.working .glow { animation: pulse 1.6s steps(4) infinite alternate; }
+.portrait.hop .bust, .portrait:hover .bust { animation: hop 0.36s steps(2) 1; }
+@keyframes bob { 0% { transform: translateY(0); } 50% { transform: translateY(-1px); } 100% { transform: translateY(0); } }
+@keyframes pulse { from { opacity: 1; } to { opacity: 0.45; } }
+@keyframes hop { 0% { transform: translateY(0); } 50% { transform: translateY(-2px); } 100% { transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .portrait *, .logo * { animation: none !important; } }
+.stages { list-style: none; margin: 0.75rem 0 0; padding: 0; display: flex; gap: 1.25rem; flex-wrap: wrap; }
+.stage { display: grid; justify-items: center; gap: 0.125rem; font-size: 0.75rem; line-height: 1.25; color: var(--muted); }
+.stage .who { font-weight: 600; color: var(--ink); }
+.stage.waiting { opacity: 0.55; }
+.stage.working .who { color: var(--accent); }
 .count { white-space: nowrap; font-size: 0.8125rem; font-weight: 600; color: var(--wait); background: var(--wait-bg); border-radius: 999px; padding: 0.0625rem 0.625rem; }
 #intake input {
   width: 100%; font: inherit; color: var(--ink); background: var(--bg);
@@ -77,6 +105,9 @@ main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(18re
   display: block; width: 100%; text-align: left; border-color: transparent; background: transparent;
   border-radius: 8px; padding: 0.5625rem 0.625rem; min-height: 0;
 }
+.row.with-portrait { display: flex; gap: 0.625rem; align-items: flex-start; }
+.row.with-portrait .portrait { width: 1.75rem; height: 1.75rem; margin-top: 0.0625rem; }
+.row-body { min-width: 0; flex: 1; display: block; }
 .row:hover { background: var(--sunk); }
 .row.open { background: var(--accent-bg); border-color: var(--accent); }
 .row-top { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }

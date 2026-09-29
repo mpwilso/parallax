@@ -189,7 +189,7 @@ def test_the_maker_cant_write_its_tests_and_a_change_comes_to_you(proj, monkeypa
                             test_runner=junit_runner(), preflight_runner=good_probe)
     assert status == "disputed"
     raised = kinds(proj, "disagreement.raised", tid)[-1]
-    assert raised["data"]["stage"] == "guard" and "the UI tester's tests changed" in raised["reason"]
+    assert raised["data"]["stage"] == "guard" and "Field's tests changed" in raised["reason"]
     assert not list(Path(proj.task(tid)["worktree"]).glob("docs/tasks/**/*.spec.js"))  # never in the maker's reach
     prepared = build.prepare(proj, tid, setup=False, launching=False)
     assert any(d.endswith("/docs/tasks") for d in prepared.rules.deny_write)
@@ -209,12 +209,12 @@ def test_it_fails_closed_when_the_browser_cant_run_or_it_writes_nothing(proj, mo
         raise uitest.UITestError("the browser can't start without libnss3.so")
     monkeypatch.setattr(uitest, "ensure_tools", broken)
     tid, status = pilot(proj, None, None)
-    assert status == "disputed" and "the UI tester couldn't run: the browser can't start" in kinds(proj, "disagreement.raised", tid)[-1]["reason"]
+    assert status == "disputed" and "Field (the UI tester) couldn't run: the browser can't start" in kinds(proj, "disagreement.raised", tid)[-1]["reason"]
 
     monkeypatch.setattr(uitest, "ensure_tools", lambda: uitest.Tools(Path("/nowhere"), Path("/nowhere/chrome")))
     monkeypatch.setattr(uitest, "TESTER", FakeTester(write=False))
     tid, status = pilot(proj, None, None)
-    assert status == "disputed" and "the UI tester wrote no tests" in kinds(proj, "disagreement.raised", tid)[-1]["reason"]
+    assert status == "disputed" and "Field (the UI tester) wrote no tests" in kinds(proj, "disagreement.raised", tid)[-1]["reason"]
 
 
 def test_its_tools_are_the_browser_and_its_own_folder(tmp_path):
@@ -269,7 +269,7 @@ def test_tests_written_without_ever_seeing_the_app_dont_count(proj, monkeypatch)
     monkeypatch.setattr(uitest, "FLOW_RUNNER", flow_runner([[("opens", True)]]))
     tid, status = pilot(proj, None, None)
     assert kinds(proj, "uitest.failed", tid) and not kinds(proj, "uitest.recorded", tid)
-    assert "the app didn't start for the UI tester: fatal: unknown error" in kinds(proj, "rework.started", tid)[0]["reason"]
+    assert "the app didn't start for Field: fatal: unknown error" in kinds(proj, "rework.started", tid)[0]["reason"]
 
 
 def test_a_test_that_fails_on_the_build_it_describes_is_dropped_not_reworked(proj, monkeypatch):
@@ -278,7 +278,7 @@ def test_a_test_that_fails_on_the_build_it_describes_is_dropped_not_reworked(pro
     monkeypatch.setattr(uitest, "FLOW_RUNNER", flow_runner([[("opens", False)]]))
     tid, status = pilot(proj, None, None)
     assert status == "disputed" and not kinds(proj, "rework.started", tid)
-    assert "none of the UI tester's tests passed on the build it described" in kinds(proj, "disagreement.raised", tid)[-1]["reason"]
+    assert "none of Field's tests passed on the build it described" in kinds(proj, "disagreement.raised", tid)[-1]["reason"]
 
 
 def test_its_own_em_dash_is_not_the_makers_finding(proj, monkeypatch):
@@ -367,7 +367,7 @@ def test_the_testers_limit_is_its_reserve_and_it_stops_there(proj, monkeypatch):
     tid, status = pilot(proj, None, None)
     plan = lifecycle.plan_data(proj, tid)
     assert tester.limit == proj.policy.ui_tester["max_usd"] == p._reserve(proj, plan) == 0.5
-    assert status == "disputed" and "the UI tester wrote no tests (error)" in kinds(proj, "disagreement.raised", tid)[-1]["reason"]
+    assert status == "disputed" and "Field (the UI tester) wrote no tests (error)" in kinds(proj, "disagreement.raised", tid)[-1]["reason"]
     assert kinds(proj, "uitest.failed", tid)[-1]["data"]["cost_usd"] == 0.5  # what it spent counts
 
     class SDK:  # the real adapter hands the limit to the SDK as its budget
@@ -387,4 +387,4 @@ def test_a_tester_that_reaches_the_cap_stops_the_task_and_nothing_else_runs(proj
         steps=[("write", "README.md", "ok\n")]), checker, test_runner=junit_runner(), preflight_runner=good_probe)
     assert status == "stuck" and checker.briefs == [] and not kinds(proj, "flows.recorded", tid)
     [item] = proj.inbox()
-    assert item["data"]["budget"] and "while the UI tester was using the app" in item["reason"]
+    assert item["data"]["budget"] and "while Field was using the app" in item["reason"]

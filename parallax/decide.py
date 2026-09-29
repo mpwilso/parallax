@@ -56,18 +56,18 @@ WHY_HUMAN = {  # one short sentence per kind: why code stopped instead of decidi
     "scope": "the change reached outside the plan you approved",
     "flows": "only a person can say whether the test or the app is wrong",
     "rework": "three reworks didn't satisfy the check, so the plan or the work needs your judgment",
-    "checker": "the checker failed twice, so nothing has reviewed this change",
-    "tests": "the tests couldn't run, which is a setup problem, not the maker's work",
+    "checker": "Second Eye failed twice, so nothing has reviewed this change",
+    "tests": "the tests couldn't run, which is a setup problem, not Maker's work",
     "guard": "a protected path was touched, and no rule lets code accept that",
-    "drafting": "the drafters couldn't produce a plan that fits, and only you can restate the work",
+    "drafting": "Focus couldn't produce a plan that fits, and only you can restate the work",
     "error": "it stopped on an error nobody planned for",
     "stuck": "it stopped, and whether to try again or change course is yours",
-    "turns": "the maker used every turn it had, and more turns may just be more of the same",
+    "turns": "Maker used every turn it had, and more turns may just be more of the same",
 }
 
 
 
-REJECT = Option("reject", "the drafters redraft the intent and plan from your reason", True)
+REJECT = Option("reject", "Focus redrafts the intent and plan from your reason", True)
 DROP = Option("drop", "ends the task; it leaves the inbox", True)
 RETRY = Option("retry", "runs it again from where it stopped")
 
@@ -107,7 +107,7 @@ def decision(project: Project, task_id: str) -> Decision | None:
     d, why = item["data"], " ".join(item["reason"].split())
     stage = d.get("stage")
     if d.get("turns"):
-        return Decision("turns", "The maker used every turn it had without finishing: run it again, or redraft?",
+        return Decision("turns", "Maker used every turn it had without finishing: run it again, or redraft?",
                         [RETRY, REJECT, DROP], "retry", "the rest of the build and check", item)
     if d.get("budget"):
         new = raise_to(project, task_id)
@@ -130,16 +130,16 @@ def decision(project: Project, task_id: str) -> Decision | None:
                         [Option("accept", "accepts the risk for this exact change, and the check goes on", True),
                          REJECT, DROP], "reject", "the check", item, {"secret": secret})
     if stage == "flows":
-        return Decision("flows", "A UI tester test still fails after a rework: is the test wrong, or the app?",
+        return Decision("flows", "Field's UI test still fails after a rework: is the test wrong, or the app?",
                         [Option("remove", "the test is wrong: it's taken out of this task, and the check goes on", True),
-                         Option("reject", "the app is wrong: the drafters redraft the intent and plan from your reason", True),
+                         Option("reject", "the app is wrong: Focus redrafts the intent and plan from your reason", True),
                          DROP], "reject", "Ready", item)
     if stage == "check" and why.startswith("the check still fails after"):
         return Decision("rework", "The check kept failing after every rework: redraft, or accept it as it is?",
                         [REJECT, Option("accept", "accepts the risk and makes it Ready", True), DROP],
                         "reject", "Ready", item)
-    if stage == "check" and why.startswith("checker error"):
-        return Decision("checker", "The checker failed to answer: try it again?",
+    if stage == "check" and why.startswith("Second Eye error"):
+        return Decision("checker", "Second Eye failed to answer, twice: try it again?",
                         [RETRY, Option("accept", "accepts it unreviewed, as a risk", True), DROP],
                         "retry", "Ready", item)
     if stage == "check":  # the plan's tests couldn't run
@@ -149,7 +149,7 @@ def decision(project: Project, task_id: str) -> Decision | None:
         return Decision("guard", "The change touched a protected file: redraft it?", [REJECT, DROP],
                         "reject", "Ready", item)
     if why.startswith("drafting"):
-        return Decision("drafting", "The drafters couldn't get the plan right: redraft with a hint from you?",
+        return Decision("drafting", "Focus couldn't get the plan right: redraft with a hint from you?",
                         [REJECT, DROP], "reject", "the whole task", item)
     if d.get("error"):  # the same error twice means running it again won't help
         again = sum(e["kind"] == "stuck.raised" and " ".join(e["reason"].split()) == why

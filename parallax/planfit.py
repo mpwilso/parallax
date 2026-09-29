@@ -68,7 +68,7 @@ def problems(intent: str, plan: dict, spent: float, budget_policy: dict, reserve
                    f"${limit:.2f}. estimate at most ${most:.2f}, or plan less work")
     elif spent < cap < floor:
         out.append(f"the cap (${cap:.2f}) leaves no room for a rework round: make it at least ${floor:.2f} "
-                   f"(drafting so far, plus twice the estimate" + (", plus the UI tester's share)" if reserve else ")"))
+                   f"(drafting so far, plus twice the estimate" + (", plus Field's share)" if reserve else ")"))
     if cap > limit:
         out.append(f"the cap (${cap:.2f}) is over the policy's ${limit:.2f} for a {size} task")
     return out

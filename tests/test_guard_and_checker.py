@@ -160,10 +160,10 @@ def test_a_checker_error_is_retried_once_by_code_then_comes_to_you(repo):
     assert _check(proj, tid, maker, checker) == "disputed"
     assert len(checker.briefs) == 2 and len(maker.goals) == 1  # asked once more, with the same brief
     [retry] = [e for e in proj.ledger.entries() if e["kind"] == "check.retried"]
-    assert retry["reason"] == "the checker gave no usable verdict (garbled reply), so it was asked once more"
+    assert retry["reason"] == "Second Eye gave no usable verdict (garbled reply), so it was asked once more"
     assert not [e for e in proj.ledger.entries() if e["kind"] == "rework.started"]
     [item] = proj.inbox()
-    assert item["reason"].startswith("checker error")
+    assert item["reason"].startswith("Second Eye error")
 
 
 def test_a_checker_that_answers_the_second_time_never_reaches_you(repo):

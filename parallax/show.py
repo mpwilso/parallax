@@ -48,11 +48,11 @@ def _checker(v: dict | None) -> tuple[list[str], list[str], list[tuple[str, str]
         return [], [], []
     d, cite = v["data"], f"(ledger {v['id']})"
     n = len(d.get("findings", []))
-    head = f"checker: {d['verdict']}, {'no findings' if not n else f'{n} finding' + ('s' if n > 1 else '')} {cite}"
+    head = f"Second Eye, the blind checker: {d['verdict']}, {'no findings' if not n else f'{n} finding' + ('s' if n > 1 else '')} {cite}"
     findings = [f"{f['where'] or 'the change'} {f['severity']}: {' '.join(f['text'].split())} {cite}"
                 for f in d.get("findings", [])]
     nla = " ".join(str(d.get("not_looked_at") or "nothing").split())
-    gaps = [] if nla.rstrip(".").lower() == "nothing" else [(f"the checker says: {nla}", f"checker did not look at: {nla} {cite}")]
+    gaps = [] if nla.rstrip(".").lower() == "nothing" else [(f"Second Eye says: {nla}", f"Second Eye did not look at: {nla} {cite}")]
     return [head], findings, gaps
 
 
@@ -69,10 +69,10 @@ def _ui(entries: list[dict]) -> tuple[list[str], list[tuple[str, str]]]:
             found.append(f"UI flows: {d['passed']} of {d['total']} pass" + (f"; failing: {', '.join(bad[:3])}" if bad else "") + f" {cite}")
     if rec:
         for why in rec["data"].get("dropped") or []:
-            found.append(f"UI tester's test dropped: {why} (ledger {rec['id']})")
+            found.append(f"Field's test dropped: {why} (ledger {rec['id']})")
         nla = " ".join(str(rec["data"].get("not_looked_at") or "nothing").split())
         if nla.rstrip(".").lower() != "nothing":
-            gaps.append((f"the UI tester says: {nla}", f"UI tester did not look at: {nla} (ledger {rec['id']})"))
+            gaps.append((f"Field says: {nla}", f"Field did not look at: {nla} (ledger {rec['id']})"))
     return found, gaps
 
 
@@ -137,7 +137,7 @@ def _next(task_id: str, dec) -> str:
 def lead(why: str) -> str:
     """The first clause of a reason, up to 16 words: "error: the sandbox exited (srt: ...)" leads
     with "the sandbox exited", never with "error"."""
-    for generic in ("error: ", "checker error: "):
+    for generic in ("error: ", "Second Eye error: "):
         if why.lower().startswith(generic):
             why = why[len(generic):]
     first = why.split(": ", 1)[0].split("; ", 1)[0]
@@ -211,8 +211,8 @@ def report(project: Project, task_id: str) -> str:
     changed = lead + _changed(project, task_id, _attempt(entries, task_id))
     if dec is not None:
         if dec.item and not _last(_attempt(entries, task_id), "verdict.recorded", stage="check"):  # it stopped before the checker: say so, never "nothing"
-            gaps = gaps + [("the plan's tests and the blind checker, which haven't run",
-                            f"not looked at: the plan's tests and the blind checker haven't run (ledger {dec.item['id']})")]
+            gaps = gaps + [("the plan's tests and Second Eye, which haven't run",
+                            f"not looked at: the plan's tests and Second Eye (the blind checker) haven't run (ledger {dec.item['id']})")]
         return _decision(project, task_id, dec, found, gaps, changed, boundary + findings)
     if status == "ready":
         found = _the_work(project, task_id, staged) + found + _outcomes(project, task_id, tests)
@@ -222,9 +222,9 @@ def report(project: Project, task_id: str) -> str:
         how = "passed" if verdict and verdict["data"]["verdict"] == "pass" else "found nothing blocking"
         if verdict and verdict["data"]["verdict"] in ("error", "fail"):
             how = f"said {verdict['data']['verdict']} and you accepted the risk"
-        bottom = f"Ready: the checker {how} and {passed} of {total} plan tests pass."
+        bottom = f"Ready: Second Eye {how} and {passed} of {total} plan tests pass."
         if lead:
-            bottom = f"Ready again after your reject: the checker {how} and {passed} of {total} plan tests pass."
+            bottom = f"Ready again after your reject: Second Eye {how} and {passed} of {total} plan tests pass."
         return lint.shaped("Decision needed", bottom, gaps, f"you run parallax accept {task_id}, or reject it with a reason.",
                            found, changed, "the checker", boundary + findings)
     if status in ("accepted", "merged"):

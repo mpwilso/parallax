@@ -226,13 +226,13 @@ def ensure_tools() -> Tools:
     d = tools_dir()
     if not (d / "node_modules" / "@playwright" / "test" / "cli.js").exists():
         if not shutil.which("npm"):
-            raise UITestError("the UI tester needs Node.js and npm. install them, and it runs on its own")
+            raise UITestError("Field, the UI tester, needs Node.js and npm. install them, and it runs on its own")
         d.mkdir(parents=True, exist_ok=True)
         (d / "package.json").write_text('{"private": true}\n')
         out = _run(["npm", "install", "--ignore-scripts", "--no-audit", "--no-fund", "--prefix", str(d),
                     f"@playwright/mcp@{MCP_VERSION}", f"@playwright/test@{TEST_VERSION}"])
         if out.returncode != 0:
-            raise UITestError(f"couldn't install the UI tester's tools: {(out.stderr or out.stdout).strip()[-300:]}")
+            raise UITestError(f"couldn't install Field's tools: {(out.stderr or out.stdout).strip()[-300:]}")
     shells = sorted(glob.glob(str(d / "browsers" / "chromium_headless_shell-*" / "*" / "chrome-headless-shell")))
     if not shells:
         out = _run(["node", str(d / "node_modules" / "@playwright" / "test" / "cli.js"), "install", "--only-shell",
@@ -240,7 +240,7 @@ def ensure_tools() -> Tools:
                                       "PLAYWRIGHT_BROWSERS_PATH": str(d / "browsers")})
         shells = sorted(glob.glob(str(d / "browsers" / "chromium_headless_shell-*" / "*" / "chrome-headless-shell")))
         if not shells:
-            raise UITestError(f"couldn't install the UI tester's browser: {(out.stderr or out.stdout).strip()[-300:]}")
+            raise UITestError(f"couldn't install Field's browser: {(out.stderr or out.stdout).strip()[-300:]}")
     exe = Path(shells[-1])
     lib = d / "lib" / "usr" / "lib" / "x86_64-linux-gnu"
     missing = _missing_libs(exe, lib if lib.exists() else None)
@@ -373,23 +373,23 @@ def test(project: Project, task_id: str, p, tester_for) -> tuple[str, str]:
     if not (work / APP_UP).exists():  # fail closed: tests written without ever seeing the app don't count
         project.ledger.append("uitest.failed", "ui tester", text[-600:] or result.status, app_log=log[-600:], **common)
         if log.strip():
-            return "app", "the app didn't start for the UI tester: " + lint.one_sentence(" ".join(log.strip().splitlines()[-3:]))
-        return "you", "the UI tester never reached the app: its browser server didn't start"
+            return "app", "the app didn't start for Field: " + lint.one_sentence(" ".join(log.strip().splitlines()[-3:]))
+        return "you", "Field (the UI tester) never reached the app: its browser server didn't start"
     if written:  # Parallax runs them once, on the build the tester just used, before trusting any
         said = {str(f.get("name")): bool(f.get("works")) for f in reply.get("flows", []) if isinstance(f, dict)}
         check = _run_specs(project, tools, home / "validate", copy, work / "flows", p.venv, FLOW_RUNNER)
         if check.app_failed:
-            return "app", "the app didn't start for the UI tester's tests: " + lint.one_sentence(check.tail)
+            return "app", "the app didn't start for Field's tests: " + lint.one_sentence(check.tail)
         written, dropped = usable(written, check, said)
         common["dropped"] = dropped
     if not written:
         project.ledger.append("uitest.failed", "ui tester", text[-600:] or result.status, **common)
         if NO_ANSWER in log:
-            return "app", "the app didn't start for the UI tester: " + lint.one_sentence(" ".join(log.strip().splitlines()[-3:]))
+            return "app", "the app didn't start for Field: " + lint.one_sentence(" ".join(log.strip().splitlines()[-3:]))
         if common.get("dropped"):
-            return "you", "none of the UI tester's tests passed on the build it described: " + lint.one_sentence(
+            return "you", "none of Field's tests passed on the build it described: " + lint.one_sentence(
                 "; ".join(common["dropped"]))
-        return "you", f"the UI tester wrote no tests ({result.status}): {lint.one_sentence(text or 'no reply')}"
+        return "you", f"Field (the UI tester) wrote no tests ({result.status}): {lint.one_sentence(text or 'no reply')}"
     dest = lifecycle.task_dir(project, task_id) / "ui_flows"
     shutil.rmtree(dest, ignore_errors=True)
     files = {}
