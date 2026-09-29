@@ -132,8 +132,9 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
             flow_fix = [f"blocker {c['file']}: the UI flow \"{c['name']}\" fails: {c['message']}" for c in flows.failed]
 
     # code findings first: they go straight back to the maker, and the checker isn't paid to spot them
+    guarded = set(uitest.guarded(project, task_id))  # the UI tester's tests aren't the maker's to fix
     dashes = [f"blocker {path}:{line}: an em dash was added; use a comma or a colon"
-              for path, line, text in tree.added_lines(s.diff) if lint.EM_DASH in text]
+              for path, line, text in tree.added_lines(s.diff) if lint.EM_DASH in text and path not in guarded]
     if dashes:
         project.ledger.append("check.found", "parallax", "; ".join(dashes), task=task_id, tree=s.tree, findings=dashes)
         return "rework", dashes + flow_fix + ([] if results.ok else [f"tests failed (exit {results.exit})"])

@@ -68,6 +68,8 @@ def _ui(entries: list[dict]) -> tuple[list[str], list[tuple[str, str]]]:
             bad = [c["name"] for c in d.get("failed") or []]
             found.append(f"UI flows: {d['passed']} of {d['total']} pass" + (f"; failing: {', '.join(bad[:3])}" if bad else "") + f" {cite}")
     if rec:
+        for why in rec["data"].get("dropped") or []:
+            found.append(f"UI tester's test dropped: {why} (ledger {rec['id']})")
         nla = " ".join(str(rec["data"].get("not_looked_at") or "nothing").split())
         if nla.rstrip(".").lower() != "nothing":
             gaps.append((f"the UI tester says: {nla}", f"UI tester did not look at: {nla} (ledger {rec['id']})"))

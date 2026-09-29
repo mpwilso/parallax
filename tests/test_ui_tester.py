@@ -119,7 +119,7 @@ def test_only_plans_that_change_the_ui(proj):
 
 def test_the_tester_is_blind_sandboxed_and_its_tests_are_hashed_and_run(proj, monkeypatch):
     tester = FakeTester()
-    runner = flow_runner([[("opens", True)]])
+    runner = flow_runner([[("opens", True)], [("opens", True)]])
     monkeypatch.setattr(uitest, "TESTER", tester)
     monkeypatch.setattr(uitest, "FLOW_RUNNER", runner)
     tid, status = pilot(proj, tester, runner)
@@ -157,7 +157,7 @@ def test_the_tester_is_blind_sandboxed_and_its_tests_are_hashed_and_run(proj, mo
 def test_a_failing_flow_is_reworked_and_the_tester_runs_once(proj, monkeypatch):
     tester = FakeTester(works=False)
     monkeypatch.setattr(uitest, "TESTER", tester)
-    monkeypatch.setattr(uitest, "FLOW_RUNNER", flow_runner([[("opens", False)], [("opens", True)]]))
+    monkeypatch.setattr(uitest, "FLOW_RUNNER", flow_runner([[("opens", False)], [("opens", False)], [("opens", True)]]))
     maker = ScriptedAgent(steps=[("write", "README.md", "ok\n")])
     tid, status = pilot(proj, tester, None, maker)
     assert status == "ready" and len(tester.calls) == 1
@@ -167,7 +167,7 @@ def test_a_failing_flow_is_reworked_and_the_tester_runs_once(proj, monkeypatch):
 
 def test_the_maker_cant_write_its_tests_and_a_change_comes_to_you(proj, monkeypatch):
     monkeypatch.setattr(uitest, "TESTER", FakeTester())
-    monkeypatch.setattr(uitest, "FLOW_RUNNER", flow_runner([[("opens", False)]]))
+    monkeypatch.setattr(uitest, "FLOW_RUNNER", flow_runner([[("opens", True)], [("opens", False)]]))
     rel = None
 
     def sneaky(cwd):
@@ -190,7 +190,7 @@ def test_the_maker_cant_write_its_tests_and_a_change_comes_to_you(proj, monkeypa
 
 def test_an_app_that_wont_start_is_the_makers_to_fix(proj, monkeypatch):
     monkeypatch.setattr(uitest, "TESTER", FakeTester())
-    monkeypatch.setattr(uitest, "FLOW_RUNNER", flow_runner(["app", [("opens", True)]]))
+    monkeypatch.setattr(uitest, "FLOW_RUNNER", flow_runner([[("opens", True)], "app", [("opens", True)]]))
     tid, status = pilot(proj, None, None)
     assert status == "ready"
     assert "the app didn't start for the UI flow tests" in kinds(proj, "rework.started", tid)[0]["reason"]
@@ -263,3 +263,29 @@ def test_tests_written_without_ever_seeing_the_app_dont_count(proj, monkeypatch)
     tid, status = pilot(proj, None, None)
     assert kinds(proj, "uitest.failed", tid) and not kinds(proj, "uitest.recorded", tid)
     assert "the app didn't start for the UI tester: fatal: unknown error" in kinds(proj, "rework.started", tid)[0]["reason"]
+
+
+def test_a_test_that_fails_on_the_build_it_describes_is_dropped_not_reworked(proj, monkeypatch):
+    """964571: the tester's tests failed on the very build it had used, and the maker was sent to fix them."""
+    monkeypatch.setattr(uitest, "TESTER", FakeTester(works=True))
+    monkeypatch.setattr(uitest, "FLOW_RUNNER", flow_runner([[("opens", False)]]))
+    tid, status = pilot(proj, None, None)
+    assert status == "disputed" and not kinds(proj, "rework.started", tid)
+    assert "none of the UI tester's tests passed on the build it described" in kinds(proj, "disagreement.raised", tid)[-1]["reason"]
+
+
+def test_its_own_em_dash_is_not_the_makers_finding(proj, monkeypatch):
+    class Dashing(FakeTester):
+        def run(self, goal, cwd, server, allowed):
+            out = super().run(goal, cwd, server, allowed)
+            spec = Path(cwd) / "flows" / "opens.spec.js"
+            spec.write_text(spec.read_text() + "// a \u2014 b\n")
+            return out
+    monkeypatch.setattr(uitest, "TESTER", Dashing())
+    monkeypatch.setattr(uitest, "FLOW_RUNNER", flow_runner([[("opens", True)]]))
+    tid, status = pilot(proj, None, None)
+    assert status == "ready" and not kinds(proj, "check.found", tid)
+
+
+def test_a_fenced_reply_is_read():
+    assert uitest._reply('done.\n```json\n{"flows": [{"name": "a", "works": true}]}\n```')["flows"][0]["works"] is True
