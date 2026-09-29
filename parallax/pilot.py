@@ -73,7 +73,7 @@ def draft_until_fit(project: Project, task_id: str, drafter_for) -> str:
 
 def _reserve(project: Project, plan: dict) -> float:
     from . import uitest
-    return float(uitest.settings(project)["max_usd"]) if uitest.applies(project, plan) else 0.0
+    return min(uitest.RESERVE_USD, float(uitest.settings(project)["max_usd"])) if uitest.applies(project, plan) else 0.0
 
 
 def _room_for_rework(project: Project, task_id: str, plan: dict) -> dict:
@@ -89,7 +89,11 @@ def _room_for_rework(project: Project, task_id: str, plan: dict) -> dict:
     cap = float(plan["budget_cap_usd"])
     if cap >= floor:
         return plan
-    new = math.ceil(floor * 10 - 1e-9) / 10  # up to the next ten cents
+    size = lint.intent_fields(intent).get("size", "small")
+    limit = float(project.policy.budget["large_cap_usd" if size == "large" else "small_cap_usd"])
+    if floor > limit:  # no cap fits: planfit tells the drafter the most it may estimate
+        return plan
+    new = min(math.ceil(floor * 10 - 1e-9) / 10, limit)  # up to the next ten cents
     path = lifecycle.doc_path(project, task_id, "plan")
     text = path.read_text(encoding="utf-8")
     text, n = re.subn(r"(?m)^budget_cap_usd\s*=.*$", f"budget_cap_usd = {new:.2f}", text)

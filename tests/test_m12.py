@@ -374,3 +374,15 @@ def test_one_call_drafting_leaves_a_large_tasks_plan_for_after_its_spec(repo, mo
     drafter = TogetherDrafter(docs(size="large"))
     lifecycle.draft(proj, tid, ["intent", "plan"], drafter)
     assert [e["data"]["doc"] for e in kinds(proj, "draft.recorded")] == ["intent"]
+
+
+def test_a_cap_is_never_raised_past_the_size_limit_and_the_drafter_hears_what_fits(proj, monkeypatch):
+    """42b54a: code raised the cap to $5.60, over the $5 small-task limit, and three redrafts couldn't fix it."""
+    monkeypatch.setattr(build, "_spawn", lambda *a: 9)
+    big = docs()["plan"].replace("estimated_cost_usd = 0.9", "estimated_cost_usd = 2.6").replace(
+        "budget_cap_usd = 2.0", "budget_cap_usd = 3.0")
+    tid = pilot.intake(proj, WANT)["task"]
+    pilot.draft_until_fit(proj, tid, FakeDrafter({**docs(), "plan": big}))
+    assert lifecycle.plan_data(proj, tid)["budget_cap_usd"] == 3.0  # left as drafted: no raise past $5
+    misfit = kinds(proj, "draft.misfit")[0]["reason"]
+    assert "the estimate ($2.60) is too big for a small task" in misfit and "estimate at most $2.40" in misfit

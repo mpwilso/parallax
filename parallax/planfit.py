@@ -59,11 +59,16 @@ def problems(intent: str, plan: dict, spent: float, budget_policy: dict, reserve
     if cap <= spent:
         out.append(f"the cap (${cap:.2f}) isn't above what drafting already spent (${spent:.2f})")
     floor = rework_floor(float(plan["estimated_cost_usd"]), spent, reserve)
-    if spent < cap < floor:
-        out.append(f"the cap (${cap:.2f}) leaves no room for a rework round: make it at least ${floor:.2f} "
-                   f"(drafting so far, plus twice the estimate" + (", plus the UI tester's share)" if reserve else ")"))
     size = lint.intent_fields(intent).get("size", "small")
     limit = budget_policy["large_cap_usd" if size == "large" else "small_cap_usd"]
+    if floor > limit:
+        most = max(round((limit - spent - reserve) / 2, 2), 0)
+        out.append(f"the estimate (${float(plan['estimated_cost_usd']):.2f}) is too big for a {size} task: with "
+                   f"drafting so far and room for one rework, the cap would be ${floor:.2f}, over the policy's "
+                   f"${limit:.2f}. estimate at most ${most:.2f}, or plan less work")
+    elif spent < cap < floor:
+        out.append(f"the cap (${cap:.2f}) leaves no room for a rework round: make it at least ${floor:.2f} "
+                   f"(drafting so far, plus twice the estimate" + (", plus the UI tester's share)" if reserve else ")"))
     if cap > limit:
         out.append(f"the cap (${cap:.2f}) is over the policy's ${limit:.2f} for a {size} task")
     return out

@@ -36,6 +36,7 @@ from .core import ParallaxError, Project
 # newer MCP versions put their browser behind a Unix socket, which the sandbox refuses (Part 3 spike)
 MCP_VERSION = "0.0.70"
 TEST_VERSION = "1.60.0-alpha-1774999321000"  # the MCP's own Playwright core, so one browser serves both
+RESERVE_USD = 0.50  # what a plan's cap keeps for the tester: live runs cost $0.05 to $0.29 (docs/ui-runs)
 APP_FAILED = 97  # the wrapper's exit code when the app never answered
 APP_UP = ".app-up"  # the wrapper leaves this once the app answers: without it, the tester never had an app
 NO_ANSWER = "the app didn't answer at"
