@@ -63,6 +63,17 @@ A working prototype I use on this repo: a task it did on itself, with its record
 - **The three real-sandbox tests need a machine that allows unprivileged user namespaces.** CI installs the sandbox and runs them when the runner allows it; if not, they skip and say why, and they run locally.
 - **One person, one machine.** No splitting work into several tasks or scheduling them yet, and no evals on the current pipeline yet (both planned).
 
+## How it was built
+
+I designed Parallax and directed its build; Claude Code wrote most of the code under that direction. I reviewed every milestone, and the design notes and real run logs in [docs/](docs/) show the process.
+
+## What's next
+
+- Evals on the current pipeline, scored by real merged fixes.
+- A behavioral verifier: tests of the intended outcomes, written before the build, that the builder can't change.
+- Several parallel tasks from one request.
+- A knowledge layer that gives agents project context and past decisions to draw on.
+
 ## Setup
 
 Windows users run Parallax inside WSL2, in a distro just for it. On Linux, start at step 3.

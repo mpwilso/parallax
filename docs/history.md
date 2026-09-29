@@ -38,5 +38,6 @@ text only, and was scored by the tests the humans added in their pull request, w
 Latest run (2026-09-28, 11 cases from 6 projects, $12.12 in all): **10 of 11 fixes resolved**; the
 blind checker was right 8 times, missed 1 bad fix and raised 1 false alarm. Reports:
 [67faab](../evals/results/2026-09-28-67faab.md), [73982e](../evals/results/2026-09-28-73982e.md).
-The evals ran on the old path and were cut with it; the cases are kept in
-[evals/cases.toml](../evals/cases.toml), and the evals come back on the current pipeline in M16.
+These committed results came from an earlier harness that has since been removed, with the
+old path it ran on. The cases in [evals/cases.toml](../evals/cases.toml) are kept as the case set
+for a future harness on the current pipeline (M16 in [plan.md](plan.md)).

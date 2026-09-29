@@ -271,7 +271,12 @@ Kept (a): the drafters' default is Sonnet 5.5, `[draft] model` in the policy. (b
 
 #### M16: evals and stats
 
-- The old path (`task new`, `run`, `checker.py`, `runner.py`, the policy's `[actions]`, exact rules and "ask") was cut early, on 2026-09-29, and the evals with it, since they ran on that path. `evals/cases.toml` stays as the case list; the evals come back here, on the `do` pipeline.
+- The old path (`task new`, `run`, `checker.py`, `runner.py`, the policy's `[actions]`, exact rules and "ask") was cut early, on 2026-09-29, and the eval harness with it, since it ran on that path. `evals/cases.toml` stays as the case set for the new harness, which runs on the `do` pipeline.
+- The behavioral verifier: the test-writer, an agent that writes tests of the intent's outcomes before the maker builds, hashed so the maker can't change them. It joins the live loop only if the evals show it catches what the checker misses.
 
 - Cases in the SWE-bench format, run through `do`'s pipeline; the test-writer in the eval only; the report shows catches, misses and false alarms with and without it, per checker model; about 10 new cases you pick. Stats add first-pass rate, rework cycles and wait time. The old path (`task new`, `run`, the policy's `[actions]`, exact rules, "ask") is cut.
 - **You confirm it:** `parallax eval check` says all cases are sound; `parallax stats` shows touches per task averaging about 1.
+
+#### Later: a knowledge layer
+
+- Project context and past decisions for the agents to draw on: what the repo is, what was decided before and why (from the ledger and `docs/tasks/`), so drafters and makers don't relearn it on every task. Read-only for agents, like everything else they're given.
