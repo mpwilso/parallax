@@ -2,6 +2,28 @@
 
 **Agents do the work. You make the calls.**
 
+## How to use Parallax day to day
+
+**Start it.** In your repo, run `parallax ui` and open the link it prints (from Windows, in your browser; WSL passes `localhost` through). The link stays the same between runs, so bookmark it. Leave the terminal open.
+
+**Type work in.** Write what you want in the box at the top, in plain words, and press Enter. That's all. Drafters write the intent and plan, the maker builds it in a sandbox, tests run, and a blind checker reviews it, all without you.
+
+**Read the list.** Three parts, most important first:
+- **Waiting on you:** the only part that needs you. The riskiest item is on top.
+- **Working:** one line per task saying which agent has it, for how long, and what it has spent of its cap. Nothing to do here.
+- **Done:** folded away. An accepted task says when the merge is still yours.
+
+**Open a card** (click it, or press `n` for the next one that waits). It reads top to bottom: the bottom line, the one question, your options with what each does and which one is recommended, then what nobody looked at, and the evidence. The change, the intent and the plan are one click away.
+- **Ready** means tests pass and the checker found nothing blocking. Accept it, or reject it with a reason.
+- **Needs you** means one decision only you can make: a change outside the plan, a secrets file, a reached cap, an error, or a UI test that still fails. The question says which.
+- **A redraft** says so at the top, quotes your reason, and lists what changed since the version you rejected.
+
+**Accept and merge.** Accept commits the reviewed change to the task's branch and shows the merge command. Run it yourself in your repo's folder: merging is always yours.
+
+**When something needs you,** pick an option. Anything that sends work back, drops it, or accepts a risk asks for a one-line reason; the drafters use it. After you decide, the next card that waits opens on its own. If you'd rather not keep the task, drop it.
+
+**Keys:** `/` type work, `n` next waiting, `j`/`k` move, `a` then `Enter` accept, `r` reject, `1` to `9` then `Enter` pick an option, `d` the change, `Esc` back. The same is in the terminal: `parallax inbox`, `parallax show <task>`, `parallax accept <task>`, `parallax reject <task> --reason "..."`, `parallax decide <task> <option>`.
+
 Parallax is a small orchestration layer for AI coding agents built around one idea: the scarce resource isn't execution, it's judgment. Agents can already write a lot of code. What gets lost is who decided what, on what evidence, and whether anyone actually checked.
 
 ## The problem
