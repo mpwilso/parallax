@@ -109,11 +109,11 @@ def test_planfit_catches_what_cost_rejections_on_e9a55a():
     found = " | ".join(planfit.problems(intent, plan, 0.5, budget))
     assert "the plan lists tests/test_readme.py, which the intent's scope (README.md) doesn't allow" in found
     assert "the intent names a budget of $4.00, but the plan's cap is $2.00" in found
-    assert planfit.problems(docs()["intent"], {**plan, "covers": {}}, 0.5, budget) == [
+    assert planfit.problems(docs()["intent"], {**plan, "covers": {}}, 0.2, budget) == [
         "the plan doesn't cover outcome 1; add it to covers with the tests or steps that prove it"]
     assert "isn't above what drafting already spent" in " ".join(planfit.problems(docs()["intent"], plan, 2.0, budget))
     assert "over the policy's $1.00" in " ".join(planfit.problems(docs()["intent"], plan, 0.1, {**budget, "small_cap_usd": 1.0}))
-    assert planfit.problems(docs()["intent"], plan, 0.5, budget) == []
+    assert planfit.problems(docs()["intent"], plan, 0.2, budget) == []  # $0.20 drafting, twice $0.90: $2.00
 
 
 def test_a_misfit_is_redrafted_on_its_own_then_comes_to_you_after_two_tries(proj, monkeypatch):
@@ -292,9 +292,25 @@ def test_the_cap_leaves_room_for_one_rework(proj):
     """ee8178: a $0.60 cap for work estimated just under it; one rework spent it."""
     plan = {**lint.plan_block(docs()["plan"])[0], "estimated_cost_usd": 0.55, "budget_cap_usd": 0.6}
     found = planfit.problems(docs()["intent"], plan, 0.22, proj.policy.budget)
-    assert found == ["the cap ($0.60) leaves no room for a rework round: make it at least $0.88 "
-                     "(drafting so far, plus twice the rest of the estimate)"]
-    assert planfit.problems(docs()["intent"], {**plan, "budget_cap_usd": 0.88}, 0.22, proj.policy.budget) == []
+    assert found == ["the cap ($0.60) leaves no room for a rework round: make it at least $1.32 "
+                     "(drafting so far, plus twice the estimate)"]
+    assert planfit.problems(docs()["intent"], {**plan, "budget_cap_usd": 1.32}, 0.22, proj.policy.budget) == []
+    assert "UI tester" in planfit.problems(docs()["intent"], {**plan, "budget_cap_usd": 1.32}, 0.22,
+                                           proj.policy.budget, reserve=1.5)[0]
+
+
+def test_a_short_cap_is_raised_by_code_not_redrafted(proj, monkeypatch):
+    """a56043: drafting cost more than the whole estimate, and the build ran out of cap."""
+    monkeypatch.setattr(build, "_spawn", lambda *a: 9)
+    short = docs()["plan"].replace("estimated_cost_usd = 0.9", "estimated_cost_usd = 1.1")
+    tid = pilot.intake(proj, WANT)["task"]
+    drafter = FakeDrafter({**docs(), "plan": short}, cost=0.6)
+    assert pilot.draft_until_fit(proj, tid, drafter) == "fit"
+    plan = lifecycle.plan_data(proj, tid)
+    assert plan["budget_cap_usd"] == 3.4  # $1.20 of drafting, plus twice $1.10
+    raised = [e for e in kinds(proj, "draft.recorded") if e["actor"] == "parallax"]
+    assert "raised the cap from $2.00 to $3.40" in raised[-1]["reason"]
+    assert not kinds(proj, "draft.misfit") and stats.touches(proj)[tid] == 0  # no redraft, and not a hand edit
 
 
 def test_a_rejected_task_leaves_the_inbox(proj, monkeypatch, capsys):

@@ -28,12 +28,14 @@ def in_scope(path: str, scope: list[str]) -> bool:
     return False
 
 
-def rework_floor(estimate: float, spent: float) -> float:
-    """The smallest cap with room for one rework round: drafting so far, plus the rest twice."""
-    return round(spent + 2 * max(estimate - spent, 0), 2)
+def rework_floor(estimate: float, spent: float, reserve: float = 0.0) -> float:
+    """The smallest cap with room for one rework round: drafting so far, plus the work twice, plus
+    what the UI tester may use. The estimate is the work from launch on: the drafter can't know what
+    its own draft costs, so it never includes drafting (seen live: drafting outran the estimate)."""
+    return round(spent + 2 * estimate + reserve, 2)
 
 
-def problems(intent: str, plan: dict, spent: float, budget_policy: dict) -> list[str]:
+def problems(intent: str, plan: dict, spent: float, budget_policy: dict, reserve: float = 0.0) -> list[str]:
     out = []
     scope = lint.scope_of(intent)
     for path in [*plan["files"], *plan["tests"]]:
@@ -53,10 +55,10 @@ def problems(intent: str, plan: dict, spent: float, budget_policy: dict) -> list
         out.append(f"the intent names a budget of ${named:.2f}, but the plan's cap is ${cap:.2f}; they must match")
     if cap <= spent:
         out.append(f"the cap (${cap:.2f}) isn't above what drafting already spent (${spent:.2f})")
-    floor = rework_floor(float(plan["estimated_cost_usd"]), spent)
+    floor = rework_floor(float(plan["estimated_cost_usd"]), spent, reserve)
     if spent < cap < floor:
         out.append(f"the cap (${cap:.2f}) leaves no room for a rework round: make it at least ${floor:.2f} "
-                   f"(drafting so far, plus twice the rest of the estimate)")
+                   f"(drafting so far, plus twice the estimate" + (", plus the UI tester's share)" if reserve else ")"))
     size = lint.intent_fields(intent).get("size", "small")
     limit = budget_policy["large_cap_usd" if size == "large" else "small_cap_usd"]
     if cap > limit:

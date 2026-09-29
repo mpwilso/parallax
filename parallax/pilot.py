@@ -13,7 +13,9 @@ The task ends at Ready, or at one Decision needed.
 """
 from __future__ import annotations
 
+import math
 import os
+import re
 import sys
 from typing import Callable
 
@@ -58,15 +60,46 @@ def draft_until_fit(project: Project, task_id: str, drafter_for) -> str:
                 and lifecycle.state(project, task_id).gate == ("intent",):
             lifecycle.approve(project, task_id, rule="large task: its intent is approved by code, its plan waits for you")
             return draft_until_fit(project, task_id, drafter_for)
-        plan = lifecycle.plan_data(project, task_id)
+        plan = _room_for_rework(project, task_id, lifecycle.plan_data(project, task_id))
         fit = planfit.problems(lifecycle._read(project, task_id, "intent"), plan,
-                               costs.spent(project, task_id), project.policy.budget)
+                               costs.spent(project, task_id), project.policy.budget, _reserve(project, plan))
         if not fit:
             return "fit"
         problems = {"plan": fit}
         project.ledger.append("draft.misfit", "parallax", "; ".join(fit), task=task_id, attempt=attempt + 1)
     detail = "; ".join(p for ps in problems.values() for p in ps)
     return _needs_you(project, task_id, f"drafting still failed after {MAX_REDRAFTS} redrafts: {detail}")
+
+
+def _reserve(project: Project, plan: dict) -> float:
+    from . import uitest
+    return float(uitest.settings(project)["max_usd"]) if uitest.applies(project, plan) else 0.0
+
+
+def _room_for_rework(project: Project, task_id: str, plan: dict) -> dict:
+    """A cap too short for one rework round is raised by code, and the plan's hash recorded again.
+
+    Only Parallax knows what drafting cost once the plan is written, so it sets the floor. Never
+    when the intent names a budget: that's yours, and a short one comes back as a misfit."""
+    intent = lifecycle._read(project, task_id, "intent")
+    if lint.budget_of(intent) is not None:
+        return plan
+    spent = costs.spent(project, task_id)
+    floor = planfit.rework_floor(float(plan["estimated_cost_usd"]), spent, _reserve(project, plan))
+    cap = float(plan["budget_cap_usd"])
+    if cap >= floor:
+        return plan
+    new = math.ceil(floor * 10 - 1e-9) / 10  # up to the next ten cents
+    path = lifecycle.doc_path(project, task_id, "plan")
+    text = path.read_text(encoding="utf-8")
+    text, n = re.subn(r"(?m)^budget_cap_usd\s*=.*$", f"budget_cap_usd = {new:.2f}", text)
+    if n != 1:
+        return plan
+    path.write_text(text, encoding="utf-8")
+    project.ledger.append("draft.recorded", "parallax", f"raised the cap from ${cap:.2f} to ${new:.2f}: drafting spent "
+                          f"${spent:.2f}, and the work twice plus any UI tester share needs ${floor:.2f}",
+                          task=task_id, doc="plan", sha=lifecycle.file_hash(path))
+    return lifecycle.plan_data(project, task_id)
 
 
 def launch_rule(project: Project, task_id: str) -> tuple[bool, str]:

@@ -13,6 +13,8 @@ from parallax.policy import Policy
 from test_m8 import docs, make_key
 
 UI_POLICY = """[actions]
+[launch]
+auto_launch_usd = 5.0  # room for the tester's share: $0.20 drafting, twice $0.90, $1.50
 [ui_tester]
 enabled = true
 start = "python3 tests/ui_app.py 8765"
