@@ -39,8 +39,9 @@ HOST = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2
 PLAN_FIELDS = {
     "files": list, "tests": list, "lines_changed": int, "domains": list, "outside_reads": list,
     "binaries": list, "symlinks": list, "dependencies": list, "review_tightening": str,
-    "estimated_cost_usd": (int, float), "budget_cap_usd": (int, float), "covers": dict,
+    "estimated_cost_usd": (int, float), "budget_cap_usd": (int, float), "covers": dict, "user_flows": list,
 }
+OPTIONAL_PLAN_FIELDS = {"user_flows": []}  # plans drafted before a field existed still read
 PLAN_TEMPLATE = '''```toml
 files = ["path/to/file.py"]      # every file the change touches
 tests = ["tests/test_file.py"]   # the tests that prove it's done
@@ -54,6 +55,7 @@ review_tightening = ""           # extra review rule for this task only; can't l
 estimated_cost_usd = 1.50
 budget_cap_usd = 2.00
 covers = { "1" = ["tests/test_file.py"] }   # each numbered outcome in the intent -> the tests or steps that prove it
+user_flows = []                  # outcome numbers a person checks by going through the app's UI, like ["1"]
 ```'''
 
 Problem = tuple[int, str]
@@ -210,7 +212,10 @@ def plan_block(text: str) -> tuple[dict | None, int, str | None]:
     if text[m.end():].strip():
         return None, line, "the ```toml block must be the last thing in the plan"
     try:
-        return tomllib.loads(m.group(1)), line, None
+        data = tomllib.loads(m.group(1))
+        for key, default in OPTIONAL_PLAN_FIELDS.items():
+            data.setdefault(key, list(default))
+        return data, line, None
     except tomllib.TOMLDecodeError as err:
         return None, line, f"the toml block doesn't parse: {err}"
 
@@ -218,7 +223,7 @@ def plan_block(text: str) -> tuple[dict | None, int, str | None]:
 def check_plan_data(data: dict) -> list[str]:
     """What's wrong with the plan's toml block, if anything."""
     out = []
-    missing = [k for k in PLAN_FIELDS if k not in data]
+    missing = [k for k in PLAN_FIELDS if k not in data and k not in OPTIONAL_PLAN_FIELDS]
     unknown = [k for k in data if k not in PLAN_FIELDS]
     if missing:
         out.append(f"plan block is missing {', '.join(missing)}")

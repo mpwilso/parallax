@@ -1,11 +1,11 @@
 """The UI tester: a blind agent that uses the running app in a real browser, and leaves tests.
 
 Off unless the policy's [ui_tester] turns it on, with the app's start command and URL. Then, on a
-task whose plan changes a UI (a planned file matches [ui_tester] paths), at the start of the check:
+task whose plan names user_flows (outcomes a person goes through in the UI), at the start of the check:
 
 1. Parallax starts the app from a copy of the built tree, in the sandbox, with network only on
    loopback, and a pinned Playwright MCP server whose browser runs inside the same sandbox.
-2. The tester (a Claude model) gets the intent's numbered outcomes and the app's URL. Nothing
+2. The tester (a Claude model) gets those outcomes and the app's URL. Nothing
    else: not the diff, the plan, or the maker's notes, and no shell. It walks each outcome's flow
    and writes one Playwright test per flow, in its own empty folder.
 3. Parallax runs its tests once on that build (one failing for a flow it said works is dropped),
@@ -18,7 +18,6 @@ task whose plan changes a UI (a planned file matches [ui_tester] paths), at the 
 """
 from __future__ import annotations
 
-import fnmatch
 import glob
 import hashlib
 import json
@@ -125,9 +124,8 @@ def settings(project: Project) -> dict:
 
 
 def applies(project: Project, plan: dict) -> bool:
-    """On for this project, and the plan changes a UI."""
-    cfg = settings(project)
-    return cfg["enabled"] and any(fnmatch.fnmatch(f, pat) for f in plan["files"] for pat in cfg["paths"])
+    """On for this project, and the plan says the task changes a flow a user goes through."""
+    return settings(project)["enabled"] and bool(plan.get("user_flows"))
 
 
 def recorded(project: Project, task_id: str) -> dict | None:
@@ -308,10 +306,14 @@ def _env(tools: Tools, venv: Path | None, work: Path, url: str) -> dict[str, str
 # the tester, once per attempt -------------------------------------------------------------------------
 
 def outcomes(project: Project, task_id: str) -> str:
-    """The intent's Outcome section: the only thing the tester learns about the work."""
+    """The outcomes the plan names as user flows: the only thing the tester learns about the work."""
     intent = lifecycle._read(project, task_id, "intent")
     m = re.search(r"^#+\s*Outcomes?\s*$(.*?)(?=^#+\s|\Z)", intent, re.M | re.S)
-    return (m.group(1).strip() if m else "") or "(the intent lists no outcomes)"
+    section = m.group(1).strip() if m else ""
+    wanted = {str(n) for n in (lifecycle.plan_data(project, task_id) or {}).get("user_flows", [])}
+    items = re.findall(r"^\s*(\d+)[.)]\s+(.*)$", section, re.M)
+    picked = [f"{n}. {text.strip()}" for n, text in items if n in wanted]
+    return "\n".join(picked) or section or "(the intent lists no outcomes)"
 
 
 def allowed(tool: str, tool_input: dict, work: Path) -> bool:

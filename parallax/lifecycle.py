@@ -88,7 +88,9 @@ US dollars. estimated_cost_usd is the work from launch on: building and checking
 drafting. The cap covers the whole task and stops it: at least the drafting so far plus twice the
 estimate, so one rework round fits; Parallax raises a cap that's short. If the intent names a
 budget, the cap is that budget. files and tests must all be inside the intent's scope, and covers must name every
-numbered outcome in the intent with the tests or steps that prove it.
+numbered outcome in the intent with the tests or steps that prove it. user_flows lists the outcomes
+a person checks by going through the app's UI (a flow they click or type through), or [] if none:
+a UI tester uses the running app for exactly those.
 Keep the header as two lines, with no blank line between them.""",
 }
 

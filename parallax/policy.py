@@ -21,7 +21,7 @@ DEFAULT_LIMITS = {
 DEFAULT_BUDGET = {"drafting_usd": 2.0, "small_cap_usd": 5.0, "large_cap_usd": 20.0}  # estimated dollars
 DEFAULT_LAUNCH = {"auto_launch_usd": 3.0, "review_paths": [], "review_plans": False}
 DEFAULT_UI_TESTER = {
-    "enabled": False, "start": "", "url": "", "paths": [],
+    "enabled": False, "start": "", "url": "",
     "model": "claude-sonnet-5-5", "max_usd": 1.5,
 }
 DEFAULT_CHECK = {
@@ -82,13 +82,12 @@ rework_cap = 3               # rework cycles before a failing check comes to you
 # test_command = "python -m pytest -q -p no:cacheprovider -o junit_family=xunit1 --junitxml={junit} {tests}"
 
 [ui_tester]
-# a blind agent that uses your app in a real browser after the build, on tasks whose plan changes
-# a UI, and leaves Playwright tests that every later check reruns with no model. off until you
+# a blind agent that uses your app in a real browser after the build, on tasks whose plan names
+# user flows, and leaves Playwright tests that every later check reruns with no model. off until you
 # turn it on here. it runs in the sandbox, with network only to the app's local address.
 enabled = false
 start = ""                 # starts the app, from the built tree's folder, e.g. "npm run dev"
 url = ""                   # where the app answers, on this machine only, e.g. "http://127.0.0.1:5173/"
-paths = []                 # a plan changing any of these paths or globs changes the UI
 # max_usd = 1.50           # the most one run of the tester may use, inside the task's cap
 """
 
@@ -121,8 +120,6 @@ def _ui_tester(cfg: dict) -> dict:
     for key in ("start", "url", "model"):
         if not isinstance(out[key], str):
             raise ValueError(f"[ui_tester] {key} must be text")
-    if not isinstance(out["paths"], list) or not all(isinstance(x, str) and x.strip() for x in out["paths"]):
-        raise ValueError("[ui_tester] paths must be a list of paths or globs")
     if not isinstance(out["max_usd"], (int, float)) or isinstance(out["max_usd"], bool) or out["max_usd"] <= 0:
         raise ValueError("[ui_tester] max_usd must be a dollar amount above 0")
     if out["enabled"]:
@@ -131,8 +128,6 @@ def _ui_tester(cfg: dict) -> dict:
         if not LOCAL_URL.match(out["url"]):
             raise ValueError("[ui_tester] url must be on this machine, like http://127.0.0.1:5173/: the tester's "
                              "network reaches nothing else")
-        if not out["paths"]:
-            raise ValueError("[ui_tester] needs paths: which files make up your UI, so Parallax knows a plan changes it")
     return out
 
 

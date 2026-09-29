@@ -49,6 +49,9 @@ def problems(intent: str, plan: dict, spent: float, budget_policy: dict, reserve
     for k in covers:
         if k not in outcomes:
             out.append(f"covers names outcome {k}, which the intent doesn't have")
+    for k in plan.get("user_flows", []):
+        if str(k) not in outcomes:
+            out.append(f"user_flows names outcome {k}, which the intent doesn't have")
     cap = float(plan["budget_cap_usd"])
     named = lint.budget_of(intent)
     if named is not None and abs(cap - named) > 0.005:

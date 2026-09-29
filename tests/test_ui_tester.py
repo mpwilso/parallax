@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from fakes import FakeChecker, FakeDrafter, ScriptedAgent, good_probe, junit_runner
-from parallax import build, costs, show, uitest, views
+from parallax import build, costs, lint, show, uitest, views
 from parallax.agents.base import AgentResult
 from parallax.core import POLICY_FILE, Project
 from parallax.policy import Policy
@@ -19,7 +19,6 @@ auto_launch_usd = 5.0  # room for the tester's share: $0.20 drafting, twice $0.9
 enabled = true
 start = "python3 tests/ui_app.py 8765"
 url = "http://127.0.0.1:8765/#tok"
-paths = ["README.md"]
 """
 SPEC = "const { test, expect } = require('@playwright/test');\ntest('opens', async ({ page }) => { await page.goto(process.env.APP_URL); });\n"
 
@@ -78,11 +77,18 @@ def proj(repo, monkeypatch, tmp_path):
     return Project.init(repo)
 
 
+def flows_docs():
+    """The fixture docs, with a plan that names outcome 1 as a user flow."""
+    d = docs()
+    d["plan"] = d["plan"].replace("covers = {", 'user_flows = ["1"]\ncovers = {')
+    return d
+
+
 def pilot(proj, tester, flows, maker=None):
     from parallax import pilot as p
     tid = p.intake(proj, "fix the README")["task"]
     maker = maker or ScriptedAgent(steps=[("write", "README.md", "ok\n")])
-    return tid, build.run_mode(proj, tid, "pilot", FakeDrafter(docs()), lambda left, s: maker, FakeChecker(),
+    return tid, build.run_mode(proj, tid, "pilot", FakeDrafter(flows_docs()), lambda left, s: maker, FakeChecker(),
                                test_runner=junit_runner(), preflight_runner=good_probe)
 
 
@@ -94,9 +100,8 @@ def kinds(proj, kind, tid=None):
 
 def test_off_by_default_and_needs_its_settings_when_on():
     assert Policy({}).ui_tester["enabled"] is False
-    for bad, says in ((dict(enabled=True, url="http://127.0.0.1:1/", paths=["a"]), "start"),
-                      (dict(enabled=True, start="x", url="https://example.com/", paths=["a"]), "on this machine"),
-                      (dict(enabled=True, start="x", url="http://127.0.0.1:1/", paths=[]), "paths"),
+    for bad, says in ((dict(enabled=True, url="http://127.0.0.1:1/"), "start"),
+                      (dict(enabled=True, start="x", url="https://example.com/"), "on this machine"),
                       (dict(max_usd=0), "above 0"), (dict(nope=1), "unknown")):
         with pytest.raises(ValueError, match=says):
             Policy({}, ui_tester=bad)
@@ -110,8 +115,10 @@ def test_off_means_it_never_runs(repo, monkeypatch):
     assert status == "ready" and not kinds(proj, "uitest.started")
 
 
-def test_only_plans_that_change_the_ui(proj):
-    assert uitest.applies(proj, {"files": ["README.md"]}) and not uitest.applies(proj, {"files": ["setup.py"]})
+def test_only_plans_that_name_user_flows(proj):
+    """Touching a UI file isn't enough: the plan says which outcomes a person goes through."""
+    assert uitest.applies(proj, {"files": ["x"], "user_flows": ["1"]})
+    assert not uitest.applies(proj, {"files": ["parallax/web/app.js"], "user_flows": []})
 
 
 # a run -----------------------------------------------------------------------------------------------------
@@ -174,7 +181,7 @@ def test_the_maker_cant_write_its_tests_and_a_change_comes_to_you(proj, monkeypa
     tid = p.intake(proj, "fix the README")["task"]
     makers = iter([ScriptedAgent(steps=[("write", "README.md", "ok\n")]),
                    ScriptedAgent(steps=[("write", "README.md", "ok again\n"), ("call", tamper)])])
-    status = build.run_mode(proj, tid, "pilot", FakeDrafter(docs()), lambda left, s: next(makers), FakeChecker(),
+    status = build.run_mode(proj, tid, "pilot", FakeDrafter(flows_docs()), lambda left, s: next(makers), FakeChecker(),
                             test_runner=junit_runner(), preflight_runner=good_probe)
     assert status == "disputed"
     raised = kinds(proj, "disagreement.raised", tid)[-1]
@@ -318,3 +325,24 @@ def test_every_accepted_tasks_flows_rerun_on_later_tasks(proj):
     t = proj.task(tid)
     found = uitest.specs(proj, tid, Path(t["worktree"]), t["base"])
     assert list(found) == ["docs/tasks/aaa111/ui_flows/old.spec.js"] and found["docs/tasks/aaa111/ui_flows/old.spec.js"] == SPEC.encode()
+
+
+def test_the_tester_sees_only_the_outcomes_the_plan_names(proj, monkeypatch):
+    from parallax import planfit
+    intent = docs()["intent"].replace("1. A new user on WSL can follow them.",
+                                      "1. A new user on WSL can follow them.\n2. The page lists the steps in order.")
+    plan = {**lint.plan_block(flows_docs()["plan"])[0], "user_flows": ["3"]}
+    assert "user_flows names outcome 3, which the intent doesn't have" in planfit.problems(intent, plan, 0.2, proj.policy.budget)
+    from parallax import pilot as p, lifecycle
+    tid = p.intake(proj, "x")["task"]
+    d = flows_docs()
+    d["intent"] = intent
+    d["plan"] = d["plan"].replace('user_flows = ["1"]', 'user_flows = ["2"]').replace(
+        'covers = { "1" = ["tests/test_readme.py"] }', 'covers = { "1" = ["tests/test_readme.py"], "2" = ["tests/test_readme.py"] }')
+    p.draft_until_fit(proj, tid, FakeDrafter(d))
+    assert uitest.outcomes(proj, tid) == "2. The page lists the steps in order."
+
+
+def test_plans_without_the_field_still_read():
+    data, _, why = lint.plan_block(docs()["plan"])
+    assert why is None and data["user_flows"] == [] and lint.check_plan_data(data) == []

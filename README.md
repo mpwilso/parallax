@@ -176,14 +176,13 @@ The page runs on your machine only, behind a token that's in the link, and a str
 
 ### The UI tester (optional)
 
-Turn it on per project in `parallax.policy.toml`, and a blind agent uses your app in a real browser after each build that changes your UI, then leaves Playwright tests that every later check reruns for free:
+Turn it on per project in `parallax.policy.toml`, and a blind agent uses your app in a real browser after each build whose plan names `user_flows` (the outcomes a person goes through in the UI), then leaves Playwright tests that every later check reruns for free:
 
 ```toml
 [ui_tester]
 enabled = true
 start = "npm run dev"                 # starts the app, from the built tree's folder
 url = "http://127.0.0.1:5173/"        # on this machine only: its network reaches nothing else
-paths = ["src/components/**", "src/pages/**"]
 ```
 
 It sees the intent's outcomes and the running app, never the diff or the plan. It runs in the sandbox, its cost counts against the task's cap, and its screenshots are on the card. It needs Node.js; Parallax installs its pinned tools and browser once, on first use.
