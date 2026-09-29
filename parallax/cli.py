@@ -80,11 +80,16 @@ def main(argv: list[str] | None = None) -> int:
     ui.add_argument("--port", type=int, default=0)
     ui.add_argument("--no-open", action="store_true", help="don't open the browser, just print the link")
     for name in ("approve", "reject"):
-        r = sub.add_parser(name, help=f"{name} a task's pending gate, or inbox items "
-                                      "(on a disagreement: side with the maker / the checker)")
-        r.add_argument("items", nargs="+", metavar="task-or-item")
-        r.add_argument("--reason", default="", help="one reason, recorded on every item. "
-                                                    "rejects and inbox items need one; approving a gate doesn't")
+        r = sub.add_parser(name, help="approve a plan that waits for you" if name == "approve" else
+                           "send a task back to the drafters with your reason (--drop ends it instead)")
+        r.add_argument("items", nargs="+", metavar="task")
+        r.add_argument("--reason", default="", help="why. a reject needs one: it's what the drafters redraft from")
+        if name == "reject":
+            r.add_argument("--drop", action="store_true", help="end the task instead of redrafting it")
+    dc = sub.add_parser("decide", help="answer the one decision a task is waiting on")
+    dc.add_argument("task")
+    dc.add_argument("option", help="one of the options its card lists")
+    dc.add_argument("--reason", default="", help="needed for accept, reject and drop")
 
     el = sub.add_parser("eval", help="test parallax on real merged fixes (run from the parallax repo folder)")
     esub = el.add_subparsers(dest="ecmd", required=True)
@@ -164,6 +169,11 @@ def _run(args) -> int:
 
     if args.cmd == "diff":
         print(_reviewed_diff(proj, args.task) or "no changes")
+        return 0
+
+    if args.cmd == "decide":
+        from . import decide
+        print(decide.apply(proj, args.task, args.option, args.reason))
         return 0
 
     if args.cmd == "stats":
@@ -295,7 +305,8 @@ def _shaped(proj: Project, text: str) -> None:
 def _reviewed_diff(proj: Project, task_id: str) -> str:
     """The reviewed tree against its base, once there is one; the worktree before that."""
     import subprocess
-    staged = [e for e in proj.ledger.entries() if e["kind"] == "check.staged" and e["data"].get("task") == task_id]
+    from .status import attempt
+    staged = [e for e in attempt(proj.ledger.entries(), task_id) if e["kind"] == "check.staged"]  # this attempt's
     if not staged:
         return proj.diff(task_id)
     t = proj.task(task_id)
@@ -324,25 +335,30 @@ def _watch(proj: Project, task_id: str, every: float = 5.0) -> int:
 
 
 def _gate(proj: Project, task_id: str, args) -> None:
+    """approve and reject on a lifecycle task, through the task's one decision where there is one."""
+    from . import decide, pilot
+    dec = decide.decision(proj, task_id)
     if args.cmd == "reject":
-        e = lifecycle.reject(proj, task_id, args.reason)
-        if e["kind"] == "task.rejected":
-            print(f"rejected task {task_id} (ledger {e['id']}). your reason stays in the ledger.")
+        if args.drop:
+            if dec is not None:
+                print(decide.apply(proj, task_id, "drop", args.reason))
+                return
+            if not args.reason.strip():
+                raise ParallaxError("dropping a task needs a reason")
+            proj.ledger.append("task.rejected", "human", args.reason, task=task_id, was=proj.task(task_id)["status"])
+            print(f"dropped {task_id}. it's out of the inbox.")
             return
-        print(f"rejected {e['data']['gate'].replace('+', ' and ')} for {task_id} (ledger {e['id']}). your reason stays in the ledger.")
+        if dec is not None and any(o.name == "reject" for o in dec.options):
+            print(decide.apply(proj, task_id, "reject", args.reason))
+            return
+        pilot.redraft(proj, task_id, args.reason)
+        print(f"redrafting {task_id} from your reason. it comes back to the inbox.")
         return
-    waited = proj.task(task_id)["status"] == "needs you"
+    if dec is not None and dec.kind in ("launch", "review"):
+        print(decide.apply(proj, task_id, "launch" if dec.kind == "launch" else "approve"))
+        return
     e = lifecycle.approve(proj, task_id)
     print(f"approved {e['data']['gate'].replace('+', ' and ')} for {task_id} (ledger {e['id']}).")
-    if waited and lifecycle.state(proj, task_id).gate is None:  # the plan waited for you: now it runs
-        from . import build, preflight
-        p = build.prepare(proj, task_id)
-        lines = preflight.report(build.run_preflight(proj, p))
-        if not lines[-1].startswith("ready"):
-            print("\n".join(lines))
-            raise ParallaxError("preflight failed, so it didn't launch")
-        build.launch(proj, p)
-        print(f"building {task_id} without you, estimated budget ${p.left:.2f}. it comes back to parallax inbox.")
 
 
 def _lint(path: Path, cwd: Path) -> int:

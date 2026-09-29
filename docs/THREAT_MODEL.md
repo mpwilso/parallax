@@ -45,7 +45,7 @@ Trailers (`Parallax-Task`, `Approved-By`, `Verified-By`, `Ledger-Head`) are a re
 | ASI02 Tool Misuse | Every tool call passes the tool layer; shell commands also run in the OS sandbox; nothing outside the plan crosses the boundary. |
 | ASI03 Identity and Privilege Abuse | The maker holds no credentials: scrubbed environment, `$HOME` hidden, no key. Only you can approve, with a key the sandbox can't read. |
 | ASI04 Agentic Supply Chain Vulnerabilities | New dependencies must be in the approved plan, and changed dependency manifests are checked by code. Packages themselves: out of scope for a local tool. |
-| ASI05 Unexpected Code Execution | The maker's code runs only in the sandbox; setup runs as you only on a clean base worktree; accept runs no hooks; auto-run files are flagged at Ready. |
+| ASI05 Unexpected Code Execution | The maker's code runs only in the sandbox; setup runs as you only on a fresh copy of the base commit; accept runs no hooks; auto-run files are flagged at Ready. |
 | ASI06 Memory and Context Poisoning | No agent keeps memory across tasks. The ledger is the only state, append-only and hash-chained. |
 | ASI07 Insecure Inter-Agent Communication | Agents never talk to each other. Parallax passes files and diffs between them, and decides what each sees. |
 | ASI08 Cascading Failures | One task, one worktree, one budget cap; a failure stops that task and comes to you. Stuck detection and the rework cap stop loops. |

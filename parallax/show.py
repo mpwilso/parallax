@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from . import lifecycle, lint, tree
+from . import costs, decide, lifecycle, lint, tree
 from .core import Project
 
 
@@ -80,21 +80,33 @@ def _the_work(project: Project, task_id: str, staged: dict | None) -> list[str]:
     return out
 
 
-def _review(project: Project, task_id: str, asked: dict | None) -> str:
-    """The plan waits for you: why, what it costs, and where to read it."""
-    plan = lifecycle.plan_data(project, task_id) or {}
-    why = " ".join((asked["reason"] if asked else "the policy asks for review").split())
-    found = []
-    if plan:
-        found.append(f"cost: estimated ${float(plan['estimated_cost_usd']):.2f}, cap ${float(plan['budget_cap_usd']):.2f} "
-                     f"(docs/tasks/{task_id}/plan.md:1)")
-    if asked:
-        found.append(f"why it waits: {why} (ledger {asked['id']})")
-    return lint.shaped("Decision needed", "The plan waits for you before it runs.",
-                       [(f"{doc}.md says: {text}", f"docs/tasks/{task_id}/{doc}.md:{n} not looked at: {text}")
-                        for doc, n, text in lifecycle.gaps(project, task_id, ("intent", "plan"))],
-                       f"you read docs/tasks/{task_id}/plan.md, then run parallax approve {task_id}, or reject it with a reason.",
-                       found)
+def _next(task_id: str, dec) -> str:
+    names = [o.name for o in dec.options]
+    return f"you run parallax decide {task_id} with {', '.join(names[:-1])} or {names[-1]}."
+
+
+def _decision(project: Project, task_id: str, dec, found: list[str], gaps: list[tuple[str, str]],
+              changed: list[str] = (), extra: list[str] = ()) -> str:
+    """One Decision needed: the problem up top, the question and its options, then the evidence."""
+    options = [f"{o.name}: {o.does}" + (" (needs a reason)" if o.needs_reason else "") for o in dec.options]
+    if dec.item:
+        why = " ".join(dec.item["reason"].split())
+        lead = why.split(": ", 1)[0].split("; ", 1)[0].split()
+        bottom = lint.one_sentence("Needs you: " + " ".join(lead[:16]))  # the real problem, never a placeholder
+        found = [f"{why} (ledger {dec.item['id']})"] + list(found)
+    else:
+        bottom = "The plan waits for you before it runs."
+        plan = lifecycle.plan_data(project, task_id) or {}
+        cap = costs.budget(project, task_id, plan)[0] if plan else 0.0
+        found = _the_work(project, task_id, None) + [
+            f"cost: estimated ${float(plan.get('estimated_cost_usd', 0)):.2f}, cap ${cap:.2f} (docs/tasks/{task_id}/plan.md:1)",
+            f"why it waits: {dec.extra.get('why', '')}"
+            + (f" (ledger {dec.extra['asked']})" if dec.extra.get("asked") else " (Unverified)")]
+        gaps = [(f"{doc}.md says: {text}", f"docs/tasks/{task_id}/{doc}.md:{n} not looked at: {text}")
+                for doc, n, text in lifecycle.gaps(project, task_id, ("intent", "plan"))]
+    who = "the checker" if dec.item else "the drafters"  # a plan under review hasn't met the checker yet
+    return lint.shaped("Decision needed", bottom, gaps, _next(task_id, dec), found, changed, who,
+                       list(extra), decisions=[decide.line(dec)], details=options)
 
 
 def report(project: Project, task_id: str) -> str:
@@ -105,14 +117,13 @@ def report(project: Project, task_id: str) -> str:
     st = lifecycle.state(project, task_id)
     entries = [e for e in project.ledger.entries() if e["data"].get("task") == task_id]
     status = t["status"]
-    if st.gate is not None:
-        waiting = [e for e in project.inbox() if e["data"].get("task") == task_id]
+    dec = decide.decision(project, task_id)
+    if st.gate is not None and dec is None:
         if status == "drafting":
             return lint.report("FYI", f"Task {task_id} is drafting.", "nothing", "nothing waits on you; parallax stop ends it.")
-        if status == "needs you" and not waiting:
-            return _review(project, task_id, _last(entries, "review.requested"))
-        if not waiting:
-            return lifecycle.report(project, task_id)
+        return lifecycle.report(project, task_id)
+    if dec is not None and dec.item is None:
+        return _decision(project, task_id, dec, [], [])
 
     tests = _last(entries, "tests.recorded")
     verdict = _last(entries, "verdict.recorded", stage="check")
@@ -122,16 +133,8 @@ def report(project: Project, task_id: str) -> str:
     boundary = [f"boundary change: {f} runs automatically (ledger {staged['id']})"
                 for f in (staged["data"]["autorun"] if staged else [])]
     changed = _changed(project, task_id, entries)
-    open_items = [e for e in project.inbox() if e["data"].get("task") == task_id]
-
-    if open_items:  # the short label goes up top; the whole reason goes under Found, cited
-        item = open_items[-1]
-        why = " ".join(item["reason"].split())
-        lead = why.split(": ", 1)[0].split("; ", 1)[0].split()
-        bottom = lint.one_sentence("Needs you: " + " ".join(lead[:16]))  # the real problem, never a placeholder
-        return lint.shaped("Decision needed", bottom, gaps,
-                           "you approve (accept the risk) or reject it in parallax inbox, with a reason.", [f"{why} (ledger {item['id']})"] + found, changed, "the checker",
-                           boundary + findings)
+    if dec is not None:
+        return _decision(project, task_id, dec, found, gaps, changed, boundary + findings)
     if status == "ready":
         found = _the_work(project, task_id, staged) + found
         passed = tests["data"]["passed"] if tests else 0

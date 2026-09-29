@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from fakes import FakeDrafter
-from parallax import approvals, lifecycle, lint
+from parallax import approvals, build, lifecycle, lint
 from parallax.agents.claude import tool_to_action
 from parallax.cli import main
 from parallax.core import POLICY_FILE, ROOT_ENV, TASK_ENV, ParallaxError, Project
@@ -193,15 +193,16 @@ def test_a_plan_that_fails_lint_cant_be_approved(proj):
 
 def test_reject_needs_a_reason_and_the_redraft_hears_it(proj, monkeypatch, capsys):
     tid = lifecycle.new_intent(proj, WANT, FakeDrafter(docs()))["task"]
+    monkeypatch.setattr(build, "_spawn", lambda *a: 1)
     monkeypatch.chdir(proj.root)
     assert main(["reject", tid]) == 1
-    assert "a rejection needs a reason" in capsys.readouterr().err
+    assert "needs a reason" in capsys.readouterr().err
     assert main(["reject", tid, "--reason", "the plan skips the uv step"]) == 0
-    [r] = kinds(proj, "gate.rejected")
-    assert r["reason"] == "the plan skips the uv step" and r["data"]["gate"] == "intent+plan"
+    [r] = kinds(proj, "task.redraft")
+    assert r["reason"] == "the plan skips the uv step"
 
     drafter = FakeDrafter(docs())
-    lifecycle.draft(proj, tid, ["intent", "plan"], drafter)  # M13 runs this on its own after a reject
+    lifecycle.draft(proj, tid, ["intent", "plan"], drafter)  # what the pilot runs after a reject
     assert "the plan skips the uv step" in drafter.requests[0] and "the plan skips the uv step" in drafter.requests[1]
 
 

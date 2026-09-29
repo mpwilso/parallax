@@ -13,6 +13,7 @@ tokens, and CLAUDE_CODE_SUBPROCESS_ENV_SCRUB set. The build never pauses; the ma
 from __future__ import annotations
 
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -71,21 +72,24 @@ def goal(project: Project, task_id: str) -> str:
 
 
 def _setup_venv(project: Project, task_id: str, worktree: Path, home: Path) -> Path | None:
-    """Run [build] setup once, as you. Only on a clean worktree still at its base commit: setup may
-    run repo code (a build backend, say), and nothing the maker wrote may ever run as you."""
+    """Run [build] setup once, as you, on a fresh copy of the base commit, never the worktree.
+
+    setup may run repo code (a build backend, say), and nothing the maker wrote may ever run as
+    you. Running it on the base commit makes that true whatever state the worktree is in, so a
+    lost venv can always be made again."""
     command = project.policy.build["setup"].strip()
     if not command:
         return None
     venv = home / "venv"
     if venv.exists():
         return venv
-    head = subprocess.run(["git", "-C", str(worktree), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
-    dirty = subprocess.run(["git", "-C", str(worktree), "status", "--porcelain"], capture_output=True, text=True).stdout
-    if head != project.task(task_id)["base"] or dirty.strip():
-        raise ParallaxError("the task's venv is missing and its worktree has changes, so setup won't run: "
-                            "it could run code the maker wrote as you")
-    env = {**os.environ, "PARALLAX_VENV": str(venv), "PARALLAX_WORKTREE": str(worktree)}
-    out = subprocess.run(command, shell=True, cwd=worktree, env=env, capture_output=True, text=True)
+    from . import tree
+    base = home / "setup-base"
+    shutil.rmtree(base, ignore_errors=True)
+    tree.export(worktree, project.task(task_id)["base"], base)
+    env = {**os.environ, "PARALLAX_VENV": str(venv), "PARALLAX_WORKTREE": str(base)}
+    out = subprocess.run(command, shell=True, cwd=base, env=env, capture_output=True, text=True)
+    shutil.rmtree(base, ignore_errors=True)
     project.ledger.append("setup.ran", "parallax", command, task=task_id, exit=out.returncode)
     if out.returncode != 0:
         tail = (out.stderr or out.stdout).strip().splitlines()[-1:] or ["no output"]

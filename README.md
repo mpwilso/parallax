@@ -129,11 +129,14 @@ parallax inbox                                 # what waits on you: one item per
 parallax show <task-id>                        # its card: the work, what changed, tests, the checker, risks
 parallax diff <task-id>                        # the change itself
 parallax accept <task-id>                      # commit exactly what was reviewed; it prints the merge for you to run
-parallax reject <task-id> --reason "..."       # or send it back with your reason
+parallax reject <task-id> --reason "..."       # or send it back: the drafters redraft from your reason (--drop ends it)
+parallax decide <task-id> <option>             # answer a Decision needed: its card lists the options and recommends one
 parallax stats                                 # human touches per task; the target is 1
 ```
 
-That's the whole loop for a normal small task: you describe it, and you accept or reject it. In between, without you: drafters write the intent and plan to `docs/tasks/<id>/`; Parallax normalizes and lints them and checks the plan against the intent by code (every file inside the intent's scope, every outcome covered, the budget right), sending any problem back to the drafter up to 2 times; then the policy's launch rule decides. A small task whose budget cap is at most `auto_launch_usd` (default $3) and that touches nothing in `review_paths` launches on its own; the approval is signed and names the rule. A large task, a plan touching `review_paths`, or `review_plans = true` waits for you: `parallax approve <task-id>` starts it.
+That's the whole loop for a normal small task: you describe it, and you accept or reject it. In between, without you: drafters write the intent and plan to `docs/tasks/<id>/`; Parallax normalizes and lints them and checks the plan against the intent by code (every file inside the intent's scope, every outcome covered, the budget right), sending any problem back to the drafter up to 2 times; then the policy's launch rule decides. A small task whose budget cap is at most `auto_launch_usd` (default $3) and that touches nothing in `review_paths` launches on its own; the approval is signed and names the rule. A large task, a plan touching `review_paths`, or `review_plans = true` waits for you, and so does a cap over `auto_launch_usd`: `parallax decide <task-id> approve` (or `launch`) starts it.
+
+Anything else that needs you comes as one Decision needed: one question, its options, a recommendation written by code, and what it blocks. A reached cap offers to raise it; an intent and plan that disagree ask which wins; a check that kept failing offers a redraft. Rejecting at Ready sends your reason back to the drafters, who may redraft the intent as well as the plan; the worktree goes back to its base, and the new attempt gets a fresh cap.
 
 Power use: `parallax stop` ends every running task, and `preflight`, `build`, `recheck`, `lint`, `log` and `verify` are there when you need them.
 
@@ -141,7 +144,7 @@ Power use: `parallax stop` ends every running task, and `preflight`, `build`, `r
 
 Then the check runs, in the same background process. Code checks the diff against the plan first: files outside it, unlisted binaries or symlinks, new dependencies, and a diff over 400 changed lines all come to you. Parallax runs the plan's tests itself, in the sandbox, with the test harness (conftest, pytest settings) from the base branch. The blind checker, a different Claude model, sees only the intent's outcome and constraints, `REVIEW.md`, and the diff. If tests fail or the checker finds something `REVIEW.md` says blocks, the maker gets the findings and reworks, up to 3 times; the fail after that comes to you. A finding that sets your intent against your approved plan never goes to the maker: it comes to you. Hitting the budget cap, which covers the whole task from its first draft, stops the task and brings it to you too. `parallax show <task-id>` says where it stands.
 
-If your tests need packages, set `[build] setup` in the policy file to a command that makes the task's venv at `$PARALLAX_VENV`. It runs as you, before the build. For example:
+If your tests need packages, set `[build] setup` in the policy file to a command that makes the task's venv at `$PARALLAX_VENV`. It runs as you, before the build, on a fresh copy of the base commit, so nothing the maker wrote can run as you. For example:
 
 ```toml
 [build]

@@ -11,7 +11,7 @@ from . import status
 from .core import Project
 
 TOUCH_KINDS = {"gate.approved", "gate.rejected", "task.rejected", "task.accepted", "decision.resolved",
-               "risk.accepted", "task.stopped", "human.command", "budget.raised"}
+               "risk.accepted", "task.stopped", "human.command", "budget.raised", "task.redraft"}
 TARGET = 1
 
 

@@ -17,7 +17,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Callable
 
-from . import build, costs, lifecycle, lint, review, testrun, tree
+from . import build, costs, lifecycle, lint, review, status, testrun, tree
 from .agents.base import BlindChecker, CheckerError, Review
 from .core import ParallaxError, Project
 
@@ -55,7 +55,8 @@ def _path(where: str) -> str:
 
 
 def rework_cycles(project: Project, task_id: str) -> int:
-    return sum(e["kind"] == "rework.started" and e["data"].get("task") == task_id for e in project.ledger.entries())
+    """Rework cycles in this attempt."""
+    return sum(e["kind"] == "rework.started" for e in status.attempt(project.ledger.entries(), task_id))
 
 
 def _to_you(project: Project, task_id: str, stage: str, why: str, **refs) -> str:

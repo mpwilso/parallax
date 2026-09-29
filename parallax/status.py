@@ -25,6 +25,8 @@ def derive(entries: list[dict]) -> dict[str, dict]:
             t["status"] = "drafting"
         elif kind == "review.requested":
             t["status"] = "needs you"
+        elif kind == "task.redraft":
+            t["status"] = "drafting"
         elif kind in ("build.finished", "check.finished"):
             t["status"] = d["status"]
         elif kind == "check.started":
@@ -70,3 +72,13 @@ _TO_BOARD = {
 def board(status: str) -> str:
     """Where a task's status puts it on the board. Anything unknown waits on you, never hides."""
     return _TO_BOARD.get(status, "needs you")
+
+
+def attempt(entries: list[dict], task_id: str) -> list[dict]:
+    """A task's entries since its latest redraft: the current attempt.
+
+    A reject at Ready starts a new attempt. Approvals, drafts, rework cycles and the budget count
+    within an attempt; cost and touches still add up across the whole task."""
+    mine = [e for e in entries if e["data"].get("task") == task_id]
+    starts = [i for i, e in enumerate(mine) if e["kind"] == "task.redraft"]
+    return mine[starts[-1]:] if starts else mine

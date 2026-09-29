@@ -40,4 +40,4 @@ This is a personal project built on personal time and accounts. Don't reference,
 
 ## Current milestone
 
-Follow docs/plan.md. M7 to M12 are built. Next is M13: the one decision.
+Follow docs/plan.md. M7 to M13 are built. Next is M14: the UI.

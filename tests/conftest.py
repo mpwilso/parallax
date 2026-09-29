@@ -29,3 +29,17 @@ def git_identity(monkeypatch):
     for who in ("AUTHOR", "COMMITTER"):
         monkeypatch.setenv(f"GIT_{who}_NAME", "Parallax Test")
         monkeypatch.setenv(f"GIT_{who}_EMAIL", "test@parallax.invalid")
+
+
+@pytest.fixture(autouse=True)
+def no_background_agents(monkeypatch):
+    """Tests never call a model, so they never start a real pilot or builder.
+
+    A test that reaches a real spawn fails here, loudly, instead of launching an agent in the
+    background. Tests that need a spawn fake it with their own monkeypatch, which wins over this."""
+    from parallax import build
+
+    def refuse(argv, env, cwd, log):
+        raise AssertionError(f"a test tried to start a real background process: {' '.join(argv[-3:])}. fake build._spawn")
+
+    monkeypatch.setattr(build, "_spawn", refuse)

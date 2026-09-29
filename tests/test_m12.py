@@ -299,11 +299,15 @@ def test_the_cap_leaves_room_for_one_rework(proj):
 
 def test_a_rejected_task_leaves_the_inbox(proj, monkeypatch, capsys):
     """ef4163: rejected at its gate, and still shown as needs you."""
+    old = lifecycle.new_intent(proj, WANT, FakeDrafter(docs()))["task"]
+    lifecycle.reject(proj, old, "superseded")  # how ef4163 was rejected, before M13
+    assert inbox.items(proj) == []
     tid = lifecycle.new_intent(proj, WANT, FakeDrafter(docs()))["task"]
     assert inbox.items(proj)[0]["task"] == tid
     monkeypatch.chdir(proj.root)
-    main(["reject", tid, "--reason", "superseded"])
+    main(["reject", tid, "--drop", "--reason", "superseded"])
     capsys.readouterr()
     assert inbox.items(proj) == []
     main(["task", "list"])
-    assert f"{tid}  [rejected]" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert f"{tid}  [rejected]" in out and f"{old}  [rejected]" in out

@@ -247,14 +247,21 @@ def test_recheck_needs_a_build_then_runs_in_the_background(repo, monkeypatch, ca
     assert spawned[0][-1] == "check" and kinds(proj, "build.started")[-1]["data"]["mode"] == "check"
 
 
-def test_reject_at_ready_needs_a_reason_and_closes_the_task(repo, monkeypatch, capsys):
+def test_reject_at_ready_redrafts_from_your_reason_and_drop_ends_it(repo, monkeypatch, capsys):
     proj, tid, wt = approved(repo)
     run(proj, tid, built(proj, tid, [("write", "README.md", "ok\n")]))
+    spawned = []
+    monkeypatch.setattr(build, "_spawn", lambda argv, env, cwd, log: spawned.append(argv) or 5)
     monkeypatch.chdir(proj.root)
-    assert main(["reject", tid]) == 1
+    assert main(["reject", tid]) == 1  # a reject needs a reason: it's what the drafters redraft from
     assert main(["reject", tid, "--reason", "the tone is wrong for the README"]) == 0
+    assert "redrafting" in capsys.readouterr().out and spawned[-1][-1] == "pilot"
+    assert kinds(proj, "task.redraft")[0]["reason"] == "the tone is wrong for the README"
+    assert proj.task(tid)["status"] == "drafting" and not (wt / "README.md").exists()  # the worktree is back at base
+
+    proj.ledger.append("builder.finished", "parallax", "", task=tid, status="drafting")  # the redraft's pilot ends
+    assert main(["reject", tid, "--drop", "--reason", "not worth it"]) == 0
     assert proj.task(tid)["status"] == "rejected"
-    assert kinds(proj, "task.rejected")[0]["reason"] == "the tone is wrong for the README"
 
 
 def test_init_writes_review_md_once(repo):

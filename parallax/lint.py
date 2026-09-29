@@ -304,9 +304,11 @@ def lint_file(path: Path, root: Path | None = None, ledger_ids: set[str] | None 
 
 
 def report(type_: str, bottom: str, not_looked_at: str, next_: str, found: list[str] = (),
-           details: list[str] = (), changed: list[str] = ()) -> str:
+           details: list[str] = (), changed: list[str] = (), decisions: list[str] = ()) -> str:
     """A report in the output shape. Callers lint it before showing it."""
     lines = [f"Type: {type_}", f"Bottom line: {bottom}", f"Not looked at: {not_looked_at}", f"Next: {next_}"]
+    if decisions:
+        lines += ["Decisions", *[f"- {d}" for d in decisions]]
     if changed:
         lines += ["Changed since last time", *[f"- {c}" for c in changed]]
     if found:
@@ -323,34 +325,36 @@ def one_sentence(text: str) -> str:
 
 
 def shaped(type_: str, bottom: str, gaps: list[tuple[str, str]], next_: str, found: list[str] = (),
-           changed: list[str] = (), who: str = "the drafters", extra: list[str] = ()) -> str:
+           changed: list[str] = (), who: str = "the drafters", extra: list[str] = (),
+           decisions: list[str] = (), details: list[str] = ()) -> str:
     """A report that carries others' Not looked at, never replaces it.
 
     gaps: (inline text, cited text) pairs. Inline in the header when that fits its cap; otherwise
     each cited text goes under Found. extra: Found items that move to Details first, and then the
     cited gaps too, if the body would break its cap.
     """
-    found, extra, changed = list(found), list(extra), list(changed)
+    found, extra, changed, details = list(found), list(extra), list(changed), list(details)
+    kw = {"changed": changed, "decisions": list(decisions)}
 
     def fits(text: str, cap: str) -> bool:
         return not any(cap in m for _, m in lint_report(text))
 
     if gaps:
         inline = "; ".join(g.rstrip(".") for g, _ in gaps) + "."
-        text = report(type_, bottom, inline, next_, found + extra, changed=changed)
+        text = report(type_, bottom, inline, next_, found + extra, details, **kw)
         if fits(text, "header is"):
             if fits(text, "body is"):
                 return text
-            return report(type_, bottom, inline, next_, found, extra, changed)
+            return report(type_, bottom, inline, next_, found, extra + details, **kw)
         verb = "list" if who.endswith("s") else "lists"
         cited, header = [c for _, c in gaps], f"what {who} {verb} under Found ({len(gaps)})"
-        for f, d in ((found + extra + cited, []), (found + cited, extra)):
-            text = report(type_, bottom, header, next_, f, d, changed)
+        for f, d in ((found + extra + cited, details), (found + cited, extra + details)):
+            text = report(type_, bottom, header, next_, f, d, **kw)
             if fits(text, "body is"):
                 return text
-        return report(type_, bottom, f"what {who} {verb} under Details ({len(gaps)})", next_, found, extra + cited, changed)
-    text = report(type_, bottom, "nothing", next_, found + extra, changed=changed)
-    return text if fits(text, "body is") else report(type_, bottom, "nothing", next_, found, extra, changed)
+        return report(type_, bottom, f"what {who} {verb} under Details ({len(gaps)})", next_, found, extra + cited + details, **kw)
+    text = report(type_, bottom, "nothing", next_, found + extra, details, **kw)
+    return text if fits(text, "body is") else report(type_, bottom, "nothing", next_, found, extra + details, **kw)
 
 
 def _money(text: str) -> float | None:

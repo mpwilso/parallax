@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from . import approvals, costs, lint
+from . import approvals, costs, lint, status
 from .agents.base import Agent, AgentResult
 from .core import ROOT_ENV, TASK_ENV, ParallaxError, Project, refuse_inside_task
 from .gate import make_permission_fn
@@ -130,7 +130,7 @@ def lifecycle_task(project: Project, task_id: str) -> dict:
 
 def state(project: Project, task_id: str, key: bytes | None = None) -> State:
     key = approvals.key_or_none() if key is None else key
-    entries = [e for e in project.ledger.entries() if e["data"].get("task") == task_id]
+    entries = status.attempt(project.ledger.entries(), task_id)  # this attempt: a redraft starts over
     approved = [e for e in entries if e["kind"] == "gate.approved" and approvals.valid(key, e["data"])]
     done = {doc for e in approved for doc in e["data"]["files"]}
     if "plan" in done:
@@ -151,14 +151,12 @@ def state(project: Project, task_id: str, key: bytes | None = None) -> State:
 
 
 def _feedback(project: Project, task_id: str) -> str:
-    """Your latest rejection reason for the pending gate, if you rejected it since the last approval."""
+    """Your latest reason to redraft: a reject at Ready starts this attempt with it."""
     reason = ""
-    for e in project.ledger.entries():
-        if e["data"].get("task") != task_id:
-            continue
+    for e in status.attempt(project.ledger.entries(), task_id):
         if e["kind"] == "gate.approved":
             reason = ""
-        elif e["kind"] == "gate.rejected":
+        elif e["kind"] in ("gate.rejected", "task.redraft"):
             reason = e["reason"]
     return reason
 

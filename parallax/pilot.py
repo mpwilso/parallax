@@ -17,8 +17,8 @@ import os
 import sys
 from typing import Callable
 
-from . import build, check, costs, lifecycle, lint, planfit, sandbox
-from .core import Project, refuse_inside_task
+from . import build, check, costs, lifecycle, lint, planfit, sandbox, status
+from .core import ParallaxError, Project, refuse_inside_task
 
 MAX_REDRAFTS = 2
 
@@ -27,14 +27,7 @@ def intake(project: Project, work: str, spawn: Callable | None = None) -> dict:
     """Create the task and start its pilot. Returns at once."""
     refuse_inside_task(project.root)
     t = project.new_task(work, intent=True)
-    home = sandbox.task_home(project.root, t["task"])
-    home.mkdir(parents=True, exist_ok=True)
-    os.chmod(home, 0o700)
-    argv = [sys.executable, "-u", "-m", "parallax.build", str(project.root), t["task"], "pilot"]
-    # your PATH stays, so the policy's setup command finds its tools; the maker's PATH is set on its own
-    env = build.scrubbed_env(None, path=os.environ.get("PATH", build.SYSTEM_PATH))
-    pid = (spawn or build._spawn)(argv, env, project.root, home / "pilot.log")
-    project.ledger.append("build.started", "parallax", "", task=t["task"], pid=pid, mode="pilot")
+    _spawn_pilot(project, t["task"], spawn)
     return project.task(t["task"])
 
 
@@ -117,3 +110,48 @@ def run(project: Project, task_id: str, drafter_for, maker_for, checker_for, *,
         return "needs you"
     lifecycle.approve(project, task_id, rule=why)
     return go(project, task_id, maker_for, checker_for, test_runner, preflight_runner)
+
+
+def _spawn_pilot(project: Project, task_id: str, spawn: Callable | None = None) -> int:
+    """A detached pilot. Your PATH stays, so the policy's setup command finds its tools; the maker's
+    PATH is set on its own."""
+    home = sandbox.task_home(project.root, task_id)
+    home.mkdir(parents=True, exist_ok=True)
+    os.chmod(home, 0o700)
+    argv = [sys.executable, "-u", "-m", "parallax.build", str(project.root), task_id, "pilot"]
+    env = build.scrubbed_env(None, path=os.environ.get("PATH", build.SYSTEM_PATH))
+    pid = (spawn or build._spawn)(argv, env, project.root, home / "pilot.log")
+    project.ledger.append("build.started", "parallax", "", task=task_id, pid=pid, mode="pilot")
+    return pid
+
+
+def redraft(project: Project, task_id: str, reason: str, spawn: Callable | None = None) -> dict:
+    """Your reject at Ready: a new attempt. The drafters get your reason and may redraft the intent
+    as well as the plan; the worktree goes back to its base; the pilot runs again, with a fresh cap."""
+    refuse_inside_task(project.root)
+    if not reason.strip():
+        raise ParallaxError("a reject needs a reason: it's what the drafters redraft from")
+    if task_id in build.running_builds(project):
+        raise ParallaxError(f"task {task_id} is working right now. parallax stop ends it first")
+    t = lifecycle.lifecycle_task(project, task_id)
+    e = project.ledger.append("task.redraft", "human", reason, task=task_id)
+    wt = t["worktree"]
+    import subprocess
+    subprocess.run(["git", "-C", wt, "reset", "-q", "--hard", t["base"]], capture_output=True)
+    subprocess.run(["git", "-C", wt, "clean", "-fdq"], capture_output=True)
+    _spawn_pilot(project, task_id, spawn)
+    return e
+
+
+def resume(project: Project, task_id: str, spawn: Callable | None = None, preflight_runner=None) -> str:
+    """Start a task again where it stopped: drafting, the build, or the check. Returns the mode."""
+    if lifecycle.state(project, task_id).gate is not None:
+        _spawn_pilot(project, task_id, spawn)
+        return "pilot"
+    built = any(e["kind"] == "build.finished" for e in status.attempt(project.ledger.entries(), task_id))
+    mode = "check" if built else "build"
+    p = build.prepare(project, task_id)
+    if not all(line.ok for line in build.run_preflight(project, p, preflight_runner)):
+        raise ParallaxError("preflight failed, so it didn't launch. parallax preflight " + task_id + " shows why")
+    build.launch(project, p, spawn=spawn, mode=mode)
+    return mode

