@@ -1,6 +1,7 @@
 import json
 import os
 import stat
+import textwrap
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -121,7 +122,7 @@ def test_doctor_report_lines_up_and_the_cli_exit_code_follows_failures(tmp_path,
 def test_the_readme_doctor_sample_matches_what_doctor_prints(tmp_path, monkeypatch):
     """The README's sample output is the real thing, padding and all."""
     readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
-    blocks = [b.strip("\n").splitlines() for b in readme.split("```")[1::2]]
+    blocks = [textwrap.dedent(b).strip("\n").splitlines() for b in readme.split("```")[1::2]]  # it may sit in a list
     sample, = [b for b in blocks if b and b[0].startswith("platform ")]
 
     home = tmp_path / "home"  # an existing key, so the detail is the path, not "created ..."

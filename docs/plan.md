@@ -1,3 +1,5 @@
+> **Design notes.** Working notes from building Parallax, kept as a record of how decisions were made. They describe plans and states that have since changed; the README and [docs/parallax.md](parallax.md) describe Parallax as it is.
+
 **Type:** FYI
 **Bottom line:** M7 to M11 built the core loop; M12 to M16 make it hands-free.
 **Not looked at:** drafters on the structured intent, until M12 runs live.
@@ -100,13 +102,13 @@ From the brief, lighter versions:
 
 1. In PowerShell as admin: `wsl --install --no-distribution`, then restart.
 2. In PowerShell: `wsl --install Ubuntu-24.04 --no-launch`, `wsl --export Ubuntu-24.04 $env:TEMP\u.tar`, `wsl --import parallax C:\WSL\parallax $env:TEMP\u.tar --version 2`, `wsl --unregister Ubuntu-24.04`.
-3. `wsl -d parallax`, then as root: create your user (`adduser matt`, `usermod -aG sudo matt`).
+3. `wsl -d parallax`, then as root: create your user (`adduser <you>`, `usermod -aG sudo <you>`).
 4. Install: `apt update && apt install -y git bubblewrap socat ripgrep nodejs npm python3 curl`. Then `npm install -g @anthropic-ai/sandbox-runtime`, and as your user, uv (`curl -LsSf https://astral.sh/uv/install.sh | sh`) and Claude Code (`curl -fsSL https://claude.ai/install.sh | bash`, then `claude` to log in).
 5. As your user, while Windows drives are still mounted: `git clone /mnt/c/<path to parallax> ~/code/parallax`, and `uv tool install --editable "$HOME/code/parallax[claude]"`. The clone checks out `m7-restructure`, the branch this plan is on. Optional: an SSH signing key for accept commits.
 6. Write `/etc/wsl.conf`, then run `wsl --terminate parallax` and wait 8 seconds:
    ```
    [user]
-   default=matt
+   default=<you>
    [interop]
    enabled=false
    appendWindowsPath=false

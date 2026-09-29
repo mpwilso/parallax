@@ -1,3 +1,5 @@
+> **Design notes.** Working notes from building Parallax, kept as a record of how decisions were made. They describe plans and states that have since changed; the README and [docs/parallax.md](parallax.md) describe Parallax as it is.
+
 "Parallax is hands-free. Execution happens without me. I only make judgment calls, and when I make them, I have everything I need to make them well. Any feature that adds work for me instead of removing it is wrong."
 
 This is the point of Parallax, and the test for every feature.
@@ -133,7 +135,7 @@ Commit trailers, generated, for example:
 ```
 Parallax-Task: 3f9a1c
 Intent: docs/tasks/3f9a1c/intent.md
-Approved-By: matt (intent+plan) 2026-09-29T14:20Z
+Approved-By: <you> (intent+plan) 2026-09-29T14:20Z
 Verified-By: checker=pass tests=42/42
 Ledger-Head: 9c1e...
 ```

@@ -1,0 +1,15 @@
+name: tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Chromium for the browser tests
+        run: uv run --no-project --python 3.12 --with playwright python -m playwright install --with-deps chromium
+      - name: The full suite, browser tests included. No test calls a model.
+        # The three tests that need the real sandbox (srt, bubblewrap, socat) skip, and -rs says so.
+        run: uv run --no-project --python 3.12 --with pytest --with playwright --with-editable . python -m pytest -q -rs -p no:cacheprovider
