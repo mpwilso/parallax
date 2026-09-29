@@ -15,7 +15,7 @@ playwright = pytest.importorskip("playwright.sync_api", reason="needs Playwright
 from playwright.sync_api import expect, sync_playwright  # noqa: E402
 
 from fakes import FakeChecker, FakeDrafter, ScriptedAgent, good_probe, junit_runner  # noqa: E402
-from parallax import build, lifecycle, pilot, views  # noqa: E402
+from parallax import build, lifecycle, pilot, preflight, views  # noqa: E402
 from parallax.agents.base import Review  # noqa: E402
 from parallax.core import Project  # noqa: E402
 from parallax.ui import UI  # noqa: E402
@@ -40,6 +40,7 @@ def browser():
 def proj(repo, monkeypatch):
     make_key()
     monkeypatch.setattr(build, "_spawn", lambda argv, env, cwd, log: 9)
+    monkeypatch.setattr(preflight, "run_srt", good_probe)  # a raise runs preflight; no sandbox in a sandbox
     (repo / "README.md").write_text("# calc\n\nA calculater.\n")
     import subprocess
     subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)

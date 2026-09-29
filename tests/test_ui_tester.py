@@ -37,6 +37,7 @@ class FakeTester:
 
     def run(self, goal, cwd, server, allowed):
         self.calls.append({"goal": goal, "cwd": Path(cwd), "server": server, "allowed": allowed})
+        (Path(cwd) / uitest.APP_UP).touch()  # the wrapper's mark that the app answered
         if self.write:
             (Path(cwd) / "flows").mkdir()
             (Path(cwd) / "flows" / "opens.spec.js").write_text(SPEC)
@@ -128,7 +129,7 @@ def test_the_tester_is_blind_sandboxed_and_its_tests_are_hashed_and_run(proj, mo
     assert "A new user on WSL can follow them." in goal and "http://127.0.0.1:8765/#tok" in goal
     for never in ("Rewrite the install section", "tests/test_readme.py", "done", "README.md\n"):  # no plan, no diff, no notes
         assert never not in goal
-    assert not any(call["cwd"].iterdir()) or {p.name for p in call["cwd"].iterdir()} <= {"flows", "opens.png", "tmp", "app.log"}
+    assert not any(call["cwd"].iterdir()) or {p.name for p in call["cwd"].iterdir()} <= {"flows", "opens.png", "tmp", "app.log", uitest.APP_UP}
     srv = call["server"]
     assert srv["command"] == "srt" and "--allowed-origins http://127.0.0.1:8765" in srv["args"][-1]
     cfg = json.loads(Path(srv["args"][1]).read_text())
@@ -247,3 +248,18 @@ def test_a_repos_own_browser_tests_get_the_pinned_browser_in_the_check(repo):
     testrun.run(repo, head, base, plan, repo.parent / "home", None, {"PATH": "/usr/bin"}, "true {junit} {tests}", runner)
     assert seen["env"]["PARALLAX_BROWSER"] == str(shell)
     assert str(uitest.tools_dir()) in seen["cfg"]["filesystem"]["allowRead"]
+
+
+def test_tests_written_without_ever_seeing_the_app_dont_count(proj, monkeypatch):
+    """d7f384: the app never started, the tester wrote four tests blind, and they were kept."""
+    class Blind(FakeTester):
+        def run(self, goal, cwd, server, allowed):
+            out = super().run(goal, cwd, server, allowed)
+            (Path(cwd) / uitest.APP_UP).unlink()
+            (Path(cwd) / "app.log").write_text("fatal: unknown error occurred while reading the configuration files\n")
+            return out
+    monkeypatch.setattr(uitest, "TESTER", Blind())
+    monkeypatch.setattr(uitest, "FLOW_RUNNER", flow_runner([[("opens", True)]]))
+    tid, status = pilot(proj, None, None)
+    assert kinds(proj, "uitest.failed", tid) and not kinds(proj, "uitest.recorded", tid)
+    assert "the app didn't start for the UI tester: fatal: unknown error" in kinds(proj, "rework.started", tid)[0]["reason"]

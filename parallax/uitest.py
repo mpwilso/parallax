@@ -36,6 +36,7 @@ from .core import ParallaxError, Project
 MCP_VERSION = "0.0.70"
 TEST_VERSION = "1.60.0-alpha-1774999321000"  # the MCP's own Playwright core, so one browser serves both
 APP_FAILED = 97  # the wrapper's exit code when the app never answered
+APP_UP = ".app-up"  # the wrapper leaves this once the app answers: without it, the tester never had an app
 NO_ANSWER = "the app didn't answer at"
 LIB_PACKAGES = {  # Chromium's usual missing libraries on a fresh Ubuntu 24.04, and their packages
     "libnss3.so": "libnss3", "libnssutil3.so": "libnss3", "libsmime3.so": "libnss3",
@@ -249,6 +250,7 @@ def _script(start: str, url: str, cwd: Path, log: Path, then: str, tmp: Path) ->
             f"cd {shlex.quote(str(cwd))} && ({start}) >{q} 2>&1 &\n"
             f"{WAIT.format(url=origin)}\n"
             f"if [ $? -ne 0 ]; then echo \"{NO_ANSWER} {origin} within 60s\" >>{q}; exit {APP_FAILED}; fi\n"
+            f"touch {shlex.quote(str(log.parent / APP_UP))}\n"
             f"{then}")
 
 
@@ -269,7 +271,7 @@ def _env(tools: Tools, venv: Path | None, work: Path, url: str) -> dict[str, str
     env = build.scrubbed_env(venv)
     env.update(tools.env())
     # no TMPDIR here: srt keeps its sockets in it, and a task folder's path is too long for one (testrun.py)
-    env.update({"HOME": str(work), "XDG_CONFIG_HOME": str(work / "config"),
+    env.update({"HOME": str(work), "XDG_CONFIG_HOME": str(work / "config"), "GIT_CONFIG_GLOBAL": "/dev/null",
                 "XDG_DATA_HOME": str(work / "data"), "APP_URL": url})
     return env
 
@@ -334,6 +336,11 @@ def test(project: Project, task_id: str, p, tester_for) -> tuple[str, str]:
     log = (work / "app.log").read_text(errors="replace")[-600:] if (work / "app.log").exists() else ""
     written = sorted(work.glob("flows/*.spec.js"))
     common = dict(task=task_id, tree=s.tree, cost_usd=result.cost_usd, model=cfg["model"])
+    if not (work / APP_UP).exists():  # fail closed: tests written without ever seeing the app don't count
+        project.ledger.append("uitest.failed", "ui tester", text[-600:] or result.status, app_log=log[-600:], **common)
+        if log.strip():
+            return "app", "the app didn't start for the UI tester: " + lint.one_sentence(" ".join(log.strip().splitlines()[-3:]))
+        return "you", "the UI tester never reached the app: its browser server didn't start"
     if not written:
         project.ledger.append("uitest.failed", "ui tester", text[-600:] or result.status, **common)
         if NO_ANSWER in log:
@@ -401,7 +408,7 @@ def run_flows(project: Project, task_id: str, p, reviewed: str, runner=None) -> 
     cfg_path = _sandbox(home, copy, tools, p.venv, [work, out, work / "tmp"])
     junit = out / "junit.xml"
     origin = re.sub(r"[#?].*$", "", cfg["url"])
-    config = home / "flows.config.js"
+    config = work / "flows.config.js"  # inside the sandbox's reach: the task folder isn't
     config.write_text("module.exports = " + json.dumps({
         "testDir": str(copy / cfg["tests"]), "testMatch": "**/*.spec.js", "outputDir": str(out / "results"),
         "timeout": 30000, "workers": 1, "retries": 0, "reporter": [["junit", {"outputFile": str(junit)}], ["line"]],

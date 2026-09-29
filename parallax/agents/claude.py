@@ -253,6 +253,7 @@ class ClaudeUITester:
             setting_sources=[],
             max_turns=self.max_turns,
             max_budget_usd=self.max_budget_usd,
+            env={"MCP_TIMEOUT": "90000"},  # the app starts first; its server connects once it answers
         )
         result = await _final_result(sdk, options, goal)
         if result is None:

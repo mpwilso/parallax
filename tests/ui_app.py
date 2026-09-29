@@ -23,6 +23,7 @@ def main(port: int) -> None:
     root = Path(tempfile.mkdtemp(prefix="ui-app-"))
     os.environ["XDG_DATA_HOME"] = str(root / "data")
     os.environ["XDG_CONFIG_HOME"] = str(root / "config")
+    os.environ["GIT_CONFIG_GLOBAL"] = "/dev/null"  # the sandbox refuses any .gitconfig, even a missing one
     for who in ("AUTHOR", "COMMITTER"):
         os.environ[f"GIT_{who}_NAME"] = "Demo"
         os.environ[f"GIT_{who}_EMAIL"] = "demo@parallax.invalid"
