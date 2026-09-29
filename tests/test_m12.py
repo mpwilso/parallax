@@ -334,3 +334,43 @@ def test_the_background_process_runs_the_installed_parallax_never_the_repos(proj
     monkeypatch.setattr(build, "_spawn", lambda argv, env, cwd, log: seen.append(argv) or 9)
     pilot.intake(proj, WANT)
     assert seen[0][1:4] == ["-P", "-u", "-m"]  # -P: the working folder never goes on sys.path
+
+
+class TogetherDrafter(FakeDrafter):
+    """Answers the one-call request with both files, marked the way Parallax asks."""
+
+    def run(self, goal, cwd, permission_fn, stage="build", env=None):
+        if "Draft two files for this task in one reply" in goal:
+            self.requests.append(goal)
+            from parallax.agents.base import AgentResult
+            return AgentResult("done", f"=== intent.md ===\n{self.docs['intent']}\n=== plan.md ===\n{self.docs['plan']}", 0.3)
+        return super().run(goal, cwd, permission_fn, stage, env)
+
+
+def test_the_drafter_model_and_one_call_drafting_are_settings(repo, monkeypatch):
+    (repo / POLICY_FILE).write_text('[actions]\n[draft]\nmodel = "claude-sonnet-5-5"\ntogether = true\n')
+    make_key()
+    monkeypatch.setattr(build, "_spawn", lambda *a: 9)
+    proj = Project.init(repo)
+    assert proj.policy.draft == {"model": "claude-sonnet-5-5", "together": True}
+    tid = pilot.intake(proj, WANT)["task"]
+    drafter = TogetherDrafter(docs())
+    assert pilot.draft_until_fit(proj, tid, drafter) == "fit"
+    assert len(drafter.requests) == 1  # one call wrote both
+    recorded = [e for e in kinds(proj, "draft.recorded") if e["actor"] == "drafter"]
+    assert [e["data"]["doc"] for e in recorded] == ["intent", "plan"] and all(e["data"]["together"] for e in recorded)
+    assert "Rewrite the install section for WSL." in lifecycle.doc_path(proj, tid, "plan").read_text()
+    with pytest.raises(ValueError, match="true or false"):
+        from parallax.policy import Policy
+        Policy({}, draft={"together": "yes"})
+
+
+def test_one_call_drafting_leaves_a_large_tasks_plan_for_after_its_spec(repo, monkeypatch):
+    (repo / POLICY_FILE).write_text('[actions]\n[draft]\ntogether = true\n')
+    make_key()
+    monkeypatch.setattr(build, "_spawn", lambda *a: 9)
+    proj = Project.init(repo)
+    tid = pilot.intake(proj, WANT)["task"]
+    drafter = TogetherDrafter(docs(size="large"))
+    lifecycle.draft(proj, tid, ["intent", "plan"], drafter)
+    assert [e["data"]["doc"] for e in kinds(proj, "draft.recorded")] == ["intent"]

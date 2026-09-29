@@ -265,9 +265,9 @@ def _maker(left: float, settings: str) -> Agent:
     return ClaudeAgent(max_budget_usd=left, settings=settings)
 
 
-def _drafter(cap: float) -> Agent:
-    from .agents.claude import ClaudeAgent
-    return ClaudeAgent(max_budget_usd=cap)
+def _drafter(cap: float, model: str | None = None) -> Agent:
+    from .agents.claude import DEFAULT_MODEL, ClaudeAgent
+    return ClaudeAgent(model=model or DEFAULT_MODEL, max_budget_usd=cap)
 
 
 def _checker(left: float, model: str):
@@ -304,7 +304,9 @@ def run_mode(project: Project, task_id: str, mode: str, drafter_for, maker_for, 
 
 def main(argv: list[str]) -> int:
     root, task_id, mode = argv
-    status = run_mode(Project(Path(root)), task_id, mode, _drafter, _maker, _checker)
+    project = Project(Path(root))
+    drafter = lambda cap: _drafter(cap, project.policy.draft["model"])  # noqa: E731  the policy's model
+    status = run_mode(project, task_id, mode, drafter, _maker, _checker)
     print(f"{mode} {task_id}: {status}", flush=True)
     return 0
 

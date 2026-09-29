@@ -20,6 +20,7 @@ DEFAULT_LIMITS = {
 }
 DEFAULT_BUDGET = {"drafting_usd": 2.0, "small_cap_usd": 5.0, "large_cap_usd": 20.0}  # estimated dollars
 DEFAULT_LAUNCH = {"auto_launch_usd": 3.0, "review_paths": [], "review_plans": False}
+DEFAULT_DRAFT = {"model": "claude-opus-5", "together": False}
 DEFAULT_UI_TESTER = {
     "enabled": False, "start": "", "url": "",
     "model": "claude-sonnet-5-5", "max_usd": 1.5,
@@ -74,6 +75,10 @@ review_plans = false    # true: every plan waits for you
 # outside the sandbox, in the task's worktree, with $PARALLAX_VENV set to where the venv goes.
 # the maker gets the venv on its PATH and can read it, nothing more. empty: no venv.
 setup = ""
+
+[draft]
+model = "claude-opus-5"  # the drafters: they write the intent, the spec and the plan
+together = false         # true: a first draft writes the intent and the plan in one call
 
 [check]
 model = "claude-sonnet-5-5"  # the blind checker, a different Claude model from the maker
@@ -143,7 +148,7 @@ class Policy:
     def __init__(self, actions: dict[str, str], limits: dict[str, int] | None = None,
                  exact: dict[str, dict[str, str]] | None = None, budget: dict[str, float] | None = None,
                  build: dict[str, str] | None = None, check: dict | None = None, launch: dict | None = None,
-                 ui_tester: dict | None = None):
+                 ui_tester: dict | None = None, draft: dict | None = None):
         _check_table("[actions]", actions)
         self.exact = {action: dict(table) for action, table in (exact or {}).items() if table}
         if "git.merge" in self.exact:
@@ -194,6 +199,14 @@ class Policy:
             raise ValueError("[launch] review_plans must be true or false")
         self.launch = {**DEFAULT_LAUNCH, **launch}
         self.ui_tester = _ui_tester(dict(ui_tester or {}))
+        draft = dict(draft or {})
+        if set(draft) - set(DEFAULT_DRAFT):
+            raise ValueError(f"unknown [draft] settings: {sorted(set(draft) - set(DEFAULT_DRAFT))}")
+        if not isinstance(draft.get("model", "x"), str) or not draft.get("model", "x").strip():
+            raise ValueError("[draft] model must be a Claude model name")
+        if not isinstance(draft.get("together", False), bool):
+            raise ValueError("[draft] together must be true or false")
+        self.draft = {**DEFAULT_DRAFT, **draft}
 
     @classmethod
     def from_dict(cls, data: dict) -> "Policy":
@@ -201,7 +214,7 @@ class Policy:
             raise ValueError("profiles are gone. every task uses [actions]; remove [profiles]")
         return cls(data.get("actions", {}), data.get("limits", {}), data.get("exact", {}), data.get("budget", {}),
                    data.get("build", {}), data.get("check", {}),
-                   data.get("launch", {}), data.get("ui_tester", {}))
+                   data.get("launch", {}), data.get("ui_tester", {}), data.get("draft", {}))
 
     @classmethod
     def load(cls, path: Path) -> "Policy":
