@@ -18,11 +18,18 @@ from .tree import added_lines
 PATTERNS = {
     "private key": re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
     "anthropic key": re.compile(r"sk-ant-[A-Za-z0-9_\-]{20,}"),
-    "openai-style key": re.compile(r"\bsk-[A-Za-z0-9]{32,}"),
+    "openai-style key": re.compile(r"\bsk-(proj-|svcacct-)?[A-Za-z0-9_\-]{32,}"),
     "aws access key": re.compile(r"\b(AKIA|ASIA)[0-9A-Z]{16}\b"),
     "github token": re.compile(r"\b(gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{50,})"),
+    "gitlab token": re.compile(r"\bglpat-[A-Za-z0-9_\-]{20,}"),
     "slack token": re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}"),
+    "slack webhook": re.compile(r"hooks\.slack\.com/services/T[A-Za-z0-9]+/B[A-Za-z0-9]+/[A-Za-z0-9]+"),
     "google api key": re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b"),
+    "stripe key": re.compile(r"\b[sr]k_(live|test)_[A-Za-z0-9]{20,}"),
+    "npm token": re.compile(r"\bnpm_[A-Za-z0-9]{36}\b"),
+    "pypi token": re.compile(r"\bpypi-[A-Za-z0-9_\-]{50,}"),
+    "hugging face token": re.compile(r"\bhf_[A-Za-z0-9]{30,}\b"),
+    "jwt": re.compile(r"\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}"),
     "assigned secret": re.compile(r"(?i)\b(api[_-]?key|secret|token|passw(or)?d)\b\s*[:=]\s*[\"'][^\"'\s]{16,}[\"']"),
 }
 

@@ -23,7 +23,7 @@ from typing import Callable
 from .approvals import key_path
 
 OK, WARN, FAIL, INFO = "ok", "warn", "fail", "info"
-HARDENING = "README.md#harden-wsl"
+HARDENING = "docs/wsl.md#harden-wsl"
 
 
 def _read(path: str) -> str:

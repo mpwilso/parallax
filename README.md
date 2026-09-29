@@ -2,6 +2,8 @@
 
 [![tests](https://github.com/mpwilso/parallax/actions/workflows/tests.yml/badge.svg)](https://github.com/mpwilso/parallax/actions/workflows/tests.yml)
 
+Agents do the work. You make the calls. A local tool that runs Claude Code agents on your repo inside a sandbox, checks their work blind, and brings you one decision per task.
+
 **Parallax is hands-free: execution happens without you, and you only make the judgment calls, with everything you need to make them well.** You describe work in plain words; drafters plan it, a maker builds it in a sandbox, and your tests, a blind checker and an optional UI tester check it, all without you. It comes back as one card with one decision, every step is on a hash-chained ledger, and merging is always yours.
 
 | What waits on you | A card |
@@ -54,9 +56,9 @@ The maker never sees your key, your home folder or the network the plan doesn't 
 
 ## Status and known limits
 
-A working prototype I use on this repo: a task it did on itself, with its record, is in [docs/tasks/](docs/tasks/), and three real runs through the UI, with every state, cost and the bugs they found, are in [docs/ui-runs/](docs/ui-runs/README.md). How it got here: [docs/history.md](docs/history.md).
+A working prototype I use on this repo: a task it did on itself, from the typed request to the accepted commit, is walked through in [docs/example.md](docs/example.md), and three real runs through the UI, with every state, cost and the bugs they found, are in [docs/ui-runs/](docs/ui-runs/README.md). How it got here: [docs/history.md](docs/history.md).
 
-- **Linux or WSL2 only.** It needs Claude Code's sandbox (bubblewrap). Native Windows isn't supported; macOS is untested.
+- **Linux or WSL2.** It needs Claude Code's sandbox (bubblewrap). Native Windows isn't supported by that sandbox; macOS is untested.
 - **It needs Claude Code**, logged in, and the Claude Agent SDK. Costs are Claude Code's estimates at list prices; on a subscription your real limit is the plan's usage limits, which Parallax can't see.
 - **A cap can overshoot by one turn.** Every agent gets what's left of the cap as its own limit, but the SDK checks it between turns.
 - **The UI tester's browser server is pinned** to `@playwright/mcp` 0.0.70: later versions need Unix sockets the sandbox refuses.
@@ -76,35 +78,27 @@ I designed Parallax and directed its build; Claude Code wrote most of the code u
 
 ## Setup
 
-Windows users run Parallax inside WSL2, in a distro just for it. On Linux, start at step 3.
+Linux, or Windows through WSL2. On Windows, make the distro first: [docs/wsl.md](docs/wsl.md), then continue here inside it. macOS is untested.
 
-1. In PowerShell as admin: `wsl --install --no-distribution`, then restart. Then make a distro named `parallax`:
-   ```powershell
-   wsl --install Ubuntu-24.04 --no-launch
-   wsl --export Ubuntu-24.04 $env:TEMP\u.tar
-   wsl --import parallax C:\WSL\parallax $env:TEMP\u.tar --version 2
-   wsl --unregister Ubuntu-24.04
-   ```
-2. `wsl -d parallax`, then as root: `adduser <you>` and `usermod -aG sudo <you>`.
-3. As root, the tools. Apt's Node is too old for the sandbox runtime, so Node comes from NodeSource:
+1. The tools, as root. Apt's Node is too old for the sandbox runtime, so Node comes from NodeSource:
    ```bash
    apt update && apt install -y git bubblewrap socat ripgrep python3 curl ca-certificates
    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt install -y nodejs
    npm install -g @anthropic-ai/sandbox-runtime
    ```
-4. As your user, uv and Claude Code, then log in:
+   On Ubuntu 24.04 and later, allow the user namespaces the sandbox needs (CI does the same): `sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`, and put that line in `/etc/sysctl.d/99-parallax.conf` so it survives a reboot.
+2. As your user, uv and Claude Code, then log in:
    ```bash
    curl -LsSf https://astral.sh/uv/install.sh | sh
    curl -fsSL https://claude.ai/install.sh | bash
    source ~/.local/bin/env && claude
    ```
-5. Parallax itself:
+3. Parallax itself:
    ```bash
-   git clone <this repo> ~/code/parallax
+   git clone https://github.com/mpwilso/parallax ~/code/parallax
    uv tool install --editable "$HOME/code/parallax[claude]"
    ```
-6. On WSL, harden the distro: interop and mounted Windows drives off. Write `/etc/wsl.conf` with `[user] default=<you>`, `[interop] enabled=false` and `appendWindowsPath=false`, and `[automount] enabled=false`, then `wsl --terminate parallax` from PowerShell.
-7. Check the machine:
+4. Check the machine:
    ```bash
    parallax doctor
    ```
@@ -117,6 +111,6 @@ Windows users run Parallax inside WSL2, in a distro just for it. On Linux, start
    signing key   none: accept commits won't be signed
    ready.
    ```
-8. In a git repo you want agents to work on: `parallax init`, then `parallax ui`.
+5. In a git repo you want agents to work on: `parallax init`, then `parallax ui`. If the repo's tests need dependencies, set `[build] setup` in `parallax.policy.toml` to the command that makes a venv at `$PARALLAX_VENV`; `init` shows the command and asks first when the repo's example policy already has one.
 
-The tests never call a model: `uv run --with pytest --with playwright --with-editable . python -m pytest -q`. The browser tests need `python -m playwright install --with-deps chromium` once.
+The tests never call a model: `uv run --python 3.12 --with pytest --with playwright --with-editable . python -m pytest -q`. The browser tests need `python -m playwright install --with-deps chromium` once.

@@ -226,13 +226,13 @@ def run(project: Project, task_id: str, worktree: Path, rules: sandbox.Rules, ho
         lines.append(Line("environment", "no keys or tokens visible" if not leaks
                           else f"visible: {', '.join(sorted(set(leaks)))}", not leaks))
 
-    project.ledger.append("preflight.recorded", "parallax", "; ".join(f"{l.name}: {l.detail}" for l in lines),
-                          task=task_id, ok=all(l.ok for l in lines))
+    project.ledger.append("preflight.recorded", "parallax", "; ".join(f"{line.name}: {line.detail}" for line in lines),
+                          task=task_id, ok=all(line.ok for line in lines))
     return lines
 
 
 def report(lines: list[Line]) -> list[str]:
-    width = max([34] + [len(l.detail) + 2 for l in lines])
-    out = [f"{l.name:<13}{l.detail:<{width}}{'ok' if l.ok else 'fail'}" for l in lines]
-    out.append("ready to launch." if all(l.ok for l in lines) else "not ready: refusing to launch.")
+    width = max([34] + [len(line.detail) + 2 for line in lines])
+    out = [f"{line.name:<13}{line.detail:<{width}}{'ok' if line.ok else 'fail'}" for line in lines]
+    out.append("ready to launch." if all(line.ok for line in lines) else "not ready: refusing to launch.")
     return out

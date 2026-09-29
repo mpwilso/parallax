@@ -12,7 +12,7 @@ no code, names or UI copied.
 | claude-squad, container-use | Parallel agents in worktrees or containers | One task, one worktree, one sandbox, one budget; Parallax isn't a multiplexer |
 | SWE-bench | Scoring a fix by the tests from the merged pull request, hidden from the agent | Also measured the blind checker's catches, misses and false alarms |
 | The AI-native SDLC playbook | Files as the hand-off between stages; humans own the judgment calls | Drafting and launch run without you; you make one call per task |
-| impeccable | A design critique and audit method | Used to review Parallax's own UI (see PRODUCT.md); not part of Parallax |
+| impeccable | A design critique and audit method | Used to review Parallax's own UI; its product schema file is [PRODUCT.md](PRODUCT.md), kept for that audit and not part of Parallax |
 | Playwright, Playwright MCP | Driving a real browser from tests and from an agent | The UI tester runs the browser inside the sandbox, blind to the code |
 
 ## Sources

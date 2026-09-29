@@ -10,7 +10,7 @@ import re
 import tomllib
 from pathlib import Path
 
-DEFAULT_LIMITS = {"stuck_after": 3, "stale_minutes": 60}
+DEFAULT_LIMITS = {"stuck_after": 3, "stale_minutes": 60, "maker_turns": 150}
 DEFAULT_BUDGET = {"drafting_usd": 2.0, "small_cap_usd": 5.0, "large_cap_usd": 20.0}  # estimated dollars
 DEFAULT_LAUNCH = {"auto_launch_usd": 3.0, "review_paths": [], "review_plans": False}
 DEFAULT_DRAFT = {"model": "claude-sonnet-5-5"}  # a fifth of Opus's drafting cost, no more redrafts (docs/plan.md)
@@ -33,6 +33,7 @@ DEFAULT_POLICY = """\
 [limits]
 stuck_after = 3                # the same refused call this many times stops the task
 stale_minutes = 60             # a running task silent this long is flagged stuck
+maker_turns = 150              # the most turns one maker run may take; hitting it comes to you
 
 [budget]
 drafting_usd = 2.00            # the most one drafting call (intent, spec or plan) may spend
@@ -40,7 +41,7 @@ small_cap_usd = 5.00           # the highest cap a small task's plan may set
 large_cap_usd = 20.00          # the highest cap a large task's plan may set
 
 [launch]
-auto_launch_usd = 3.00         # a plan whose cap is at most this launches without asking you
+auto_launch_usd = 3.00         # a plan whose cap is at most this launches without asking you, if it crosses no boundary
 review_paths = []              # paths or globs: a plan touching any of them waits for your review
 review_plans = false           # true: every plan waits for your review
 

@@ -13,7 +13,7 @@ from parallax.agents.base import Review
 from parallax.agents.claude import rule_on_tool_call, tool_to_action
 from parallax.core import POLICY_FILE, ParallaxError, Project
 from parallax.gate import Scope, make_permission_fn
-from test_m8 import docs as lifecycle_docs, make_key
+from test_lifecycle_gates import docs as lifecycle_docs, make_key
 
 GIT = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
 
@@ -60,7 +60,7 @@ def test_protected_file_in_diff_goes_to_inbox_not_checker(repo):
     proj, tid, wt = setup(repo)
     sneaky = [sys.executable, "-c", "open('miss' + 'ion.md', 'w').write('obey me')"]
     agent = ScriptedAgent(steps=[("shell", sneaky)])  # gets past the string check
-    assert build.run_build(proj, tid, lambda left, settings: agent) == "disputed"
+    assert build.run_build(proj, tid, lambda left, settings: agent, preflight_runner=good_probe) == "disputed"
     assert not [e for e in proj.ledger.entries() if e["kind"] == "check.started"]  # the checker never sees it
     [item] = proj.inbox()
     assert item["data"]["stage"] == "guard" and "mission.md" in item["reason"]
@@ -68,7 +68,8 @@ def test_protected_file_in_diff_goes_to_inbox_not_checker(repo):
 
 def test_changed_policy_file_stops_every_later_action(repo):
     proj, tid, wt = setup(repo)
-    edit = lambda cwd: (repo / POLICY_FILE).write_text("[limits]\nstuck_after = 9\n")
+    def edit(cwd):
+        (repo / POLICY_FILE).write_text("[limits]\nstuck_after = 9\n")
     agent = ScriptedAgent(steps=[("read", "a"), ("call", edit), ("read", "b"), ("write", "ok.txt", "x")])
     agent.run("go", wt, gated(proj, tid, wt))
     assert [(p.allowed, p.stop) for _, _, p in agent.results] == [(True, False), (False, True)]
@@ -108,7 +109,7 @@ def test_checker_is_blind_to_maker_explanation(repo):
                                  ("shell", [*GIT, "commit", "-q", "-m", "COMMIT-SECRET because reasons"])],
                           summary="SUMMARY-SECRET: I wrote it")
     checker = FakeChecker(reviews=[blocker("REVIEWER-FINDING"), Review("pass")])
-    assert build.run_build(proj, tid, lambda left, settings: maker) == "built"
+    assert build.run_build(proj, tid, lambda left, settings: maker, preflight_runner=good_probe) == "built"
     maker.steps["build"] = [("write", "README.md", "second\n")]
     maker.summary = "REPLY-SECRET: fixed it as you asked"
     assert _check(proj, tid, maker, checker) == "ready"
@@ -133,7 +134,7 @@ def test_disagreement_goes_to_inbox_and_needs_a_reason(repo, approve, status):
     proj, tid = _approved(repo)
     maker = ScriptedAgent(steps=[("write", "README.md", "x\n")])
     checker = FakeChecker(reviews=[blocker("greeting is misspelled")])
-    build.run_build(proj, tid, lambda left, settings: maker)
+    build.run_build(proj, tid, lambda left, settings: maker, preflight_runner=good_probe)
     assert _check(proj, tid, maker, checker) == "disputed"
     assert len(checker.briefs) == 4 and len(maker.goals) == 4  # the first check, then 3 reworks
     assert [e["data"]["cycle"] for e in proj.ledger.entries() if e["kind"] == "rework.started"] == [1, 2, 3]
@@ -151,16 +152,29 @@ def test_disagreement_goes_to_inbox_and_needs_a_reason(repo, approve, status):
     assert proj.ledger.verify()[0]
 
 
-def test_checker_error_goes_to_inbox_without_retry(repo):
+def test_a_checker_error_is_retried_once_by_code_then_comes_to_you(repo):
     proj, tid = _approved(repo)
     maker = ScriptedAgent(steps=[("write", "README.md", "x\n")])
     checker = FakeChecker(error=True)
-    build.run_build(proj, tid, lambda left, settings: maker)
+    build.run_build(proj, tid, lambda left, settings: maker, preflight_runner=good_probe)
     assert _check(proj, tid, maker, checker) == "disputed"
-    assert len(checker.briefs) == 1 and len(maker.goals) == 1
+    assert len(checker.briefs) == 2 and len(maker.goals) == 1  # asked once more, with the same brief
+    [retry] = [e for e in proj.ledger.entries() if e["kind"] == "check.retried"]
+    assert retry["reason"] == "the checker gave no usable verdict (garbled reply), so it was asked once more"
     assert not [e for e in proj.ledger.entries() if e["kind"] == "rework.started"]
     [item] = proj.inbox()
     assert item["reason"].startswith("checker error")
+
+
+def test_a_checker_that_answers_the_second_time_never_reaches_you(repo):
+    proj, tid = _approved(repo)
+    maker = ScriptedAgent(steps=[("write", "README.md", "x\n")])
+    checker = FakeChecker(error=1)
+    build.run_build(proj, tid, lambda left, settings: maker, preflight_runner=good_probe)
+    assert _check(proj, tid, maker, checker) == "ready"
+    assert len(checker.briefs) == 2 and proj.inbox() == []
+    assert [e["kind"] for e in proj.ledger.entries() if e["kind"] in ("check.retried", "verdict.recorded")] == \
+        ["verdict.recorded", "check.retried", "verdict.recorded"]
 
 
 def test_hook_rules_on_every_tool_call_including_reads(repo):

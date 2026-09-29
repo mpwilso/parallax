@@ -64,7 +64,7 @@ class FakeChecker:
 
     def check(self, brief):
         self.briefs.append(brief)
-        if self.error:
+        if self.error is True or (self.error and len(self.briefs) <= int(self.error)):  # True: always; n: the first n calls
             raise CheckerError("garbled reply")
         return self.reviews[min(len(self.briefs), len(self.reviews)) - 1]
 

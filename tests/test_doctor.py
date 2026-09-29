@@ -185,3 +185,43 @@ def test_a_quiet_run_is_flagged_stuck_once(repo):
     assert flag_stale_runs(proj, later) == []  # already flagged
     [item] = proj.inbox()
     assert item["kind"] == "stuck.raised" and "no activity for 60 minutes" in item["reason"]
+
+
+def test_the_guide_names_only_commands_that_exist(capsys):
+    from parallax.cli import GUIDE
+    import re
+    assert main([]) == 0 and capsys.readouterr().out == GUIDE
+    named = set(re.findall(r"parallax (\w+)", GUIDE)) | set(re.findall(r"power use: ([^.]+)\.", GUIDE)[0].replace(",", " ").split())
+    for cmd in named - {"parallax"}:
+        try:
+            main([cmd, "-h"])
+        except SystemExit as stop:  # argparse's own help exit is 0; an unknown command exits 2
+            assert stop.code == 0, cmd
+        capsys.readouterr()
+
+
+def test_init_asks_before_adopting_a_repos_setup_command(repo, monkeypatch, capsys):
+    """The example policy ships with the repo, so its [build] setup would run repo-chosen code as you."""
+    from parallax.core import EXAMPLE_POLICY_FILE, POLICY_FILE
+    from parallax.policy import DEFAULT_POLICY
+    example = DEFAULT_POLICY.replace('setup = ""', 'setup = "make venv"', 1)
+    (repo / EXAMPLE_POLICY_FILE).write_text(example)
+    monkeypatch.chdir(repo)
+    monkeypatch.setattr("sys.stdin", type("Tty", (), {"isatty": staticmethod(lambda: True)})())
+    monkeypatch.setattr("builtins.input", lambda prompt: "n")
+    assert main(["init"]) == 0
+    out = capsys.readouterr().out
+    assert "it would run as you" in out and "  make venv" in out
+    assert Project(repo).policy.build["setup"] == ""  # declined: left out, the rest of the example kept
+    assert "left out at init" in (repo / POLICY_FILE).read_text()
+
+    (repo / POLICY_FILE).unlink()
+    monkeypatch.setattr("builtins.input", lambda prompt: "y")
+    assert main(["init"]) == 0
+    assert Project(repo).policy.build["setup"] == "make venv"
+
+    (repo / POLICY_FILE).unlink()
+    monkeypatch.setattr("sys.stdin", type("Pipe", (), {"isatty": staticmethod(lambda: False)})())
+    assert main(["init"]) == 0
+    assert "not an interactive terminal, so it's left out" in capsys.readouterr().out
+    assert Project(repo).policy.build["setup"] == ""

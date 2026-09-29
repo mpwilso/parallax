@@ -6,7 +6,7 @@ from parallax.accept import accept
 from parallax.agents.base import Finding, Review
 from parallax.cli import main
 from parallax.core import POLICY_FILE, ParallaxError, Project
-from test_m8 import WANT, docs, make_key
+from test_lifecycle_gates import WANT, docs, make_key
 
 
 @pytest.fixture
@@ -191,7 +191,7 @@ def test_a_redrafted_card_leads_with_what_changed_since_your_reject(proj):
     assert lints(proj, text)
     head, body = text.split("\nChanged since last time\n", 1)
     assert "Bottom line: Ready again after your reject:" in head
-    lead = [l[2:] for l in body.splitlines() if l.startswith("- ")][:4]
+    lead = [line[2:] for line in body.splitlines() if line.startswith("- ")][:4]
     assert lead[0].startswith('you rejected the last version: "say which shell each step runs in"')
     assert lead[1].startswith("intent: Constraints changed (+1 -1 lines); header, Problem, Outcome the same")
     assert lead[2].startswith("plan: unchanged")
@@ -207,3 +207,13 @@ def test_a_first_attempt_card_says_nothing_about_redrafts(proj):
     assert pilot_run(proj, tid) == "ready"
     text = show.report(proj, tid)
     assert "again after your reject" not in text and "you rejected" not in text
+
+
+def test_setup_records_how_long_it_took(proj):
+    from parallax.core import POLICY_FILE
+    (proj.root / POLICY_FILE).write_text('[build]\nsetup = "python3 -c \'import time; time.sleep(0.2)\'"\n')
+    proj.reload_policy()
+    tid = pilot.intake(proj, WANT)["task"]
+    assert pilot_run(proj, tid) == "ready"
+    [ran] = kinds(proj, "setup.ran")
+    assert ran["data"]["exit"] == 0 and 0.2 <= ran["data"]["seconds"] < 30

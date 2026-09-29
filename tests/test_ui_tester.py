@@ -8,9 +8,10 @@ import pytest
 from fakes import FakeChecker, FakeDrafter, ScriptedAgent, good_probe, junit_runner
 from parallax import build, costs, lint, show, uitest, views
 from parallax.agents.base import AgentResult
+from parallax import lifecycle
 from parallax.core import POLICY_FILE, Project
 from parallax.policy import Policy
-from test_m8 import docs, make_key
+from test_lifecycle_gates import docs, make_key
 
 UI_POLICY = """[launch]
 auto_launch_usd = 5.0  # room for the tester's share: $0.20 drafting, twice $0.90, $0.50
@@ -137,6 +138,7 @@ def test_the_tester_is_blind_sandboxed_and_its_tests_are_hashed_and_run(proj, mo
     assert not any(call["cwd"].iterdir()) or {p.name for p in call["cwd"].iterdir()} <= {"flows", "opens.png", "tmp", "app.log", uitest.APP_UP}
     srv = call["server"]
     assert srv["command"] == "srt" and "--allowed-origins http://127.0.0.1:8765" in srv["args"][-1]
+    assert "--allow-unrestricted-file-access" not in srv["args"][-1]  # the MCP blocks file: URLs unless told otherwise
     cfg = json.loads(Path(srv["args"][1]).read_text())
     assert cfg["network"]["allowedDomains"] == [] and str(Path.home()) in cfg["filesystem"]["denyRead"]
     assert tester.limit <= proj.policy.ui_tester["max_usd"]
@@ -332,7 +334,7 @@ def test_the_tester_sees_only_the_outcomes_the_plan_names(proj, monkeypatch):
                                       "1. A new user on WSL can follow them.\n2. The page lists the steps in order.")
     plan = {**lint.plan_block(flows_docs()["plan"])[0], "user_flows": ["3"]}
     assert "user_flows names outcome 3, which the intent doesn't have" in planfit.problems(intent, plan, 0.2, proj.policy.budget)
-    from parallax import pilot as p, lifecycle
+    from parallax import pilot as p
     tid = p.intake(proj, "x")["task"]
     d = flows_docs()
     d["intent"] = intent
@@ -350,7 +352,7 @@ def test_plans_without_the_field_still_read():
 
 def test_the_testers_limit_is_its_reserve_and_it_stops_there(proj, monkeypatch):
     """The cap keeps max_usd for the tester, and the tester may spend max_usd: the same number."""
-    from parallax import pilot as p, lifecycle
+    from parallax import pilot as p
     from parallax.agents import claude
 
     class Broke(FakeTester):  # what the SDK does at max_budget_usd: stops, with nothing written
@@ -372,7 +374,6 @@ def test_the_testers_limit_is_its_reserve_and_it_stops_there(proj, monkeypatch):
 
 
 def test_a_tester_that_reaches_the_cap_stops_the_task_and_nothing_else_runs(proj, monkeypatch):
-    from parallax import lifecycle
     checker = FakeChecker()
     tester = FakeTester(cost=5.0)  # far past what's left of the cap
     monkeypatch.setattr(uitest, "TESTER", tester)

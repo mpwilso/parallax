@@ -83,7 +83,7 @@ def kinds(proj, kind):
 # intent new and the small gate -------------------------------------------------------------
 
 def test_drafting_writes_intent_and_plan_for_a_small_task(proj, monkeypatch, capsys):
-    """Drafting itself; `parallax do` (M12) is what runs it now. See test_m12."""
+    """Drafting itself; `parallax do` (M12) is what runs it now. See test_pilot.py."""
     drafter = FakeDrafter(docs())
     tid = lifecycle.new_intent(proj, WANT, drafter)["task"]
     folder = proj.root / "docs" / "tasks" / tid

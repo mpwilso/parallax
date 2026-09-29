@@ -7,15 +7,16 @@ from pathlib import Path
 
 import pytest
 
-from fakes import FakeDrafter, ScriptedAgent
+from fakes import FakeChecker, FakeDrafter, ScriptedAgent, good_probe
 from sandboxcheck import why_not
 from parallax import approvals, build, guard, lifecycle, preflight, sandbox
+from parallax.agents.base import Finding, Review
 from parallax.agents.claude import tool_to_action
 from parallax.cli import main
-from parallax.core import POLICY_FILE, Project
+from parallax.core import POLICY_FILE, ParallaxError, Project
 from parallax.gate import Scope, host_allowed, make_permission_fn
 from parallax.build import flag_stale_runs
-from test_m8 import WANT, docs, make_key
+from test_lifecycle_gates import WANT, docs, make_key
 
 # not inside a sandbox already: a sandbox won't start nested in one (the M9 spike)
 NO_SANDBOX = why_not()  # None when the real sandbox starts here
@@ -35,10 +36,6 @@ def approved_task(proj, plan_docs=None) -> str:
 
 def kinds(proj, kind):
     return [e for e in proj.ledger.entries() if e["kind"] == kind]
-
-
-def good_probe(config, cwd, spec, env):
-    return {"written": [], "readable": [], "network": [], "env": ["HOME", "PATH"], "env_values": []}
 
 
 # the two M8 bugs --------------------------------------------------------------------------------
@@ -180,7 +177,26 @@ def test_the_builder_gets_a_scrubbed_environment():
     env = build.scrubbed_env(Path("/v"), {"HOME": "/h", "USER": "me", "LC_ALL": "C", "ANTHROPIC_API_KEY": "sk-ant-x",
                                           "GITHUB_TOKEN": "ghp_x", "AWS_SECRET_ACCESS_KEY": "x", "PATH": "/evil"})
     assert env == {"HOME": "/h", "USER": "me", "LC_ALL": "C", "PATH": "/v/bin:/usr/local/bin:/usr/bin:/bin",
-                   "VIRTUAL_ENV": "/v", "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1", **build.QUIET_BUILD}
+                   "VIRTUAL_ENV": "/v", "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1", "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
+                   **build.QUIET_BUILD}
+
+
+def test_no_agent_keeps_memory_across_tasks(proj):
+    """THREAT_MODEL: auto-memory is off for every agent, in the environment they inherit and in the
+    maker's settings file. setting_sources=[] alone doesn't switch it off."""
+    import ast
+    from parallax.agents import claude as adapter
+    tid = approved_task(proj)
+    p = build.prepare(proj, tid)
+    assert json.loads(p.settings.read_text())["autoMemoryEnabled"] is False
+    assert build.scrubbed_env(None)["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] == "1"  # the pilot, and every agent it starts
+    assert adapter.NO_MEMORY == {"CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"}
+    source = ast.parse(Path(adapter.__file__).read_text())
+    calls = [n for n in ast.walk(source) if isinstance(n, ast.Call) and getattr(n.func, "attr", "") == "ClaudeAgentOptions"]
+    assert len(calls) == 3  # maker and drafters, the UI tester, the checker
+    for call in calls:  # each passes an env built from NO_MEMORY
+        env = next(k.value for k in call.keywords if k.arg == "env")
+        assert "NO_MEMORY" in ast.dump(env), ast.dump(env)
 
 
 # the tool layer during a build ----------------------------------------------------------------------
@@ -228,7 +244,7 @@ def test_preflight_passes_when_nothing_gets_through(proj):
     tid = approved_task(proj)
     p = build.prepare(proj, tid)
     lines = build.run_preflight(proj, p, runner=good_probe)
-    assert all(l.ok for l in lines), lines
+    assert all(line.ok for line in lines), lines
     out = preflight.report(lines)
     paths = len(sandbox.protected_targets(p.worktree)) + 1  # and the shared .git directory
     assert out[0].startswith(f"bash layer   0 of {paths} protected paths writable") and out[-1] == "ready to launch."
@@ -246,7 +262,7 @@ def test_preflight_passes_when_nothing_gets_through(proj):
 def test_preflight_refuses_anything_that_gets_through(proj, probe, line):
     tid = approved_task(proj)
     p = build.prepare(proj, tid)
-    lines = {l.name: l for l in build.run_preflight(proj, p, runner=probe)}
+    lines = {line.name: line for line in build.run_preflight(proj, p, runner=probe)}
     assert not lines[line].ok
     assert preflight.report(list(lines.values()))[-1] == "not ready: refusing to launch."
 
@@ -272,7 +288,7 @@ def test_preflight_against_the_real_sandbox(proj):
     (wt / ".claude").mkdir()
     p = build.prepare(proj, tid)
     lines = build.run_preflight(proj, p)
-    assert all(l.ok for l in lines), preflight.report(lines)
+    assert all(line.ok for line in lines), preflight.report(lines)
     assert subprocess.run(["git", "-C", str(wt), "status", "--porcelain"], capture_output=True, text=True).stdout == ""
     assert not list((proj.root / ".git").glob(".parallax-preflight-*"))
 
@@ -286,16 +302,67 @@ def test_preflight_against_the_real_sandbox(proj):
 
 # launch, run, stop -------------------------------------------------------------------------------------
 
-def test_cli_build_runs_preflight_then_launches(proj, monkeypatch, capsys):
+def test_preflight_runs_in_one_place_for_every_way_an_agent_can_launch(proj, monkeypatch):
+    """Every entry point ends in build.run_build, which preflights before the maker starts, and only there."""
+    from parallax import decide, pilot, ui
+    ran = []
+    real = preflight.run
+
+    def spy(project, task_id, *a, **kw):
+        ran.append(task_id)
+        return real(project, task_id, *a, **kw)
+    monkeypatch.setattr(preflight, "run", spy)
+    monkeypatch.setattr(preflight, "run_srt", good_probe)
+    spawned = []
+    monkeypatch.setattr(build, "_spawn", lambda argv, env, cwd, log: spawned.append(argv) or 4242)
+    maker = lambda left, settings: ScriptedAgent(steps=[("write", "README.md", "ok\n")])  # noqa: E731
+
+    # the launchers only spawn: none of them preflights on its own
     tid = approved_task(proj)
     monkeypatch.chdir(proj.root)
-    monkeypatch.setattr(preflight, "run_srt", lambda *a: None)
-    assert main(["build", tid]) == 1
-    assert "not ready: refusing to launch." in capsys.readouterr().out
-    assert kinds(proj, "build.started") == []
+    assert main(["build", tid]) == 0                                                  # parallax build
+    proj.ledger.append("task.stopped", "human", "", task=tid, pid=4242)
+    proj.ledger.append("build.finished", "parallax", "", task=tid, status="built")
+    assert main(["recheck", tid]) == 0                                                # parallax recheck
+    proj.ledger.append("task.stopped", "human", "", task=tid, pid=4242)
+    proj.ledger.append("stuck.raised", "parallax", "it stopped", task=tid)
+    assert decide.apply(proj, tid, "retry").startswith("checking")                     # parallax decide / the UI's decide
+    proj.ledger.append("task.stopped", "human", "", task=tid, pid=4242)
+    t2 = pilot.intake(proj, "again")["task"]                                          # parallax do / the UI's intake box
+    assert ui.act(proj, "/api/do", {"work": "and again"})["task"]                     # the UI route itself
+    assert ran == [] and [a[-1] for a in spawned] == ["build", "check", "check", "pilot", "pilot"]
+    assert all(a[-5:-3] == ["-m", "parallax.build"] for a in spawned)               # one background module for all
 
+    # the background module, in each of its modes, preflights before any maker run
+    fakes = dict(drafter_for=FakeDrafter(docs()), maker_for=maker, checker_for=FakeChecker())
+    from fakes import junit_runner
+    assert build.run_mode(proj, tid, "build", fakes["drafter_for"], maker, fakes["checker_for"],
+                          test_runner=junit_runner(), preflight_runner=good_probe) == "ready"
+    assert ran == [tid]
+    assert build.run_mode(proj, t2, "pilot", fakes["drafter_for"], maker, fakes["checker_for"],
+                          test_runner=junit_runner(), preflight_runner=good_probe) == "ready"
+    assert ran == [tid, t2]
+    entries = proj.ledger.entries()
+    for task in (tid, t2):  # and it comes before the maker, every time
+        mine = [e["kind"] for e in entries if e["data"].get("task") == task]
+        assert mine.index("preflight.recorded") < mine.index("maker.started")
+    # a rework is a maker run too
+    proj.ledger.append("task.redraft", "human", "again", task=tid)
+    checker = FakeChecker(reviews=[Review("fail", [Finding("blocker", "README.md:1", "wrong")], "nothing"), Review("pass")])
+    assert build.run_mode(proj, tid, "pilot", fakes["drafter_for"], maker, checker,
+                          test_runner=junit_runner(), preflight_runner=good_probe) == "ready"
+    assert ran == [tid, t2, tid, tid]
+    # and by hand, the same module: a failing preflight means no maker, and it comes to you
+    proj.ledger.append("task.redraft", "human", "once more", task=tid)
+    assert build.run_mode(proj, tid, "pilot", fakes["drafter_for"], maker, FakeChecker(),
+                          test_runner=junit_runner(), preflight_runner=lambda *a: None) == "stuck"
+    assert proj.inbox()[-1]["reason"] == "preflight failed, so the build didn't launch"
+
+
+def test_cli_build_launches_the_builder_in_the_background(proj, monkeypatch, capsys):
+    tid = approved_task(proj)
+    monkeypatch.chdir(proj.root)
     spawned = []
-    monkeypatch.setattr(preflight, "run_srt", good_probe)
     monkeypatch.setattr(build, "_spawn", lambda argv, env, cwd, log: spawned.append((argv, env)) or 4242)
     assert main(["build", tid]) == 0
     assert capsys.readouterr().out == f"building {tid}, estimated budget $1.80. parallax stop ends it.\n"  # drafting cost 0.2
@@ -331,7 +398,7 @@ def test_the_builder_runs_the_maker_and_records_the_outcome(proj):
 def test_the_builder_reports_what_went_wrong(proj, steps, summary, status):
     tid = approved_task(proj)
     agent = ScriptedAgent(steps=steps, summary=summary, status="gave_up" if summary.startswith("blocked") else "done")
-    assert build.run_build(proj, tid, lambda left, settings: agent) == status
+    assert build.run_build(proj, tid, lambda left, settings: agent, preflight_runner=good_probe) == status
     [item] = proj.inbox()  # either way, it's waiting on you now
     assert item["kind"] == ("disagreement.raised" if status == "disputed" else "stuck.raised")
 
@@ -349,10 +416,43 @@ def test_stop_ends_every_running_build_and_records_it(proj, capsys, monkeypatch)
     assert capsys.readouterr().out == "nothing is running.\n"
 
 
-def test_a_builder_that_died_is_flagged_right_away(proj):
-    tid = approved_task(proj)
+def dead_pid():
     proc = subprocess.Popen([sys.executable, "-c", "pass"])
     proc.wait()
-    proj.ledger.append("build.started", "parallax", "", task=tid, pid=proc.pid)
+    return proc.pid
+
+
+def test_a_builder_that_died_with_no_progress_is_started_again_once(proj, monkeypatch):
+    spawned = []
+    monkeypatch.setattr(build, "_spawn", lambda argv, env, cwd, log: spawned.append(argv) or 4242)
+    tid = approved_task(proj)
+    proj.ledger.append("build.started", "parallax", "", task=tid, pid=dead_pid(), mode="build")
+    proj.ledger.append("maker.started", "parallax", "", task=tid, stage="build")
+    assert flag_stale_runs(proj) == []  # not flagged: retried, recorded
+    [retry] = kinds(proj, "task.retried")
+    assert retry["actor"] == "parallax" and "started again once" in retry["reason"]
+    assert kinds(proj, "build.died") and spawned[-1][-1] == "build" and proj.task(tid)["status"] == "running"
+    assert not proj.inbox()
+
+    proj.ledger.append("build.started", "parallax", "", task=tid, pid=dead_pid(), mode="build")  # dies again
+    proj.ledger.append("maker.started", "parallax", "", task=tid, stage="build")
+    assert flag_stale_runs(proj) == [tid]  # the second time comes to you
+    assert proj.task(tid)["status"] == "stuck" and len(kinds(proj, "task.retried")) == 1
+
+
+def test_a_builder_that_died_leaving_work_is_flagged_right_away(proj):
+    tid = approved_task(proj)
+    (Path(proj.task(tid)["worktree"]) / "README.md").write_text("half done\n")
+    proj.ledger.append("build.started", "parallax", "", task=tid, pid=dead_pid(), mode="build")
+    proj.ledger.append("maker.started", "parallax", "", task=tid, stage="build")
     assert flag_stale_runs(proj) == [tid]
-    assert proj.task(tid)["status"] == "stuck"
+    assert proj.task(tid)["status"] == "stuck" and not kinds(proj, "task.retried")
+
+
+@pytest.mark.parametrize("folder", [lambda: str(approvals.key_path().parent), lambda: "~/.claude"])
+def test_no_plan_can_read_the_approval_key_or_your_login(proj, folder):
+    plan = docs()["plan"].replace("outside_reads = []", f'outside_reads = ["{folder()}/x"]')
+    tid = approved_task(proj, {**docs(), "plan": plan})
+    with pytest.raises(ParallaxError, match="approval key or Claude login"):
+        build.prepare(proj, tid)
+    assert sandbox.refused_reads(["/opt/data"]) == []

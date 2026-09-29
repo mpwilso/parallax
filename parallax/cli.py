@@ -24,7 +24,7 @@ start here:
   parallax stats                        how many touches each task took. the target is 1
   parallax ui                           the same, in your browser
 
-setup: parallax doctor, init. power use: diff, stop, approve, preflight, build, recheck, lint, log, verify, eval.
+setup: parallax doctor, init. power use: diff, stop, approve, preflight, build, recheck, lint, log, verify.
 `parallax <command> -h` for details.
 """
 
@@ -108,7 +108,7 @@ def _run(args) -> int:
         return _lint(Path(args.file), cwd)
 
     if args.cmd == "init":
-        proj = Project.init(cwd)
+        proj = Project.init(cwd, confirm_setup=_confirm_setup)
         print(f"initialized parallax in {proj.root}")
         print("  parallax.policy.toml  what agents may do. anything unlisted is denied.")
         print("  REVIEW.md             how the blind checker reviews, and what blocks ready. you own it.")
@@ -163,14 +163,16 @@ def _run(args) -> int:
     if args.cmd in ("preflight", "build", "recheck") and proj.tasks().get(args.task, {}).get("intent"):
         proj.ledger.append("human.command", "human", f"parallax {args.cmd}", task=args.task)  # a touch, for stats
 
-    if args.cmd in ("preflight", "build"):
+    if args.cmd == "preflight":
         from . import build, preflight
+        lines = preflight.report(build.run_preflight(proj, build.prepare(proj, args.task)))
+        print("\n".join(lines))
+        return 0 if lines[-1].startswith("ready") else 1
+
+    if args.cmd == "build":
+        from . import build
         p = build.prepare(proj, args.task)
-        lines = preflight.report(build.run_preflight(proj, p))
-        if args.cmd == "preflight" or not lines[-1].startswith("ready"):
-            print("\n".join(lines))
-            return 0 if lines[-1].startswith("ready") else 1
-        build.launch(proj, p)
+        build.launch(proj, p)  # the builder preflights first, whoever starts it
         print(f"building {args.task}, estimated budget ${p.left:.2f}. parallax stop ends it.")
         return 0
 
@@ -345,6 +347,16 @@ def _lint(path: Path, cwd: Path) -> int:
     if not problems:
         print("ok")
     return 1 if problems else 0
+
+
+def _confirm_setup(command: str) -> bool:
+    """A repo's example policy may carry a [build] setup command, which runs as you. Never adopted unasked."""
+    print("the repo's example policy has a [build] setup command. it would run as you, on the base commit, before each build:")
+    print(f"  {command}")
+    if not sys.stdin.isatty():
+        print("not an interactive terminal, so it's left out. set [build] setup in parallax.policy.toml yourself if you want it.")
+        return False
+    return input("keep it? [y/N] ").strip().lower() in ("y", "yes")
 
 
 def _doctor() -> int:

@@ -127,6 +127,17 @@ def remove_leftovers(worktree: Path, before: set[str] = frozenset()) -> list[str
     return removed
 
 
+def remove_files(worktree: Path, rels: list[str]) -> None:
+    """Remove these worktree files and any intent-to-add entry for them."""
+    for rel in rels:
+        path = Path(worktree) / rel
+        if path.is_file() and not path.is_symlink():
+            path.unlink()
+    if rels:
+        subprocess.run(["git", "-C", str(worktree), "rm", "--cached", "-q", "--ignore-unmatch", "--", *rels],
+                       capture_output=True)
+
+
 @dataclass
 class Rules:
     """The Bash layer: what sandboxed commands may read, write and reach."""
@@ -145,6 +156,7 @@ class Rules:
 
     def claude_settings(self) -> dict:
         return {
+            "autoMemoryEnabled": False,  # no agent keeps memory across tasks (setting_sources=[] doesn't cover it)
             "sandbox": {
                 "enabled": True,
                 "failIfUnavailable": True,
@@ -158,6 +170,17 @@ class Rules:
             # the tool layer is Parallax's hook; these deny rules are a second copy of it ("//" = absolute)
             "permissions": {"deny": [f"Edit(/{p}{tail})" for p in self.deny_write for tail in ("", "/**")]},
         }
+
+
+def never_read() -> tuple[Path, ...]:
+    """Folders no plan can open for reading: the approval key's, and Claude's own (its login)."""
+    return (key_path().parent, Path.home() / ".claude")
+
+
+def refused_reads(reads: list[str]) -> list[str]:
+    """The plan's outside reads that fall inside a never-readable folder."""
+    from .guard import _inside
+    return [r for r in reads if any(_inside(Path(r), root) is not None for root in never_read())]
 
 
 def rules(worktree: Path, targets: list[Path], *, git_dir: Path | None, venv: Path | None,

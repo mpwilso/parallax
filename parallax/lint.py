@@ -29,6 +29,7 @@ HEADER_WORDS, BODY_WORDS = 40, 150
 EM_DASH = "\u2014"
 
 DECIDE = re.compile(r"^Decide: .+[.?] Recommend: .+\. Blocks: .+\.$")
+WHOSE = re.compile(r"^(Whose call|Why a human): .+\.$")  # the two lines under every question
 FILE_LINE = re.compile(r"([\w./-]+\.\w+):(\d+)")
 LEDGER_ID = re.compile(r"\bledger ([0-9a-f]{8})\b")
 LIST_ITEM = re.compile(r"^\s*(?:[-*]|\d+\.)\s+(.*)$")
@@ -96,7 +97,7 @@ def _header(lines: list[str], keys: tuple[str, ...]) -> tuple[dict[str, str], in
 
 
 def _words(lines: list[str]) -> int:
-    return sum(len(_clean(l).split()) for l in lines)
+    return sum(len(_clean(line).split()) for line in lines)
 
 
 def _sections(lines: list[str], start: int, bare: bool = False) -> list[tuple[str, int]]:
@@ -173,8 +174,9 @@ def lint_report(text: str, *, revisit: bool = False, root: Path | None = None,
     for j, line in _section_lines(lines, sections, "Decisions"):
         m = LIST_ITEM.match(line)
         body = (m.group(1) if m else line).strip()
-        if body and not DECIDE.match(body):
-            problems.append((j + 1, "decision line must read: Decide: <question>. Recommend: <option>. Blocks: <what, or nothing>."))
+        if body and not DECIDE.match(body) and not WHOSE.match(body):
+            problems.append((j + 1, "decision line must read: Decide: <question>. Recommend: <option>. Blocks: <what, or nothing>. "
+                                    "or Whose call: <who>. or Why a human: <why>."))
     for j, line in _section_lines(lines, sections, "Found"):
         m = LIST_ITEM.match(line)
         if m and not _cites(m.group(1), root, ledger_ids):
@@ -182,14 +184,14 @@ def lint_report(text: str, *, revisit: bool = False, root: Path | None = None,
 
     details = next((i for s, i in sections if s == "Details"), len(lines))
     heads = {i for _, i in sections}
-    body = [l for i, l in enumerate(lines[body_start:details], body_start) if i not in heads]
+    body = [line for i, line in enumerate(lines[body_start:details], body_start) if i not in heads]
     if _words(body) >= BODY_WORDS:
         problems.append((body_start + 1, f"body is {_words(body)} words; keep it under {BODY_WORDS}, move depth to Details"))
     return sorted(problems)
 
 
 def _em_dashes(lines: list[str]) -> list[Problem]:
-    return [(i + 1, "no em dashes") for i, l in enumerate(lines) if EM_DASH in l]
+    return [(i + 1, "no em dashes") for i, line in enumerate(lines) if EM_DASH in line]
 
 
 def intent_fields(text: str) -> dict[str, str]:
@@ -401,7 +403,7 @@ def normalize(text: str, doc: str | None = None) -> str:
     m = re.fullmatch(r"\s*```(?:markdown|md)?\s*\n(.*)\n```\s*", text, re.S)
     text = m.group(1) if m else text
     text = text.replace(" " + EM_DASH + " ", ", ").replace(EM_DASH, ", ")
-    lines = [l.rstrip() for l in text.strip().splitlines()]
+    lines = [line.rstrip() for line in text.strip().splitlines()]
     keys = LIFECYCLE_HEADER if doc in LIFECYCLE_DOCS else HEADER
     head, rest, seen = {}, [], 0
     for i, line in enumerate(lines):
@@ -446,7 +448,7 @@ def fit(text: str, root: Path | None = None, ledger_ids: set[str] | None = None)
         msg = problems[0][1]
         n = problems[0][0] - 1
         if msg.startswith("header is"):
-            fields = [(i, _HEAD.match(l)) for i, l in enumerate(lines[:4])]
+            fields = [(i, _HEAD.match(line)) for i, line in enumerate(lines[:4])]
             i, hm = max(((i, hm) for i, hm in fields if hm), key=lambda x: len(x[1].group(2).split()))
             lines[i] = f"{hm.group(1)}: {_truncate(hm.group(2), len(hm.group(2).split()) - 4)}"
             fixed.append("shortened the header")
@@ -454,24 +456,24 @@ def fit(text: str, root: Path | None = None, ledger_ids: set[str] | None = None)
             lines[n] = lines[n] + " (Unverified)"
             fixed.append("labeled an uncited item Unverified")
         elif msg.startswith("body is"):
-            found = [i for i, l in enumerate(lines) if l.strip() == "Found" or l.strip() == "## Found"]
+            found = [i for i, line in enumerate(lines) if line.strip() == "Found" or line.strip() == "## Found"]
             items = [i for i in range(found[0] + 1, len(lines)) if LIST_ITEM.match(lines[i])] if found else []
             if not items:
                 break
             moved = lines.pop(items[-1])
-            if not any(l.strip() in ("Details", "## Details") for l in lines):
+            if not any(line.strip() in ("Details", "## Details") for line in lines):
                 lines.append("Details")
             lines.append(moved)
             fixed.append("moved a Found item to Details")
         elif "one sentence" in msg:
-            i = next(i for i, l in enumerate(lines[:4]) if l.startswith("Bottom line:"))
+            i = next(i for i, row in enumerate(lines[:4]) if row.startswith("Bottom line:"))
             lines[i] = "Bottom line: " + one_sentence(lines[i][len("Bottom line:"):])
             fixed.append("made the bottom line one sentence")
         else:
             break
         text = "\n".join(lines)
-    head = [l for l in text.splitlines()[:4]]
-    body = [f"- {l.lstrip('- ')}" for l in text.splitlines()[4:] if l.strip() and l.strip() not in SECTIONS]
+    head = [line for line in text.splitlines()[:4]]
+    body = [f"- {line.lstrip('- ')}" for line in text.splitlines()[4:] if line.strip() and line.strip() not in SECTIONS]
     fallback = "\n".join(head + (["Details"] + body if body else []))
     if lint_report(fallback, root=root, ledger_ids=ledger_ids):
         fallback = report("FYI", "Parallax couldn't fit this report into its own shape.", "the report itself",

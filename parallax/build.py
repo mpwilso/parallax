@@ -58,6 +58,7 @@ def scrubbed_env(venv: Path | None, environ: dict | None = None, path: str | Non
     if venv:
         env["VIRTUAL_ENV"] = str(venv)
     env["CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"] = "1"
+    env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"  # no agent keeps memory across tasks
     env.update(QUIET_BUILD)
     return env
 
@@ -88,9 +89,11 @@ def _setup_venv(project: Project, task_id: str, worktree: Path, home: Path) -> P
     shutil.rmtree(base, ignore_errors=True)
     tree.export(worktree, project.task(task_id)["base"], base)
     env = {**os.environ, "PARALLAX_VENV": str(venv), "PARALLAX_WORKTREE": str(base)}
+    started = time.monotonic()
     out = subprocess.run(command, shell=True, cwd=base, env=env, capture_output=True, text=True)
     shutil.rmtree(base, ignore_errors=True)
-    project.ledger.append("setup.ran", "parallax", command, task=task_id, exit=out.returncode)
+    project.ledger.append("setup.ran", "parallax", command, task=task_id, exit=out.returncode,
+                          seconds=round(time.monotonic() - started, 1))
     if out.returncode != 0:
         tail = (out.stderr or out.stdout).strip().splitlines()[-1:] or ["no output"]
         raise ParallaxError(f"the [build] setup command failed: {tail[0]}")
@@ -126,6 +129,10 @@ def prepare(project: Project, task_id: str, setup: bool = True, launching: bool 
     os.chmod(home, 0o700)
     venv = _setup_venv(project, task_id, wt, home) if setup else (home / "venv" if (home / "venv").exists() else None)
     reads = [str(Path(r).expanduser()) for r in plan["outside_reads"]]
+    refused = sandbox.refused_reads(reads)
+    if refused:  # invariant 1: the plan can open the boundary, never the key or your login
+        raise ParallaxError(f"the plan's outside_reads include {refused[0]}, which holds your approval key or "
+                            "Claude login. no plan can read it. reject the task with a reason")
     scope = Scope(reads=tuple(Path(p) for p in reads) + ((venv,) if venv else ()), domains=tuple(plan["domains"]))
     targets = sandbox.protected_targets(wt)
     sandbox.prepare_mount_points(targets)
@@ -157,13 +164,20 @@ def launch(project: Project, p: Prepared, spawn: Callable | None = None, mode: s
     return pid
 
 
-def run_build(project: Project, task_id: str, maker_for: Callable[[float, str], Agent], extra: str = "") -> str:
-    """Run the maker once, then record what came of it. extra: what a rework must fix."""
+def run_build(project: Project, task_id: str, maker_for: Callable[[float, str], Agent], extra: str = "",
+              preflight_runner=None) -> str:
+    """Run the maker once, then record what came of it. extra: what a rework must fix.
+
+    Preflight runs here, and only here: every maker launch, whoever started it, tests both layers
+    with the build's own rules first. A failure comes to you; nothing launches."""
     if inside_task(project.root):
         raise ParallaxError("tasks can't start builds")
     p = prepare(project, task_id, setup=False, launching=False)
     if p.left <= 0:
         return costs.stop_at_cap(project, task_id, p.cap)
+    if not all(line.ok for line in run_preflight(project, p, preflight_runner)):
+        project.ledger.append("stuck.raised", "parallax", "preflight failed, so the build didn't launch", task=task_id)
+        return "stuck"
     env = {TASK_ENV: task_id, ROOT_ENV: str(project.root), **QUIET_BUILD,
            "PATH": (f"{p.venv}/bin:" if p.venv else "") + SYSTEM_PATH}  # set here, whatever the pilot's PATH
     if p.venv:
@@ -187,6 +201,8 @@ def run_build(project: Project, task_id: str, maker_for: Callable[[float, str], 
         status = "stuck"
     elif costs.budget(project, task_id, p.plan)[1] <= 0 or "budget cap" in (res.summary or ""):
         status = "over budget"  # recorded below, and it comes to you
+    elif res.status == "error" and "turn cap" in (res.summary or ""):
+        status = "out of turns"  # the same way: recorded, and it comes to you
     elif res.status == "conflict":
         status = "disputed"
         project.ledger.append("disagreement.raised", "parallax",
@@ -200,6 +216,10 @@ def run_build(project: Project, task_id: str, maker_for: Callable[[float, str], 
     project.ledger.append("build.finished", "parallax", first, task=task_id, status=status)
     if status == "over budget":
         return costs.stop_at_cap(project, task_id, p.cap, _doing(extra))
+    if status == "out of turns":
+        why = first + (f" while {_doing(extra)}" if extra else "")
+        project.ledger.append("stuck.raised", "parallax", why, task=task_id, turns=True)
+        return "stuck"
     if status == "blocked":  # a refusal made the task impossible: it comes to you now, not after rework
         project.ledger.append("stuck.raised", "parallax", first, task=task_id)
     return status
@@ -218,10 +238,12 @@ def _make(project: Project, task_id: str, maker: Agent, goal: str, stage: str, f
     return res
 
 
-def flag_stale_runs(project: Project, now: datetime | None = None) -> list[str]:
+def flag_stale_runs(project: Project, now: datetime | None = None, spawn: Callable | None = None) -> list[str]:
     """A running task gone quiet, with nothing waiting on you, may have died. Flag it stuck.
 
-    Runs on every command, in place of a pulse."""
+    A build process that died leaving no new work is started again once, recorded; a second
+    death, or one that left work behind, comes to you. Runs on every command and every board
+    request, in place of a pulse. Returns the tasks flagged stuck."""
     now = now or datetime.now(timezone.utc)
     minutes = project.policy.limits["stale_minutes"]
     waiting_on_you = {e["data"].get("task") for e in project.inbox()}
@@ -232,6 +254,13 @@ def flag_stale_runs(project: Project, now: datetime | None = None) -> list[str]:
             continue
         if tid in builds and not _alive(builds[tid]):
             why = "the build process ended without finishing"
+            project.ledger.append("build.died", "parallax", why, task=tid, pid=builds[tid])
+            if _no_progress(project, t) and not _retried(project, tid):
+                from .pilot import resume
+                project.ledger.append("task.retried", "parallax",
+                                      why + " and left no new work, so it was started again once", task=tid)
+                resume(project, tid, spawn)
+                continue
         elif datetime.fromisoformat(t["last"]) < now - timedelta(minutes=minutes):
             why = f"no activity for {minutes} minutes, the run may have died"
         else:
@@ -241,12 +270,35 @@ def flag_stale_runs(project: Project, now: datetime | None = None) -> list[str]:
     return flagged
 
 
+def _retried(project: Project, task_id: str) -> bool:
+    from .status import attempt
+    return any(e["kind"] == "task.retried" for e in attempt(project.ledger.entries(), task_id))
+
+
+def _no_progress(project: Project, t: dict) -> bool:
+    """Nothing new in the worktree since the last check (or since the base, before any check)."""
+    from . import tree
+    from .status import attempt
+    wt = Path(t["worktree"])
+    if not wt.is_dir():
+        return True
+    staged = [e for e in attempt(project.ledger.entries(), t["task"]) if e["kind"] == "check.staged"]
+    home = sandbox.task_home(project.root, t["task"])
+    home.mkdir(parents=True, exist_ok=True)
+    now = tree.stage(wt, t["base"], home / "stale.index").tree
+    if staged:
+        return now == staged[-1]["data"]["tree"]
+    base_tree = subprocess.run(["git", "-C", str(wt), "rev-parse", f"{t['base']}^{{tree}}"],
+                               capture_output=True, text=True).stdout.strip()
+    return now == base_tree
+
+
 def _doing(extra: str) -> str:
     """A short 'what the rework was fixing', from the rework's instructions."""
     if not extra:
         return ""
     from .check import summarize
-    return "rework was fixing " + summarize([l[2:] for l in extra.splitlines() if l.startswith("- ")])
+    return "rework was fixing " + summarize([line[2:] for line in extra.splitlines() if line.startswith("- ")])
 
 
 def _alive(pid: int) -> bool:
@@ -268,7 +320,7 @@ def running_builds(project: Project) -> dict[str, int]:
         if e["kind"] == "build.started":
             out[tid] = e["data"]["pid"]
             legacy.discard(tid) if "mode" in e["data"] else legacy.add(tid)
-        elif e["kind"] in ("builder.finished", "task.stopped") or (e["kind"] == "build.finished" and tid in legacy):
+        elif e["kind"] in ("builder.finished", "task.stopped", "build.died") or (e["kind"] == "build.finished" and tid in legacy):
             out.pop(tid, None)
     return out
 
@@ -296,9 +348,9 @@ def stop(project: Project, grace: float = 3.0) -> list[str]:
     return stopped
 
 
-def _maker(left: float, settings: str) -> Agent:
+def _maker(left: float, settings: str, turns: int | None = None) -> Agent:
     from .agents.claude import ClaudeAgent
-    return ClaudeAgent(max_budget_usd=left, settings=settings)
+    return ClaudeAgent(max_budget_usd=left, settings=settings, max_turns=turns)
 
 
 def _drafter(cap: float, model: str | None = None) -> Agent:
@@ -329,7 +381,7 @@ def run_mode(project: Project, task_id: str, mode: str, drafter_for, maker_for, 
             status = run(project, task_id, drafter_for, maker_for, checker_for,
                          test_runner=test_runner, preflight_runner=preflight_runner)
         else:
-            status = run_build(project, task_id, maker_for) if mode == "build" else "built"
+            status = run_build(project, task_id, maker_for, preflight_runner=preflight_runner) if mode == "build" else "built"
             if status == "built":
                 status = run_check(project, task_id, checker_for, maker_for,
                                    test_runner=test_runner, preflight_runner=preflight_runner)
@@ -348,7 +400,8 @@ def main(argv: list[str]) -> int:
     root, task_id, mode = argv
     project = Project(Path(root))
     drafter = lambda cap: _drafter(cap, project.policy.draft["model"])  # noqa: E731  the policy's model
-    status = run_mode(project, task_id, mode, drafter, _maker, _checker)
+    maker = lambda left, settings: _maker(left, settings, project.policy.limits["maker_turns"])  # noqa: E731
+    status = run_mode(project, task_id, mode, drafter, maker, _checker)
     print(f"{mode} {task_id}: {status}", flush=True)
     return 0
 

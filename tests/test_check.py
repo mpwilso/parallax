@@ -5,11 +5,11 @@ import pytest
 
 from fakes import FakeChecker, FakeDrafter, ScriptedAgent, blocker, good_probe, junit_runner
 from sandboxcheck import why_not
-from parallax import approvals, build, check, lifecycle, lint, review, show, testrun, tree
+from parallax import approvals, build, check, lifecycle, lint, pilot, review, sandbox, show, testrun, tree
 from parallax.agents.base import Finding, Review
 from parallax.cli import main
 from parallax.core import Project
-from test_m8 import docs, make_key
+from test_lifecycle_gates import WANT, docs, make_key
 
 GIT = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
 NO_SANDBOX = why_not()  # None when the real sandbox starts here
@@ -35,7 +35,7 @@ def approved(repo, plan_edit=None, base_files=None):
 
 def built(proj, tid, steps):
     maker = ScriptedAgent(steps=steps)
-    assert build.run_build(proj, tid, lambda left, settings: maker) == "built"
+    assert build.run_build(proj, tid, lambda left, settings: maker, preflight_runner=good_probe) == "built"
     return maker
 
 
@@ -132,10 +132,25 @@ def test_the_test_harness_comes_from_the_base_branch(repo):
 
 def test_tests_that_cant_run_come_to_you_not_the_maker(repo):
     proj, tid, wt = approved(repo)
-    maker = built(proj, tid, [("write", "README.md", "ok\n")])
+    (wt / "tests").mkdir()
+    maker = built(proj, tid, [("write", "README.md", "ok\n"), ("write", "tests/test_readme.py", "def test(): pass\n")])
     assert run(proj, tid, maker, runner=junit_runner(exit_code=4)) == "disputed"
     assert len(maker.goals) == 1 and not kinds(proj, "rework.started")
     assert "couldn't run" in proj.inbox()[0]["reason"]
+
+
+def test_a_missing_planned_test_file_is_a_conflict_that_names_it(repo):
+    """003876: the rework deleted the plan's test file, and all the card said was that tests couldn't run."""
+    from parallax import decide
+    proj, tid, wt = approved(repo)
+    maker = built(proj, tid, [("write", "README.md", "ok\n")])  # never writes tests/test_readme.py
+    assert run(proj, tid, maker, runner=junit_runner(exit_code=4)) == "disputed"
+    [item] = proj.inbox()
+    assert item["data"]["stage"] == "conflict" and item["data"]["missing"] == ["tests/test_readme.py"]
+    assert item["reason"] == "the plan's test file tests/test_readme.py is missing from the change, but your approved plan lists it"
+    dec = decide.decision(proj, tid)
+    assert dec.kind == "conflict" and "tests/test_readme.py is missing" in dec.question
+    assert [o.name for o in dec.options] == ["reject", "drop"] and dec.recommend == "reject"
 
 
 def test_failing_tests_go_back_to_the_maker_with_what_failed(repo):
@@ -201,7 +216,31 @@ def test_show_at_ready_is_the_plans_shape(repo, monkeypatch, capsys):
         f"- the work: fixing the README install steps (docs/tasks/{tid}/intent.md:1)\n"
         f"- changed: README.md, 1 line; parallax diff {tid} shows it (ledger {kinds(proj, 'check.staged')[-1]['id']})\n"
         f"- tests: 3 of 3 passed (ledger {t['id']})\n"
-        f"- checker: pass, no findings (ledger {v['id']})\n")
+        f"- checker: pass, no findings (ledger {v['id']})\n"
+        f"- outcome 1: tests/test_readme.py (ledger {t['id']})\n"
+        f"- preflight: passed (ledger {kinds(proj, 'preflight.recorded')[-1]['id']})\n"
+        f"- no harness files were reset (ledger {t['id']})\n")
+
+
+def test_the_ready_card_says_which_outcome_no_test_exercises(repo):
+    """Code only: the plan's covers against the JUnit counts. A cover that never ran is said plainly."""
+    make_key()
+    proj = Project.init(repo)
+    d = docs()
+    d["intent"] = d["intent"].replace("1. A new user on WSL can follow them.\n", "1. A new user on WSL can follow them.\n2. The doctor sample matches.\n")
+    d["plan"] = d["plan"].replace('covers = { "1" = ["tests/test_readme.py"] }',
+                                  'covers = { "1" = ["tests/test_readme.py"], "2" = ["tests/test_other.py"] }')
+    tid = lifecycle.new_intent(proj, "fix the readme", FakeDrafter(d))["task"]
+    lifecycle.approve(proj, tid)
+    maker = built(proj, tid, [("write", "README.md", "ok\n")])
+    assert run(proj, tid, maker, runner=junit_runner({"tests/test_readme.py": (3, 0)})) == "ready"
+    card = show.report(proj, tid)
+    assert "- outcome 1: tests/test_readme.py (ledger " in card
+    assert "- outcome 2: no test exercises this outcome (ledger " in card
+    t = kinds(proj, "tests.recorded")[-1]
+    assert f"- no harness files were reset (ledger {t['id']})" in card
+    ids = {e["id"] for e in proj.ledger.entries()}
+    assert lint.lint_report(card, root=proj.root, ledger_ids=ids) == []
 
 
 def test_show_after_rework_says_what_changed_and_carries_the_checkers_gaps(repo):
@@ -288,7 +327,7 @@ def test_a_task_stops_at_its_cap(repo):
     proj, tid, wt = approved(repo)  # drafting cost 0.2 of the 2.00 cap
     checker = FakeChecker()
     maker = ScriptedAgent(steps=[("write", "README.md", "ok\n")], cost=1.9)
-    assert build.run_build(proj, tid, lambda left, settings: maker) == "stuck"
+    assert build.run_build(proj, tid, lambda left, settings: maker, preflight_runner=good_probe) == "stuck"
     [item] = proj.inbox()
     assert item["reason"] == "the budget cap ran out ($2.10 of $2.00 estimated)" and item["data"]["budget"]
     assert proj.task(tid)["status"] == "stuck" and checker.briefs == []
@@ -300,7 +339,7 @@ def test_the_makers_budget_is_what_is_left_of_the_cap(repo, monkeypatch):
     proj, tid, wt = approved(repo)  # drafting cost 0.2 of the 2.00 cap
     seen = []
     maker = ScriptedAgent(steps=[("write", "README.md", "ok\n")])
-    build.run_build(proj, tid, lambda left, settings: seen.append(left) or maker)
+    build.run_build(proj, tid, lambda left, settings: seen.append(left) or maker, preflight_runner=good_probe)
     assert seen == [pytest.approx(1.8)]
     from parallax.agents import claude
     monkeypatch.setattr(claude, "_load_sdk", lambda: object())
@@ -322,7 +361,7 @@ def test_every_call_gets_what_is_left_as_its_ceiling(repo):
     proj, tid, wt = approved(repo)
     lefts = {}
     maker = ScriptedAgent(steps=[("write", "README.md", "ok\n")], cost=0.5)
-    build.run_build(proj, tid, lambda left, settings: lefts.setdefault("maker", left) and maker)
+    build.run_build(proj, tid, lambda left, settings: lefts.setdefault("maker", left) and maker, preflight_runner=good_probe)
     checker = FakeChecker()
     check.run_check(proj, tid, lambda left, model: lefts.setdefault("checker", left) and checker,
                     lambda left, settings: maker, test_runner=junit_runner(), preflight_runner=good_probe)
@@ -332,7 +371,7 @@ def test_every_call_gets_what_is_left_as_its_ceiling(repo):
 def test_the_sdk_stopping_at_its_budget_comes_to_you(repo):
     proj, tid, wt = approved(repo)
     maker = ScriptedAgent(status="error", summary="stopped at the budget cap ($1.8)", cost=0.1)
-    assert build.run_build(proj, tid, lambda left, settings: maker) == "stuck"
+    assert build.run_build(proj, tid, lambda left, settings: maker, preflight_runner=good_probe) == "stuck"
     assert "budget cap ran out" in proj.inbox()[0]["reason"]
 
 
@@ -407,7 +446,8 @@ def test_a_rework_that_drops_an_approved_file_comes_to_you(repo):
 def test_no_report_means_the_tests_didnt_run_not_that_they_failed(repo):
     """python -m pytest without pytest exits 1, like a failure. Without a report it's not the maker's to fix."""
     proj, tid, wt = approved(repo)
-    maker = built(proj, tid, [("write", "README.md", "ok\n")])
+    (wt / "tests").mkdir()
+    maker = built(proj, tid, [("write", "README.md", "ok\n"), ("write", "tests/test_readme.py", "def test(): pass\n")])
     assert run(proj, tid, maker, runner=lambda c, cwd, cmd, env: (1, "No module named pytest")) == "disputed"
     assert len(maker.goals) == 1 and "couldn't run" in proj.inbox()[0]["reason"]
 
@@ -444,8 +484,93 @@ def test_the_card_leads_with_what_matters(repo):
     card = show.report(proj, tid)
     lines = card.splitlines()
     assert lines[1].startswith("Bottom line: Needs you: the budget cap ran out")
-    [reason] = [l for l in lines if l.startswith("- the budget cap ran out")]
+    [reason] = [line for line in lines if line.startswith("- the budget cap ran out")]
     assert "while rework was fixing failing tests in test_a, test_b" in reason
     assert "- tests: 11 of 15 passed; failures in test_a, test_b (ledger " in card
     assert "- no failing test file is one the diff changed; they may fail without this change too" in card
     assert "test_readme" not in card.split("failures in", 1)[1].split("\n", 1)[0]
+
+
+# live in bb4040: the sandbox's empty placeholders reached the plan check, and the card led with .env -------------
+
+BB4040 = [".env", ".env.development", ".env.development.local", ".env.local", ".env.production",
+          ".env.production.local", ".env.test", ".env.test.local", ".gitmodules", ".npmrc", ".yarnrc",
+          ".yarnrc.yml", "bunfig.toml", "package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock"]
+
+
+@pytest.fixture
+def proj(repo, monkeypatch):  # bb4040's cases run the whole pilot
+    make_key()
+    monkeypatch.setattr(build, "_spawn", lambda *a: 1)
+    return Project.init(repo)
+
+
+def bb_run(proj, tid, maker, probe):
+    return build.run_mode(proj, tid, "pilot", FakeDrafter(docs()), lambda left, settings: maker, FakeChecker(),
+                          test_runner=junit_runner(), preflight_runner=probe)
+
+
+def test_placeholders_left_before_the_build_never_reach_the_plan_check(proj):
+    """The window bb4040 fell into: after the drafters' cleanup, before the build's own snapshot."""
+    tid = pilot.intake(proj, WANT)["task"]
+    wt = Path(proj.task(tid)["worktree"])
+
+    def probe(config, cwd, spec, env):  # preflight runs between drafting and the build
+        for name in BB4040:
+            (wt / name).touch()
+        return {"written": [], "readable": [], "network": [], "env": ["HOME", "PATH"], "env_values": []}
+
+    maker = ScriptedAgent(steps=[("write", "README.md", "ok\n")])
+    assert bb_run(proj, tid, maker, probe) == "ready"  # the build's guard runs parallax diff, which marks them intent-to-add
+    staged = kinds(proj, "check.staged")[-1]["data"]
+    assert staged["problems"] == [] and set(staged["files"]) <= {"README.md", "tests/test_readme.py"}
+    assert not any((wt / n).exists() for n in BB4040)
+    assert set(kinds(proj, "sandbox.cleaned")[-1]["data"]["files"]) == set(BB4040)
+    assert not proj.inbox()
+
+
+def test_a_placeholder_name_with_content_is_real_work_and_stays(proj):
+    tid = pilot.intake(proj, WANT)["task"]
+    wt = Path(proj.task(tid)["worktree"])
+    (wt / ".env").write_text("TOKEN=abc\n")
+    (wt / ".gitmodules").touch()
+    assert sandbox.remove_leftovers(wt, {".gitmodules"}) == []  # the check leaves the plan's own files
+    assert (wt / ".env").read_text() == "TOKEN=abc\n" and (wt / ".gitmodules").exists()
+
+
+def staged_with(wt, files):
+    s = tree.Staged(tree="t", base="b", diff="", files=list(files), lines=1)
+    return tree.conform(s, {"files": ["README.md"], "binaries": [], "symlinks": [], "dependencies": []}, 400)
+
+
+def test_many_findings_with_one_cause_read_as_one_line(tmp_path):
+    for name in BB4040:
+        (tmp_path / name).touch()
+    why, files = tree.describe(staged_with(tmp_path, BB4040), tmp_path)
+    assert why.startswith("17 files changed outside the plan's files, all empty (.env, .env.development and 15 more)")
+    assert "dependencies" not in why and len(files) == 17 and {f["size"] for f in files} == {0}
+
+
+@pytest.mark.parametrize("content, says", [
+    ("", ".env changed but isn't in the plan's files, and it is empty"),
+    ("SECRET=1\n", ".env looks like a secrets file and has content (9 bytes); .env changed but isn't in the plan's files"),
+])
+def test_a_secret_path_says_whether_it_has_content(tmp_path, content, says):
+    (tmp_path / ".env").write_text(content)
+    assert tree.describe(staged_with(tmp_path, [".env"]), tmp_path)[0] == says
+
+
+def test_the_card_counts_and_lists_the_rest_under_details(proj):
+    tid = pilot.intake(proj, WANT)["task"]
+    wt = Path(proj.task(tid)["worktree"])
+    for name in BB4040:
+        (wt / name).touch()
+    why, files = tree.describe(staged_with(wt, BB4040), wt)
+    proj.ledger.append("disagreement.raised", "parallax", why, task=tid, stage="scope", files=files)
+    text = show.report(proj, tid)
+    ids = {e["id"] for e in proj.ledger.entries()}
+    assert lint.lint_report(text, root=proj.root, ledger_ids=ids) == []
+    head, details = text.split("\nDetails\n", 1) if "\nDetails\n" in text else (text, "")
+    assert "Bottom line: Needs you: 17 files changed outside the plan's files, all empty" in head
+    assert "yarn.lock" not in head and all(f"{n}: not in the plan, empty" in details for n in BB4040)
+

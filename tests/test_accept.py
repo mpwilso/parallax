@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from fakes import FakeChecker, ScriptedAgent
+from fakes import FakeChecker, ScriptedAgent, good_probe
 from parallax import build, lifecycle, lint, secretscan
 from parallax.accept import accept, confirm_merges
 from parallax.agents.base import Finding, Review
 from parallax.cli import main
-from test_m10 import approved, built, kinds, run
+from test_check import approved, built, kinds, run
 
 GIT = ["git", "-c", "user.email=t@t", "-c", "user.name=Matt"]
 
@@ -20,7 +20,7 @@ def ready(repo, content="ok\n", checker=None):
     proj, tid, wt = approved(repo)
     maker = ScriptedAgent(steps=[("write", "README.md", content)])
     maker.model = "claude-opus-5"
-    assert build.run_build(proj, tid, lambda left, settings: maker) == "built"
+    assert build.run_build(proj, tid, lambda left, settings: maker, preflight_runner=good_probe) == "built"
     assert run(proj, tid, maker, checker) == "ready"
     return proj, tid, wt
 
@@ -59,8 +59,9 @@ def test_the_commit_is_exactly_the_reviewed_tree_plus_the_task_docs(repo):
     hook.chmod(0o755)
     acc = accept(proj, tid)["data"]
     reviewed = kinds(proj, "check.staged")[-1]["data"]["tree"]
-    listing = lambda treeish: git(repo, "ls-tree", "-r", treeish).stdout.splitlines()
-    ours = [l for l in listing(acc["commit"]) if f"docs/tasks/{tid}/" not in l]
+    def listing(treeish):
+        return git(repo, "ls-tree", "-r", treeish).stdout.splitlines()
+    ours = [line for line in listing(acc["commit"]) if f"docs/tasks/{tid}/" not in line]
     assert ours == listing(reviewed)
     assert git(repo, "rev-parse", f"{acc['commit']}^").stdout.strip() == proj.task(tid)["base"]
     assert not (repo / "HOOK-RAN").exists()  # commit-tree runs no hooks
@@ -167,3 +168,19 @@ def test_the_accept_commit_is_signed_when_you_have_a_key(repo, tmp_path):
     acc = accept(proj, tid)["data"]
     assert acc["signed"] is True
     assert "gpgsig" in git(repo, "cat-file", "commit", acc["commit"]).stdout
+
+
+def test_the_scan_knows_the_common_key_shapes():
+    keys = {
+        "openai-style key": "sk-proj-" + "a1" * 20,
+        "gitlab token": "glpat-" + "x" * 20,
+        "slack webhook": "https://hooks.slack.com/services/T000/B000/abc",
+        "stripe key": "sk_live_" + "a" * 24,
+        "npm token": "npm_" + "a" * 36,
+        "pypi token": "pypi-" + "A" * 60,
+        "hugging face token": "hf_" + "a" * 34,
+        "jwt": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.abcdefghijklmnop",
+    }
+    diff = "+++ b/x.py\n@@ -0,0 +1 @@\n" + "".join(f"+v = '{v}'\n" for v in keys.values())
+    assert secretscan.scan_diff(diff) == [f"x.py:{n} {k}" for n, k in enumerate(keys, start=1)]
+    assert secretscan.scan_diff("+++ b/x.py\n@@ -0,0 +1 @@\n+v = 'sk_live_short'\n") == []

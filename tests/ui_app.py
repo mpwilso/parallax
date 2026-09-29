@@ -38,7 +38,7 @@ def main(port: int) -> None:
     from parallax.accept import accept
     from parallax.agents.base import Review
     from parallax.core import Project
-    import test_m8
+    import test_lifecycle_gates as test_m8
 
     build._spawn = lambda argv, env, cwd, log: 9  # nothing runs in the background
     import random

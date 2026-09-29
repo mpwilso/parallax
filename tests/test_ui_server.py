@@ -2,6 +2,7 @@ import http.client
 import json
 import re
 import subprocess
+import sys
 import threading
 
 import pytest
@@ -10,8 +11,8 @@ from fakes import FakeChecker, FakeDrafter, ScriptedAgent, good_probe, junit_run
 from sandboxcheck import why_not
 from parallax import build, pilot, preflight, show, views
 from parallax.core import ROOT_ENV, TASK_ENV, ParallaxError, Project
-from parallax.ui import CSP, UI, WEB
-from test_m8 import WANT, docs, make_key
+from parallax.ui import CSP, ERROR_MESSAGE, MAX_BODY, UI, WEB
+from test_lifecycle_gates import WANT, docs, make_key
 
 NO_SANDBOX = why_not()  # None when the real sandbox starts here
 
@@ -73,7 +74,7 @@ def test_the_card_is_exactly_parallax_show(proj):
     c = views.card(proj, tid)
     text = show.report(proj, tid)
     assert c["report"]["bottom"] in text and c["report"]["bottom"].startswith("Ready: the checker passed")
-    assert c["report"]["sections"]["Found"] == [l[2:] for l in text.split("Found\n", 1)[1].splitlines() if l.startswith("- ")]
+    assert c["report"]["sections"]["Found"] == [line[2:] for line in text.split("Found\n", 1)[1].splitlines() if line.startswith("- ")]
     assert c["actions"] == {"kind": "ready"} and c["docs"] == ["intent", "plan"]
     assert "+ok" in views.document(proj, tid, "diff")
     assert views.document(proj, tid, "intent").startswith("Bottom line:")
@@ -240,4 +241,50 @@ def test_a_crash_is_an_answer_not_a_dropped_connection(server, monkeypatch):
         raise RuntimeError("boom")
     monkeypatch.setattr(views, "card", broken)
     status, body, _ = call(app, "GET", f"/api/task/{tid}")
-    assert status == 500 and "boom" in body["error"]
+    assert status == 500 and body["error"] == ERROR_MESSAGE and "boom" not in json.dumps(body)
+
+
+def test_the_error_detail_goes_to_the_server_log_only(server, monkeypatch, capsys):
+    app, proj = server
+    tid = ready_task(proj)
+
+    def broken(project, task_id):
+        raise RuntimeError("secret path /home/you/x")
+    monkeypatch.setattr(views, "card", broken)
+    status, body, _ = call(app, "GET", f"/api/task/{tid}")
+    err = capsys.readouterr().err
+    assert status == 500 and "secret path" not in json.dumps(body)
+    assert f"parallax ui: error on /api/task/{tid}" in err and "RuntimeError: secret path /home/you/x" in err
+
+
+def test_the_board_request_runs_the_same_housekeeping_as_the_cli(server, monkeypatch):
+    """Someone who only uses the UI never sees a dead task shown as building."""
+    app, proj = server
+    tid = ready_task(proj)
+    proc = subprocess.Popen([sys.executable, "-c", "pass"])
+    proc.wait()
+    proj.ledger.append("build.started", "parallax", "", task=tid, pid=proc.pid, mode="build")
+    proj.ledger.append("check.staged", "parallax", "", task=tid, tree="t1", base="b", files=["x"], lines=1,
+                       binaries=[], symlinks=[], autorun=[], problems=[], risk_accepted=False)
+    proj.ledger.append("maker.started", "parallax", "", task=tid, stage="build")  # running, with work behind it
+    assert proj.task(tid)["status"] == "running"
+    monkeypatch.setattr(build, "_spawn", lambda *a: 5)
+    status, body, _ = call(app, "GET", "/api/board")
+    assert status == 200
+    assert proj.task(tid)["status"] == "stuck" and [i["task"] for i in body["waiting"]] == [tid]
+
+
+def test_a_task_id_in_the_url_is_never_a_path(server):
+    app, proj = server
+    (proj.root / "docs").mkdir(exist_ok=True)
+    (proj.root / "docs" / "intent.md").write_text("not yours\n")  # docs/tasks/../intent.md
+    status, body, _ = call(app, "GET", "/api/task/../doc/intent")
+    assert status == 400 and "not yours" not in json.dumps(body)
+    assert call(app, "GET", "/api/task/../shot/x.png")[0] == 400
+
+
+def test_a_bad_request_body_is_refused_not_crashed(server):
+    app, _ = server
+    assert call(app, "POST", "/api/do", headers={"Content-Length": "abc"})[0] == 400
+    assert call(app, "POST", "/api/do", headers={"Content-Length": str(MAX_BODY + 1)})[0] == 413
+    assert call(app, "GET", "/api/board")[0] == 200  # still serving

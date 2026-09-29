@@ -68,6 +68,10 @@ def _still_failing(project: Project, task_id: str, flows) -> list[dict]:
     return [c for c in flows.failed if (Path(c["file"]).name, c["name"]) in before]
 
 
+def _retried_checker(project: Project, task_id: str) -> bool:
+    return any(e["kind"] == "check.retried" for e in status.attempt(project.ledger.entries(), task_id))
+
+
 def rework_cycles(project: Project, task_id: str) -> int:
     """Rework cycles in this attempt."""
     return sum(e["kind"] == "rework.started" for e in status.attempt(project.ledger.entries(), task_id))
@@ -90,6 +94,12 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
         project.ledger.append("sandbox.cleaned", "parallax", "removed the sandbox's empty placeholder files before the check",
                               task=task_id, files=removed)
     s = _staged(project, task_id, p, plan, settings)
+    empty = [path for cause, path in s.issues if cause == "outside" and tree._size(p.worktree, path) == 0]
+    if empty:  # an empty file outside the plan is a placeholder, not work: removed, recorded, never a decision
+        sandbox.remove_files(p.worktree, empty)
+        project.ledger.append("sandbox.cleaned", "parallax", "removed empty files outside the plan's files",
+                              task=task_id, files=empty)
+        s = _staged(project, task_id, p, plan, settings)
     if not s.problems and uitest.applies(project, plan) and not uitest.recorded(project, task_id):
         if costs.budget(project, task_id, plan)[1] <= 0:
             return costs.stop_at_cap(project, task_id, p.cap, "the UI tester was about to use the app"), []
@@ -122,6 +132,10 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
                                   exit=results.exit, per_file=results.per_file, passed=results.passed,
                                   total=results.total, harness_reset=reset)
     if not results.ran:
+        missing = sorted({x.split("::", 1)[0] for x in plan["tests"] if not (p.worktree / x.split("::", 1)[0]).exists()})
+        if missing:  # a planned test file that isn't there conflicts with your plan; it isn't a test setup problem
+            return _to_you(project, task_id, "conflict", f"the plan's test file {missing[0]} is missing from the change, "
+                           f"but your approved plan lists it", tree=s.tree, missing=missing), []
         last = (results.tail.splitlines() or ["no output"])[-1]
         return _to_you(project, task_id, "check", f"the plan's tests couldn't run (exit {results.exit}): {last}",
                        tree=s.tree), []
@@ -164,13 +178,20 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
         project.ledger.append("check.finished", "parallax", "the budget cap is reached", task=task_id,
                               status="stuck", tree=s.tree)
         return costs.stop_at_cap(project, task_id, p.cap), []
-    try:
-        rv: Review = checker_for(left, settings["model"]).check(brief)
-    except Exception as err:  # recorded for you, never retried silently
-        project.ledger.append("verdict.recorded", "checker", str(err), task=task_id, stage="check", tree=s.tree,
-                              verdict="error", findings=[], not_looked_at="everything: the checker failed",
-                              brief_sha=hashlib.sha256(brief.encode()).hexdigest())
-        return _to_you(project, task_id, "check", f"checker error: {err}", tree=s.tree), []
+    rv: Review | None = None
+    for attempt_no in (1, 2):  # a garbled reply is asked once more, recorded; a second one comes to you
+        try:
+            rv = checker_for(left, settings["model"]).check(brief)
+            break
+        except Exception as err:
+            project.ledger.append("verdict.recorded", "checker", str(err), task=task_id, stage="check", tree=s.tree,
+                                  verdict="error", findings=[], not_looked_at="everything: the checker failed",
+                                  brief_sha=hashlib.sha256(brief.encode()).hexdigest())
+            if attempt_no == 1 and not _retried_checker(project, task_id):
+                project.ledger.append("check.retried", "parallax",
+                                      f"the checker gave no usable verdict ({err}), so it was asked once more", task=task_id)
+                continue
+            return _to_you(project, task_id, "check", f"checker error: {err}", tree=s.tree), []
 
     blocking = review.blocking(review_text)
     blockers = [f for f in rv.findings if f.severity in blocking]
@@ -221,10 +242,6 @@ def run_check(project: Project, task_id: str, checker_for: CheckerFor, maker_for
         p = build.prepare(project, task_id, setup=False, launching=False)
         if p.left <= 0:
             return costs.stop_at_cap(project, task_id, p.cap)
-        if not all(line.ok for line in build.run_preflight(project, p, preflight_runner)):
-            project.ledger.append("stuck.raised", "parallax", "preflight failed before a rework, so it didn't launch",
-                                  task=task_id)
-            return "stuck"
         project.ledger.append("rework.started", "parallax", "\n".join(fix), task=task_id, cycle=cycles + 1)
         extra = ("The check found problems. Fix them, then stop:\n" + "\n".join(f"- {line}" for line in fix)
                  + "\n\nIf a finding can only be fixed by going against the approved plan (removing or not "
@@ -232,7 +249,7 @@ def run_check(project: Project, task_id: str, checker_for: CheckerFor, maker_for
                    "name the finding. That's for the human to decide.")
         before = project.ledger.entries()
         reviewed = [e for e in before if e["kind"] == "check.staged" and e["data"].get("task") == task_id][-1]["data"]["tree"]
-        status = build.run_build(project, task_id, maker_for, extra=extra)
+        status = build.run_build(project, task_id, maker_for, extra=extra, preflight_runner=preflight_runner)
         if status != "built":
             return status
         wt = Path(project.task(task_id)["worktree"])

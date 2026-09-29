@@ -101,6 +101,34 @@ def _the_work(project: Project, task_id: str, staged: dict | None) -> list[str]:
     return out
 
 
+def _outcomes(project: Project, task_id: str, tests: dict | None) -> list[str]:
+    """One line per outcome in the intent: the test files that ran for it, through the plan's covers,
+    or that no test exercises it. Code only: the covers map against the recorded JUnit counts."""
+    intent = lifecycle._read(project, task_id, "intent")
+    plan = lifecycle.plan_data(project, task_id) or {}
+    ran = {f for f, (passed, counted, _) in (tests["data"]["per_file"].items() if tests else []) if counted}
+    covers = {str(k): v for k, v in plan.get("covers", {}).items()}
+    cite = f"(ledger {tests['id']})" if tests else f"(docs/tasks/{task_id}/plan.md:1)"
+    out = []
+    for n in lint.outcomes_of(intent):
+        files = sorted({c.split("::", 1)[0] for c in covers.get(n, []) if c.split("::", 1)[0] in ran})
+        out.append(f"outcome {n}: {', '.join(files)} {cite}" if files else f"outcome {n}: no test exercises this outcome {cite}")
+    return out
+
+
+def _rails(entries: list[dict], tests: dict | None) -> list[str]:
+    """Whether preflight passed before the build, and which harness files the check put back."""
+    out = []
+    pf = _last(entries, "preflight.recorded")
+    if pf:
+        out.append(f"preflight: {'passed' if pf['data'].get('ok') else 'failed'} (ledger {pf['id']})")
+    if tests:
+        reset = tests["data"].get("harness_reset") or []
+        out.append(f"harness files reset to the base commit: {', '.join(reset)} (ledger {tests['id']})" if reset
+                   else f"no harness files were reset (ledger {tests['id']})")
+    return out
+
+
 def _next(task_id: str, dec) -> str:
     names = [o.name for o in dec.options]
     return f"you run parallax decide {task_id} with {', '.join(names[:-1])} or {names[-1]}."
@@ -138,7 +166,7 @@ def _decision(project: Project, task_id: str, dec, found: list[str], gaps: list[
                 for doc, n, text in lifecycle.gaps(project, task_id, ("intent", "plan"))]
     who = "the checker" if dec.item else "the drafters"  # a plan under review hasn't met the checker yet
     return lint.shaped("Decision needed", bottom, gaps, _next(task_id, dec), found, changed, who,
-                       list(extra), decisions=[decide.line(dec)], details=options + _files(dec))
+                       list(extra), decisions=decide.lines(dec), details=options + _files(dec))
 
 
 def _files(dec) -> list[str]:
@@ -187,7 +215,8 @@ def report(project: Project, task_id: str) -> str:
                             f"not looked at: the plan's tests and the blind checker haven't run (ledger {dec.item['id']})")]
         return _decision(project, task_id, dec, found, gaps, changed, boundary + findings)
     if status == "ready":
-        found = _the_work(project, task_id, staged) + found
+        found = _the_work(project, task_id, staged) + found + _outcomes(project, task_id, tests)
+        boundary = boundary + _rails(_attempt(entries, task_id), tests)
         passed = tests["data"]["passed"] if tests else 0
         total = tests["data"]["total"] if tests else 0
         how = "passed" if verdict and verdict["data"]["verdict"] == "pass" else "found nothing blocking"

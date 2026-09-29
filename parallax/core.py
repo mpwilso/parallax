@@ -88,14 +88,21 @@ class Project:
 
     # setup ---------------------------------------------------------------
     @classmethod
-    def init(cls, root: Path, actor: str = "human") -> "Project":
+    def init(cls, root: Path, actor: str = "human", confirm_setup=None) -> "Project":
+        """confirm_setup(command) -> bool: asked once when the repo's example policy carries a [build] setup
+        command, since that runs as you. Without an answer of yes, the command is left out."""
         root = Path(root).resolve()
         refuse_inside_task(root)
         _git(root, "rev-parse", "--is-inside-work-tree")
         policy_path = root / POLICY_FILE
         if not policy_path.exists():  # the repo's own example if it has one, else the defaults
             example = root / EXAMPLE_POLICY_FILE
-            policy_path.write_text(example.read_text() if example.is_file() else DEFAULT_POLICY)
+            text = example.read_text() if example.is_file() else DEFAULT_POLICY
+            if confirm_setup is not None and example.is_file():
+                setup = Policy.load(example).build["setup"].strip()
+                if setup and not confirm_setup(setup):
+                    text = re.sub(r"(?m)^(setup\s*=\s*).*$", r'\1""  # left out at init; it would run as you', text, count=1)
+            policy_path.write_text(text)
         from .review import REVIEW_FILE, TEMPLATE as REVIEW_TEMPLATE
         if not (root / REVIEW_FILE).exists():
             (root / REVIEW_FILE).write_text(REVIEW_TEMPLATE, encoding="utf-8")

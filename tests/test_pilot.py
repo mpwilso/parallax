@@ -1,4 +1,3 @@
-import re
 from pathlib import Path
 
 import pytest
@@ -6,10 +5,9 @@ import pytest
 from fakes import FakeChecker, FakeDrafter, ScriptedAgent, good_probe, junit_runner
 from parallax import approvals, build, inbox, lifecycle, lint, pilot, planfit, preflight, show, stats
 from parallax.accept import accept
-from parallax.agents.base import Review
 from parallax.cli import main
 from parallax.core import POLICY_FILE, Project
-from test_m8 import WANT, docs, make_key
+from test_lifecycle_gates import WANT, docs, make_key
 
 EF4163_PLAN = """Bottom line: Fixes all five WSL install problems in README.md and adds a test that pins the doctor sample.
 
@@ -361,3 +359,94 @@ def test_a_cap_is_never_raised_past_the_size_limit_and_the_drafter_hears_what_fi
     assert lifecycle.plan_data(proj, tid)["budget_cap_usd"] == 3.0  # left as drafted: no raise past $5
     misfit = kinds(proj, "draft.misfit")[0]["reason"]
     assert "the estimate ($2.60) is too big for a small task" in misfit and "estimate at most $2.40" in misfit
+
+
+@pytest.mark.parametrize("field,value", [("domains", "pypi.org"), ("outside_reads", "/opt/data")])
+def test_a_plan_that_crosses_the_boundary_never_launches_by_the_rule(proj, monkeypatch, field, value):
+    """A drafter steered by repo text can list a domain or an outside read; only you can approve that."""
+    monkeypatch.setattr(build, "_spawn", lambda *a: 7)
+    plan = docs()["plan"].replace(f"{field} = []", f'{field} = ["{value}"]')
+    tid = pilot.intake(proj, WANT)["task"]
+    maker = ScriptedAgent(steps=[("write", "README.md", "ok\n")])
+    assert run_pilot(proj, tid, FakeDrafter({**docs(), "plan": plan}), maker) == "needs you"
+    assert maker.goals == [] and kinds(proj, "gate.approved") == []
+    assert kinds(proj, "review.requested")[0]["reason"] == \
+        f"the plan's {field} ({value}) cross the boundary, so only you can approve it"
+
+
+# the turn cap, empty files, and the two lines under every question ------------------------------------
+
+def test_the_makers_turn_cap_comes_to_you_the_way_a_cap_hit_does(proj, monkeypatch):
+    from parallax import decide
+    from parallax.agents.base import AgentResult
+
+    class OutOfTurns:
+        def run(self, goal, cwd, fn, stage="build", env=None):
+            return AgentResult("error", "stopped at the turn cap (150 turns)", 0.4)
+    monkeypatch.setattr(build, "_spawn", lambda *a: 7)
+    tid = pilot.intake(proj, WANT)["task"]
+    assert build.run_mode(proj, tid, "pilot", FakeDrafter(docs()), lambda left, settings: OutOfTurns(), FakeChecker(),
+                          test_runner=junit_runner(), preflight_runner=good_probe) == "stuck"
+    [item] = proj.inbox()
+    assert item["kind"] == "stuck.raised" and item["data"]["turns"] is True and item["reason"] == "stopped at the turn cap (150 turns)"
+    dec = decide.decision(proj, tid)
+    assert dec.kind == "turns" and dec.recommend == "retry" and [o.name for o in dec.options] == ["retry", "reject", "drop"]
+    assert proj.policy.limits["maker_turns"] == 150
+    card = show.report(proj, tid)
+    assert "Whose call: you, as the engineer." in card and "Why a human: the maker used every turn" in card
+    assert lint.lint_report(card, root=proj.root, ledger_ids={e["id"] for e in proj.ledger.entries()}) == []
+
+
+def test_the_sdk_result_maps_to_the_turn_cap():
+    from parallax.agents.claude import outcome
+    assert outcome("error_max_turns", True, "", 0.1, 2.0, 150).summary == "stopped at the turn cap (150 turns)"
+    assert outcome("error_max_budget_usd", True, "", 0.1, 2.0, 150).summary == "stopped at the budget cap ($2.0)"
+    assert outcome("success", False, "conflict: the plan says otherwise", 0.1, 2.0, 150).status == "conflict"
+    assert outcome("success", False, "Done.", 0.1, 2.0, 150).status == "done"
+
+
+def test_empty_files_outside_the_plan_are_removed_by_code_and_a_full_one_comes_to_you(proj, monkeypatch):
+    monkeypatch.setattr(build, "_spawn", lambda *a: 7)
+    tid = pilot.intake(proj, WANT)["task"]
+    maker = ScriptedAgent(steps=[("write", "README.md", "ok\n"), ("write", "notes.txt", "")])
+    assert run_pilot(proj, tid, FakeDrafter(docs()), maker) == "ready"
+    cleaned = [e for e in kinds(proj, "sandbox.cleaned") if e["data"]["files"] == ["notes.txt"]]
+    assert cleaned and cleaned[0]["reason"] == "removed empty files outside the plan's files"
+    assert not (Path(proj.task(tid)["worktree"]) / "notes.txt").exists() and not proj.inbox()
+
+    tid = pilot.intake(proj, "again")["task"]
+    maker = ScriptedAgent(steps=[("write", "README.md", "ok\n"), ("write", "notes.txt", "real work\n")])
+    assert run_pilot(proj, tid, FakeDrafter(docs()), maker) == "disputed"
+    [item] = [e for e in proj.inbox() if e["data"]["task"] == tid]
+    assert item["data"]["stage"] == "scope" and "notes.txt" in item["reason"]
+
+
+def test_every_needs_you_card_says_whose_call_and_why(proj, monkeypatch):
+    """Two lines under the question, set by code from the kind: security for a secrets or protected-path item."""
+    from parallax import decide, views
+    monkeypatch.setattr(build, "_spawn", lambda *a: 7)
+    tid = pilot.intake(proj, WANT)["task"]
+    assert run_pilot(proj, tid, FakeDrafter(docs())) == "ready"
+    cases = [
+        ("disagreement.raised", {"stage": "guard"}, "diff touches protected files: CLAUDE.md", "security",
+         "a protected path was touched, and no rule lets code accept that"),
+        ("disagreement.raised", {"stage": "scope", "files": [{"path": ".env", "cause": "outside", "size": 9, "secret": True}]},
+         ".env looks like a secrets file and has content", "security",
+         "a file that looks like a secret has content, and no rule lets code accept that"),
+        ("disagreement.raised", {"stage": "scope"}, "extra.py changed but isn't in the plan's files", "you, as the engineer",
+         "the change reached outside the plan you approved"),
+        ("stuck.raised", {"budget": True}, "the budget cap ran out", "you, as the engineer",
+         "the cap you approved is spent, and raising it is spending more"),
+    ]
+    for kind, data, why, owner, reason in cases:
+        item = proj.ledger.append(kind, "parallax", why, task=tid, **data)
+        dec = decide.decision(proj, tid)
+        assert (dec.owner, dec.why_human) == (owner, reason), why
+        card = show.report(proj, tid)
+        assert f"- Whose call: {owner}.\n- Why a human: {reason}." in card
+        assert lint.lint_report(card, root=proj.root, ledger_ids={e["id"] for e in proj.ledger.entries()}) == []
+        actions = views.card(proj, tid)["actions"]
+        assert (actions["owner"], actions["why_human"]) == (owner, reason)
+        proj.resolve(item["id"], False, "next case")
+    assert set(decide.WHY_HUMAN) >= {"launch", "review", "cap", "conflict", "scope", "flows", "rework", "checker",
+                                     "tests", "guard", "drafting", "error", "stuck", "turns"}

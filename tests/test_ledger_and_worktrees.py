@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from parallax.core import ParallaxError, Project
+from parallax.core import Project
 from parallax.policy import Policy
 
 

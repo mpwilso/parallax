@@ -3,11 +3,9 @@
 No model and no cost: agents are fakes, and a task's life is played into the ledger. Skipped,
 with the reason, where Playwright or Chromium isn't installed (inside a task's sandbox, say).
 """
-import json
 import os
 import re
 import threading
-from pathlib import Path
 
 import pytest
 
@@ -18,8 +16,8 @@ from fakes import FakeChecker, FakeDrafter, ScriptedAgent, good_probe, junit_run
 from parallax import build, lifecycle, pilot, preflight, views  # noqa: E402
 from parallax.agents.base import Review  # noqa: E402
 from parallax.core import Project  # noqa: E402
-from parallax.ui import UI  # noqa: E402
-from test_m8 import docs, make_key  # noqa: E402
+from parallax.ui import ERROR_MESSAGE, UI  # noqa: E402
+from test_lifecycle_gates import docs, make_key  # noqa: E402
 
 WAIT = 12_000  # ms: the page polls every 2s
 
@@ -203,8 +201,8 @@ def test_a_needs_you_card_shows_the_files_and_whether_a_secret_has_content(page,
     expect(card.locator(".bottom")).to_have_text(".env looks like a secrets file and has content (13 bytes).")
     expect(card.locator(".question")).to_contain_text("secrets file with content")
     expect(card.locator("tr.risky")).to_contain_text("has content, 13 bytes")
-    expect(card.locator(".files")).to_contain_text("notes.txt")
-    expect(card.locator(".files")).to_contain_text("empty")
+    expect(card.locator(".files")).not_to_contain_text("notes.txt")  # empty and outside the plan: removed by code, not asked
+    expect(card).to_contain_text("Whose call: security.")
     expect(card).to_contain_text("the plan's tests and the blind checker haven't run")
     expect(card.locator("#opt-reject")).to_have_class(re.compile("primary"))
 
@@ -393,7 +391,8 @@ def test_a_server_error_is_shown_not_swallowed(page, proj, monkeypatch):
         raise RuntimeError("the card broke")
     monkeypatch.setattr(views, "card", broken)
     row(page, tid).click()
-    expect(page.locator("#status")).to_contain_text("the card broke", timeout=WAIT)
+    expect(page.locator("#status")).to_contain_text(ERROR_MESSAGE, timeout=WAIT)  # one fixed line; the detail stays in the terminal
+    expect(page.locator("#status")).not_to_contain_text("the card broke")
 
 
 def test_dark_mode_keeps_the_buttons_readable(browser, server, proj):

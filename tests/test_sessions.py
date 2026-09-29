@@ -12,7 +12,7 @@ from parallax import build, costs, pilot, sessions, stats
 from parallax.agents import base
 from parallax.cli import main
 from parallax.core import Project
-from test_m8 import WANT, docs, make_key
+from test_lifecycle_gates import WANT, docs, make_key
 
 
 @pytest.fixture
@@ -171,7 +171,7 @@ def test_a_normal_end_is_never_recorded_as_partial_whatever_the_timing(proj):
 
 
 def test_a_reader_never_sees_half_an_entry(proj):
-    tid = pilot.intake(proj, WANT)["task"]
+    pilot.intake(proj, WANT)
     n = len(proj.ledger.entries())
     with proj.ledger.path.open("a") as f:
         f.write('{"id": "half", "kind": "agent.st')  # a writer caught mid-line

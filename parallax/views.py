@@ -22,6 +22,10 @@ def board(project: Project) -> dict:
     """The queue: what waits on you (riskiest first, then oldest), what's working, and what's done.
 
     columns: every task by state, kept for the terminal's view of the same thing."""
+    from .build import flag_stale_runs
+    from .sessions import reconcile
+    reconcile(project)  # the same housekeeping every command runs: a dead task never shows as building
+    flag_stale_runs(project)
     columns: dict[str, list[dict]] = {state: [] for state in status.BOARD}
     for tid, t in project.tasks().items():
         if not t.get("intent"):
@@ -85,6 +89,7 @@ def card(project: Project, task_id: str) -> dict:
     files = []
     if dec is not None:
         actions = {"kind": "decide", "question": dec.question, "recommend": dec.recommend,
+                   "owner": dec.owner, "why_human": dec.why_human,
                    "options": [{"name": o.name, "does": o.does, "needs_reason": o.needs_reason} for o in dec.options]}
         files = dec.item["data"].get("files") or [] if dec.item else []
     elif t["status"] == "ready":
@@ -152,6 +157,7 @@ def _cited(item: str) -> dict:
 
 def document(project: Project, task_id: str, name: str) -> str:
     """The diff, or one of the task's documents, as plain text."""
+    project.task(task_id)  # a known task only: the id becomes a path below
     if name == "diff":
         from .cli import _reviewed_diff
         text = _reviewed_diff(project, task_id)

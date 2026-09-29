@@ -297,6 +297,7 @@ function actions(c) {
   const p = state.pending && state.pending.task === c.task ? state.pending : null;
   return el("section", { class: "decide", "aria-label": "Your decision" },
     el("p", { class: "question" }, question),
+    a.kind === "decide" && a.owner ? el("p", { class: "whose" }, `Whose call: ${a.owner}. Why a human: ${a.why_human}.`) : null,
     filesTable(c.files),
     el("ol", { class: "options" }, options.map((o, i) => el("li", {},
       el("button", { id: "opt-" + o.name, "data-focus": "opt-" + o.name,

@@ -6,8 +6,9 @@ One detached pilot process per task, started with the scrubbed environment:
    problem goes back to the drafter with the exact reasons, up to 2 times; a third failure comes
    to you as Decision needed.
 2. The launch rule in the policy decides whether code approves the plan and starts: a small task
-   whose cap is at most auto_launch_usd and that touches nothing in review_paths, with
-   review_plans off. The approval is signed and names the rule. Anything else waits for you.
+   whose cap is at most auto_launch_usd, that touches nothing in review_paths, and that crosses
+   no boundary (no domains, no outside_reads), with review_plans off. The approval is signed and
+   names the rule. Anything else waits for you.
 3. Preflight, the build, and the check run as before, rework included.
 The task ends at Ready, or at one Decision needed.
 """
@@ -119,17 +120,18 @@ def launch_rule(project: Project, task_id: str) -> tuple[bool, str]:
     touched = [p for p in [*plan["files"], *plan["tests"]] if planfit.in_scope(p, rules["review_paths"])]
     if touched:
         return False, f"the plan touches {touched[0].split('::')[0]}, which is in review_paths"
+    for field in ("domains", "outside_reads"):  # a drafter steered by repo text can't open the boundary alone
+        if plan[field]:
+            return False, f"the plan's {field} ({plan[field][0]}) cross the boundary, so only you can approve it"
     if cap > limit:
         return False, f"the budget cap (${cap:.2f}) is over auto_launch_usd (${limit:.2f})"
     return True, f"launch rule: a small task, cap ${cap:.2f} within auto_launch_usd ${limit:.2f}, nothing in review_paths"
 
 
 def go(project: Project, task_id: str, maker_for, checker_for, test_runner=None, preflight_runner=None) -> str:
-    """After an approval, by the rule or by you: preflight, build, check."""
-    p = build.prepare(project, task_id, setup=True, launching=False)
-    if not all(line.ok for line in build.run_preflight(project, p, preflight_runner)):
-        return _needs_you(project, task_id, "preflight failed, so the build didn't launch")
-    status = build.run_build(project, task_id, maker_for)
+    """After an approval, by the rule or by you: setup, then the build (which preflights first), then the check."""
+    build.prepare(project, task_id, setup=True, launching=False)  # the venv, once, as you
+    status = build.run_build(project, task_id, maker_for, preflight_runner=preflight_runner)
     if status == "built":
         status = check.run_check(project, task_id, checker_for, maker_for,
                                  test_runner=test_runner, preflight_runner=preflight_runner)
@@ -190,8 +192,5 @@ def resume(project: Project, task_id: str, spawn: Callable | None = None, prefli
         return "pilot"
     built = any(e["kind"] == "build.finished" for e in status.attempt(project.ledger.entries(), task_id))
     mode = "check" if built else "build"
-    p = build.prepare(project, task_id)
-    if not all(line.ok for line in build.run_preflight(project, p, preflight_runner)):
-        raise ParallaxError("preflight failed, so it didn't launch. parallax preflight " + task_id + " shows why")
-    build.launch(project, p, spawn=spawn, mode=mode)
+    build.launch(project, build.prepare(project, task_id), spawn=spawn, mode=mode)  # the builder preflights first
     return mode

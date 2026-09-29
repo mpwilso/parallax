@@ -19,6 +19,8 @@ import hmac
 import json
 import os
 import secrets
+import sys
+import traceback
 import stat
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -31,6 +33,7 @@ WEB = Path(__file__).with_name("web")
 STATIC = {"/": ("index.html", "text/html; charset=utf-8"), "/app.js": ("app.js", "text/javascript; charset=utf-8"),
           "/app.css": ("app.css", "text/css; charset=utf-8")}
 TOKEN_HEADER = "X-Parallax-Token"
+MAX_BODY = 1_000_000  # a request body is a few words of work or a reason, never more
 CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' blob:; "
        "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 
@@ -138,6 +141,15 @@ def act(project: Project, path: str, body: dict) -> dict:
     raise ParallaxError("not found")
 
 
+ERROR_MESSAGE = "parallax hit an error. the terminal running parallax ui has the detail"
+
+
+def _log_error(path: str) -> str:
+    """The traceback goes to the server's terminal only; the page gets one fixed line."""
+    print(f"parallax ui: error on {path}\n{traceback.format_exc()}", file=sys.stderr, flush=True)
+    return ERROR_MESSAGE
+
+
 def _handler(ui: UI):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):  # quiet: the terminal stays readable
@@ -200,8 +212,8 @@ def _handler(ui: UI):
                     self._json(404, {"error": "not found"})
             except (ParallaxError, ValueError) as err:
                 self._json(400, {"error": str(err)})
-            except Exception as err:  # never a dropped connection: the page says what broke
-                self._json(500, {"error": f"parallax hit an error: {type(err).__name__}: {err}"})
+            except Exception:  # never a dropped connection: the page says something broke, the terminal says what
+                self._json(500, {"error": _log_error(self.path)})
 
         def do_POST(self):
             if not self._allowed(needs_token=True):
@@ -209,7 +221,13 @@ def _handler(ui: UI):
             if not (self.headers.get("Content-Type") or "").startswith("application/json"):
                 return self._json(415, {"error": "send json"})
             try:
-                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                return self._json(400, {"error": "bad content length"})
+            if not 0 <= length <= MAX_BODY:
+                return self._json(413, {"error": "too big"})
+            try:
+                body = json.loads(self.rfile.read(length) or b"{}")
             except json.JSONDecodeError:
                 return self._json(400, {"error": "bad json"})
             if not isinstance(body, dict):
@@ -218,7 +236,7 @@ def _handler(ui: UI):
                 self._json(200, act(ui.project(), self.path, body))
             except ParallaxError as err:
                 self._json(404 if str(err) == "not found" else 400, {"error": str(err)})
-            except Exception as err:
-                self._json(500, {"error": f"parallax hit an error: {type(err).__name__}: {err}"})
+            except Exception:
+                self._json(500, {"error": _log_error(self.path)})
 
     return Handler

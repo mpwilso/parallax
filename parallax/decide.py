@@ -37,6 +37,35 @@ class Decision:
                 return o
         raise ParallaxError(f"{name} isn't an option here. choose from: {', '.join(o.name for o in self.options)}")
 
+    @property
+    def owner(self) -> str:
+        """Whose call this is, by kind: security for a secrets or protected-path item, else you."""
+        return "security" if self.kind == "guard" or (self.kind == "scope" and self.extra.get("secret")) else "you, as the engineer"
+
+    @property
+    def why_human(self) -> str:
+        return WHY_HUMAN[self.kind] if self.kind != "scope" or not self.extra.get("secret") else \
+            "a file that looks like a secret has content, and no rule lets code accept that"
+
+
+WHY_HUMAN = {  # one short sentence per kind: why code stopped instead of deciding
+    "launch": "the cap is over your launch limit, and money is yours to spend",
+    "review": "your policy says a plan like this waits for your review",
+    "cap": "the cap you approved is spent, and raising it is spending more",
+    "conflict": "two things you approved disagree, and only you can say which one you meant",
+    "scope": "the change reached outside the plan you approved",
+    "flows": "only a person can say whether the test or the app is wrong",
+    "rework": "three reworks didn't satisfy the check, so the plan or the work needs your judgment",
+    "checker": "the checker failed twice, so nothing has reviewed this change",
+    "tests": "the tests couldn't run, which is a setup problem, not the maker's work",
+    "guard": "a protected path was touched, and no rule lets code accept that",
+    "drafting": "the drafters couldn't produce a plan that fits, and only you can restate the work",
+    "error": "it stopped on an error nobody planned for",
+    "stuck": "it stopped, and whether to try again or change course is yours",
+    "turns": "the maker used every turn it had, and more turns may just be more of the same",
+}
+
+
 
 REJECT = Option("reject", "the drafters redraft the intent and plan from your reason", True)
 DROP = Option("drop", "ends the task; it leaves the inbox", True)
@@ -77,11 +106,17 @@ def decision(project: Project, task_id: str) -> Decision | None:
 
     d, why = item["data"], " ".join(item["reason"].split())
     stage = d.get("stage")
+    if d.get("turns"):
+        return Decision("turns", "The maker used every turn it had without finishing: run it again, or redraft?",
+                        [RETRY, REJECT, DROP], "retry", "the rest of the build and check", item)
     if d.get("budget"):
         new = raise_to(project, task_id)
         return Decision("cap", f"Raise the cap to ${new:.2f} so it can finish?",
                         [Option("raise", f"raises the cap to ${new:.2f} and picks up where it stopped"), DROP],
                         "raise", "the rest of the build and check", item, {"to": new})
+    if stage == "conflict" and d.get("missing"):
+        return Decision("conflict", f"The plan's test file {d['missing'][0]} is missing from the change: redraft?",
+                        [REJECT, DROP], "reject", "the check", item)
     if stage == "conflict":
         return Decision("conflict", "Your intent and your plan disagree: which one wins?",
                         [Option("intent", "the intent wins: the plan is redrafted to fit it"),
@@ -93,7 +128,7 @@ def decision(project: Project, task_id: str) -> Decision | None:
                     "The change goes outside the approved plan: accept that, or redraft?")
         return Decision("scope", question,
                         [Option("accept", "accepts the risk for this exact change, and the check goes on", True),
-                         REJECT, DROP], "reject", "the check", item)
+                         REJECT, DROP], "reject", "the check", item, {"secret": secret})
     if stage == "flows":
         return Decision("flows", "A UI tester test still fails after a rework: is the test wrong, or the app?",
                         [Option("remove", "the test is wrong: it's taken out of this task, and the check goes on", True),
@@ -128,6 +163,11 @@ def decision(project: Project, task_id: str) -> Decision | None:
 def line(dec: Decision) -> str:
     """The output shape's decision line."""
     return f"Decide: {dec.question} Recommend: {dec.recommend}. Blocks: {dec.blocks}."
+
+
+def lines(dec: Decision) -> list[str]:
+    """The Decisions section: the question, then whose call it is and why a human, set by code."""
+    return [line(dec), f"Whose call: {dec.owner}.", f"Why a human: {dec.why_human}."]
 
 
 def apply(project: Project, task_id: str, name: str, reason: str = "", spawn: Callable | None = None,

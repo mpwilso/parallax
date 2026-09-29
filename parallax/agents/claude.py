@@ -23,6 +23,7 @@ WRITE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 FETCH_TOOLS = {"WebFetch", "WebSearch"}
 BUILD_TOOLS = ["Read", "Glob", "Grep", "Edit", "Write", "NotebookEdit", "Bash", "WebFetch", "WebSearch"]
 PLAN_TOOLS = ["Read", "Glob", "Grep"]
+NO_MEMORY = {"CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"}  # no agent keeps memory across tasks; setting_sources=[] doesn't cover it
 
 MAKER_PROMPT = """\
 You are the maker for one task. Your working directory is the task's own git worktree; stay inside it.
@@ -185,21 +186,29 @@ class ClaudeAgent:
             settings=self.settings,
             max_turns=self.max_turns,
             max_budget_usd=self.max_budget_usd,
-            env=env,  # marks the maker's shell as inside a task (spawn depth 1)
+            env={**NO_MEMORY, **env},  # marks the maker's shell as inside a task (spawn depth 1)
         )
         result = await _final_result(sdk, options, goal, "drafter" if stage == "draft" else "maker")
         if result is None:
             return AgentResult("error", "agent ended without a result")
-        text, cost = result.result or "", getattr(result, "total_cost_usd", None)
-        if "budget" in str(result.subtype):
-            return AgentResult("error", f"stopped at the budget cap (${self.max_budget_usd})", cost)
-        if result.is_error:
-            return AgentResult("error", text or str(result.subtype), cost)
-        if text.strip().lower().startswith("conflict:"):
-            return AgentResult("conflict", text, cost)
-        if text.strip().lower().startswith(("gave up", "blocked:")):
-            return AgentResult("gave_up", text, cost)
-        return AgentResult("done", text, cost)
+        return outcome(str(result.subtype), result.is_error, result.result or "", getattr(result, "total_cost_usd", None),
+                       self.max_budget_usd, self.max_turns)
+
+
+def outcome(subtype: str, is_error: bool, text: str, cost: float | None, budget: float | None,
+            turns: int | None) -> AgentResult:
+    """What a finished session means to Parallax, from the SDK's result."""
+    if "budget" in subtype:
+        return AgentResult("error", f"stopped at the budget cap (${budget})", cost)
+    if "max_turns" in subtype:
+        return AgentResult("error", f"stopped at the turn cap ({turns} turns)", cost)
+    if is_error:
+        return AgentResult("error", text or subtype, cost)
+    if text.strip().lower().startswith("conflict:"):
+        return AgentResult("conflict", text, cost)
+    if text.strip().lower().startswith(("gave up", "blocked:")):
+        return AgentResult("gave_up", text, cost)
+    return AgentResult("done", text, cost)
 
 
 UITEST_SYSTEM = """\
@@ -241,7 +250,7 @@ class ClaudeUITester:
             setting_sources=[],
             max_turns=self.max_turns,
             max_budget_usd=self.max_budget_usd,
-            env={"MCP_TIMEOUT": "90000"},  # the app starts first; its server connects once it answers
+            env={**NO_MEMORY, "MCP_TIMEOUT": "90000"},  # the app starts first; its server connects once it answers
         )
         result = await _final_result(sdk, options, goal, "ui tester")
         if result is None:
@@ -270,6 +279,7 @@ async def _structured(sdk, model: str, system: str, prompt: str, schema: dict, e
             setting_sources=[],
             output_format={"type": "json_schema", "schema": schema},
             max_budget_usd=max_budget_usd,
+            env=dict(NO_MEMORY),
         )
         result = await _final_result(sdk, options, prompt, "checker")
     if result is None or result.is_error:

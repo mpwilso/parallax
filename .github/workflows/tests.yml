@@ -2,13 +2,16 @@ name: tests
 
 on: [push, pull_request]
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
       - name: The sandbox, for the three tests that need it
@@ -18,6 +21,8 @@ jobs:
           sudo apt-get update && sudo apt-get install -y bubblewrap socat ripgrep
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           npm install -g @anthropic-ai/sandbox-runtime
+      - name: Lint
+        run: uv run --no-project --python 3.12 --with ruff ruff check .
       - name: Chromium for the browser tests
         run: uv run --no-project --python 3.12 --with playwright python -m playwright install --with-deps chromium
       - name: The full suite, browser tests included. No test calls a model.

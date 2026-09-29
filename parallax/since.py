@@ -56,8 +56,8 @@ def _doc_line(doc: str, old: str, new: str) -> str:
     changed = [k for k in dict.fromkeys([*a, *b]) if a.get(k) != b.get(k)]
     same = [k for k in a if k in b and a[k] == b[k]]
     diff = list(difflib.unified_diff(old.splitlines(), new.splitlines(), lineterm="", n=0))
-    plus = sum(1 for l in diff if l.startswith("+") and not l.startswith("+++"))
-    minus = sum(1 for l in diff if l.startswith("-") and not l.startswith("---"))
+    plus = sum(1 for line in diff if line.startswith("+") and not line.startswith("+++"))
+    minus = sum(1 for line in diff if line.startswith("-") and not line.startswith("---"))
     line = f"{doc}: {', '.join(changed)} changed (+{plus} -{minus} lines)"
     if same:
         line += f"; {', '.join(same)} the same"
