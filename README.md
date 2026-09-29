@@ -1,6 +1,6 @@
 # Parallax
 
-[![tests](https://github.com/OWNER/parallax/actions/workflows/tests.yml/badge.svg)](https://github.com/OWNER/parallax/actions/workflows/tests.yml)
+[![tests](https://github.com/mpwilso/parallax/actions/workflows/tests.yml/badge.svg)](https://github.com/mpwilso/parallax/actions/workflows/tests.yml)
 
 **Parallax is hands-free: execution happens without you, and you only make the judgment calls, with everything you need to make them well.** You describe work in plain words; drafters plan it, a maker builds it in a sandbox, and your tests, a blind checker and an optional UI tester check it, all without you. It comes back as one card with one decision, every step is on a hash-chained ledger, and merging is always yours.
 

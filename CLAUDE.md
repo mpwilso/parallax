@@ -34,10 +34,10 @@ Search the repo for an existing helper, test fixture, or pattern first. Reuse be
 - No em dashes in docs, README, or CLI output.
 - Plain, direct wording. One-line CLI confirmations are lowercase and short. Reports use the output shape in docs/direction.md.
 
-## Clean room
+## Original work
 
-This is a personal project built on personal time and accounts. Don't reference, reproduce, or ask about any employer's internal code, tools, names, or configs. Don't copy code, names, or UI from other orchestrators; borrow ideas only, and credit them in docs/prior-art.md.
+Only original work goes in this repo. Don't copy code, text or UI from other projects or products. Credit ideas in docs/prior-art.md.
 
 ## Current milestone
 
-Follow docs/plan.md. M7 to M14 are built. Next is M15: the light conductor.
+Follow docs/plan.md. M7 to M14 are built, with the UI pass (the queue and the decision card), the UI tester, session cost records, and the old Milestone 2 path cut. Next is M15: the light conductor.
