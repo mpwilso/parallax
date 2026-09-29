@@ -2,6 +2,8 @@
 
 Task `e9a55a` was done on this repo by Parallax, and merged. Every file it names is in the repo and every ledger id is in `.parallax/ledger.jsonl` on the machine that ran it; the commit is in this branch's history. This is what one task looks like when it works, including the one place a person stepped in.
 
+It ran before the hands-free redesign, when every plan waited for a person. The later runs through the UI in [ui-runs](ui-runs/README.md) took one touch (run 1, `1-no-touches`: accept) or two (run 2, `2-ui-change`: a launch confirm and accept; run 3, `3-reject-redraft`: a reject and accept).
+
 ## 1. The request, typed in
 
 The whole input was one paragraph in the intake box (ledger `26bf1e3d`, 00:03):

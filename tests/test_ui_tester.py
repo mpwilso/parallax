@@ -138,6 +138,9 @@ def test_the_tester_is_blind_sandboxed_and_its_tests_are_hashed_and_run(proj, mo
     assert not any(call["cwd"].iterdir()) or {p.name for p in call["cwd"].iterdir()} <= {"flows", "opens.png", "tmp", "app.log", uitest.APP_UP}
     srv = call["server"]
     assert srv["command"] == "srt" and "--allowed-origins http://127.0.0.1:8765" in srv["args"][-1]
+    assert uitest.MCP_VERSION == "0.0.70", ("the MCP pin moved. THREAT_MODEL's claim that the tester's browser blocks file: URLs "
+                                             "relies on this version's default (--allow-unrestricted-file-access off). recheck it "
+                                             "with the new version's --help, then update the claim and this pin together")
     assert "--allow-unrestricted-file-access" not in srv["args"][-1]  # the MCP blocks file: URLs unless told otherwise
     cfg = json.loads(Path(srv["args"][1]).read_text())
     assert cfg["network"]["allowedDomains"] == [] and str(Path.home()) in cfg["filesystem"]["denyRead"]
