@@ -24,7 +24,7 @@ DEFAULT_CHECK = {
     "model": "claude-sonnet-5-5",  # a different Claude model from the maker's; the eval measures it
     "diff_cap": 400,               # changed lines a blind review can take reliably
     "rework_cap": 3,               # rework cycles before the task comes to you
-    "test_command": "python -m pytest -q -p no:cacheprovider --junitxml={junit} {tests}",
+    "test_command": "python -m pytest -q -p no:cacheprovider -o junit_family=xunit1 --junitxml={junit} {tests}",
 }
 WORKTREE_TOKEN = "<worktree>"
 
@@ -75,7 +75,7 @@ setup = ""
 model = "claude-sonnet-5-5"  # the blind checker, a different Claude model from the maker
 diff_cap = 400               # a bigger diff comes to you to split, or to accept the risk
 rework_cap = 3               # rework cycles before a failing check comes to you
-# test_command = "python -m pytest -q -p no:cacheprovider --junitxml={junit} {tests}"
+# test_command = "python -m pytest -q -p no:cacheprovider -o junit_family=xunit1 --junitxml={junit} {tests}"
 """
 
 

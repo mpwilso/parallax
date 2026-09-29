@@ -14,6 +14,8 @@ from test_m8 import docs, make_key
 
 GIT = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
 HAS_SRT = all(shutil.which(b) for b in ("srt", "bwrap", "socat")) and not os.environ.get("SANDBOX_RUNTIME")
+NO_SRT_WHY = ("already inside a sandbox, and a sandbox can't start inside another (the M9 spike)"
+              if os.environ.get("SANDBOX_RUNTIME") else "needs srt, bubblewrap and socat")
 
 
 def approved(repo, plan_edit=None, base_files=None):
@@ -121,12 +123,13 @@ def test_the_test_harness_comes_from_the_base_branch(repo):
 
     def spy(config, cwd, cmd, env):
         seen.update(conftest=(cwd / "tests" / "conftest.py").read_text(), ini=(cwd / "pytest.ini").exists(),
-                    tox=(cwd / "tox.ini").exists(), tmp=cmd.split(";")[0])
+                    tox=(cwd / "tox.ini").exists(), tmp=cmd.split(";")[0], copy=str(cwd))
         return junit_runner()(config, cwd, cmd, env)
 
     run(proj, tid, ScriptedAgent(), runner=spy)
     assert seen["conftest"] == "BASE = True\n" and seen["ini"] and not seen["tox"]
-    assert seen["tmp"].startswith("export TMPDIR=") and seen["tmp"].endswith(".parallax-tmp")
+    assert seen["tmp"].startswith("export TMPDIR=") and seen["tmp"].endswith("check-tmp")
+    assert not seen["tmp"].split("=", 1)[1].startswith(seen["copy"])  # beside the copy, not in it
     assert sorted(kinds(proj, "tests.recorded")[-1]["data"]["harness_reset"]) == ["pytest.ini", "tests/conftest.py", "tox.ini"]
 
 
@@ -168,7 +171,7 @@ def test_parse_junit_counts_per_file(tmp_path):
         "tests/test_a.py": [1, 2, 0], "tests/test_b.py": [0, 0, 1]}
 
 
-@pytest.mark.skipif(not HAS_SRT, reason="needs srt, bubblewrap and socat")
+@pytest.mark.skipif(not HAS_SRT, reason=NO_SRT_WHY)
 def test_the_tests_really_run_in_the_sandbox(repo):
     proj, tid, wt = approved(repo)
     (wt / "README.md").write_text("ok\n")
@@ -403,3 +406,11 @@ def test_build_byproducts_are_never_the_change(repo):
     (wt / ".pytest_cache" / "README.md").write_text("cache")
     s = tree.stage(wt, proj.task(tid)["base"], wt.parent / "idx")
     assert s.files == ["README.md"] and s.binaries == []
+
+
+def test_results_name_files_even_when_the_plan_names_a_folder(tmp_path):
+    """Live in M12: the plan's tests were ["tests/"], and the card listed tests.test_m11, not a file."""
+    x = tmp_path / "j.xml"
+    x.write_text('<testsuites><testsuite><testcase classname="tests.test_m11" name="a"/>'
+                 '<testcase classname="tests.test_m12.TestX" name="b"><failure/></testcase></testsuite></testsuites>')
+    assert testrun.parse_junit(x, ["tests/"]) == {"tests/test_m11.py": [1, 1, 0], "tests/test_m12.py": [0, 1, 0]}

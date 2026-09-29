@@ -1,6 +1,7 @@
 """Stand-ins for a maker and a checker, so the suite never calls a model."""
 from __future__ import annotations
 
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -121,13 +122,13 @@ def junit_runner(results=None, exit_code=0):
         calls.append((cwd, cmd, env))
         files = results or {}
         if not files:
-            files = {t.split(" ")[0]: (3, 0) for t in cmd.split("--junitxml=")[1].split(" ")[1:] if t.endswith(".py")}
+            files = {t: (3, 0) for t in shlex.split(cmd.split("--junitxml=", 1)[1])[1:] if t.endswith(".py")}
         cases = []
         for f, (ok, bad) in files.items():
             mod = f[:-3].replace("/", ".")
             cases += [f'<testcase classname="{mod}" name="t{i}"/>' for i in range(ok)]
             cases += [f'<testcase classname="{mod}" name="f{i}"><failure message="x"/></testcase>' for i in range(bad)]
-        junit = Path(cwd) / ".parallax-tmp" / "junit.xml"
+        junit = Path(shlex.split(cmd.split("--junitxml=", 1)[1])[0])  # where the command asks for it
         junit.write_text("<testsuites><testsuite>" + "".join(cases) + "</testsuite></testsuites>")
         return exit_code, f"{sum(v[0] for v in files.values())} passed"
 

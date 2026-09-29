@@ -205,7 +205,9 @@ def test_hook_rules_on_every_tool_call_including_reads(repo):
 def test_log_survives_characters_the_console_cant_encode(repo):
     proj = Project.init(repo)
     proj.ledger.append("maker.finished", "maker", "fixed add() → returns a + b ✨\n\nSECOND-LINE")
-    env = {**os.environ, "PYTHONIOENCODING": "cp1252"}
+    import parallax
+    source = str(Path(parallax.__file__).resolve().parents[1])  # the code under test, installed or not
+    env = {**os.environ, "PYTHONIOENCODING": "cp1252", "PYTHONPATH": source}
     out = subprocess.run([sys.executable, "-m", "parallax.cli", "log"], cwd=repo, env=env,
                          capture_output=True, text=True, encoding="cp1252")
     assert out.returncode == 0, out.stderr

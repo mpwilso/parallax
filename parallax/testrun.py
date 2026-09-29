@@ -71,18 +71,24 @@ def harness_from_base(worktree: Path, base: str, reviewed: str, copy: Path) -> l
 
 
 def _file_of(classname: str, file_attr: str | None, tests: list[str]) -> str:
+    """The test file a JUnit case came from, as a path: never a dotted module name."""
     if file_attr:
         return file_attr
     for t in tests:
         path = t.split("::", 1)[0]
-        mod = path[:-3].replace("/", ".") if path.endswith(".py") else path.replace("/", ".")
-        if classname == mod or classname.startswith(mod + "."):
-            return path
-    return classname
+        if path.endswith(".py"):
+            mod = path[:-3].replace("/", ".")
+            if classname == mod or classname.startswith(mod + "."):
+                return path
+    parts = classname.split(".")  # tests.test_m11.TestX -> tests/test_m11.py, the last lowercase module
+    for n in range(len(parts), 0, -1):
+        if parts[n - 1].startswith("test"):
+            return "/".join(parts[:n]) + ".py"
+    return classname.replace(".", "/") + ".py"
 
 
 def parse_junit(path: Path, tests: list[str]) -> dict[str, list[int]]:
-    out: dict[str, list[int]] = {t.split("::", 1)[0]: [0, 0, 0] for t in tests}
+    out: dict[str, list[int]] = {t.split("::", 1)[0]: [0, 0, 0] for t in tests if t.split("::", 1)[0].endswith(".py")}
     if not path.exists():
         return out
     for case in ET.parse(path).getroot().iter("testcase"):
@@ -104,7 +110,10 @@ def run(worktree: Path, base: str, reviewed: str, plan: dict, home: Path, venv: 
     shutil.rmtree(copy, ignore_errors=True)
     tree.export(worktree, reviewed, copy)
     reset = harness_from_base(worktree, base, reviewed, copy)
-    tmp = copy / ".parallax-tmp"
+    # the tests' temp folder sits beside the copy, never inside it: a test that walks up from its
+    # temp folder must not find the repo it's testing (seen in M12)
+    tmp = home / "check-tmp"
+    shutil.rmtree(tmp, ignore_errors=True)
     tmp.mkdir()
     junit = tmp / "junit.xml"
     tests = list(plan["tests"])
@@ -114,6 +123,8 @@ def run(worktree: Path, base: str, reviewed: str, plan: dict, home: Path, venv: 
     sandbox.prepare_mount_points(targets)
     reads = [str(Path(r).expanduser()) for r in plan["outside_reads"]]
     rules = sandbox.rules(copy, targets, git_dir=None, venv=venv, reads=reads, domains=plan["domains"])
+    rules.allow_write.append(str(tmp))
+    rules.allow_read.append(str(tmp))
     cfg = home / "tests-srt.json"
     cfg.write_text(json.dumps(rules.srt()))
     # the tests' TMPDIR is set inside the sandbox: srt keeps its own short one for its sockets,
@@ -121,6 +132,7 @@ def run(worktree: Path, base: str, reviewed: str, plan: dict, home: Path, venv: 
     code, output = (runner or _srt)(cfg, copy, f"export TMPDIR={shlex.quote(str(tmp))}; {cmd}", env)
     results = Results(code, parse_junit(junit, tests), "\n".join(output.strip().splitlines()[-15:]), junit.exists())
     shutil.rmtree(copy, ignore_errors=True)
+    shutil.rmtree(tmp, ignore_errors=True)
     return results, reset
 
 

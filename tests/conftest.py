@@ -19,3 +19,13 @@ def private_home(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("XDG_DATA_HOME", str(base / "data"))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(base / "config"))
     return base
+
+
+@pytest.fixture(autouse=True)
+def git_identity(monkeypatch):
+    """Commits in tests carry their own identity, never borrowed from your ~/.gitconfig.
+
+    Inside the sandbox $HOME is hidden, so a test that leaned on yours failed there (seen in M12)."""
+    for who in ("AUTHOR", "COMMITTER"):
+        monkeypatch.setenv(f"GIT_{who}_NAME", "Parallax Test")
+        monkeypatch.setenv(f"GIT_{who}_EMAIL", "test@parallax.invalid")
