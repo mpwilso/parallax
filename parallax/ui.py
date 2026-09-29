@@ -31,7 +31,7 @@ WEB = Path(__file__).with_name("web")
 STATIC = {"/": ("index.html", "text/html; charset=utf-8"), "/app.js": ("app.js", "text/javascript; charset=utf-8"),
           "/app.css": ("app.css", "text/css; charset=utf-8")}
 TOKEN_HEADER = "X-Parallax-Token"
-CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; "
+CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' blob:; "
        "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 
 
@@ -192,6 +192,8 @@ def _handler(ui: UI):
                     self._json(200, {"project": p.root.name, **views.board(p)})
                 elif len(parts) == 3 and parts[:2] == ["api", "task"]:
                     self._json(200, views.card(ui.project(), parts[2]))
+                elif len(parts) == 5 and parts[:2] == ["api", "task"] and parts[3] == "shot":
+                    self._send(200, views.shot(ui.project(), parts[2], parts[4]), "image/png")
                 elif len(parts) == 5 and parts[:2] == ["api", "task"] and parts[3] == "doc":
                     self._json(200, {"text": views.document(ui.project(), parts[2], parts[4])})
                 else:

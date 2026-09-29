@@ -56,6 +56,24 @@ def _checker(v: dict | None) -> tuple[list[str], list[str], list[tuple[str, str]
     return [head], findings, gaps
 
 
+def _ui(entries: list[dict]) -> tuple[list[str], list[tuple[str, str]]]:
+    """The UI tester's flows in one line, and what it says it didn't look at, for this attempt."""
+    rec, ran = _last(entries, "uitest.recorded"), _last(entries, "flows.recorded")
+    found, gaps = [], []
+    if ran:
+        d, cite = ran["data"], f"(ledger {ran['id']})"
+        if d.get("app_failed"):
+            found.append(f"UI flows: the app didn't start {cite}")
+        else:
+            bad = [c["name"] for c in d.get("failed") or []]
+            found.append(f"UI flows: {d['passed']} of {d['total']} pass" + (f"; failing: {', '.join(bad[:3])}" if bad else "") + f" {cite}")
+    if rec:
+        nla = " ".join(str(rec["data"].get("not_looked_at") or "nothing").split())
+        if nla.rstrip(".").lower() != "nothing":
+            gaps.append((f"the UI tester says: {nla}", f"UI tester did not look at: {nla} (ledger {rec['id']})"))
+    return found, gaps
+
+
 def _changed(project: Project, task_id: str, entries: list[dict]) -> list[str]:
     """After rework: which files each cycle changed. Only on a report after rework."""
     staged = [e for e in entries if e["kind"] == "check.staged"]
@@ -154,7 +172,9 @@ def report(project: Project, task_id: str) -> str:
     verdict = _last(entries, "verdict.recorded", stage="check")
     staged = _last(entries, "check.staged")
     head, findings, gaps = _checker(verdict)
-    found = _tests(tests, staged) + head
+    ui_found, ui_gaps = _ui(_attempt(entries, task_id))
+    gaps = gaps + ui_gaps
+    found = _tests(tests, staged) + ui_found + head
     boundary = [f"boundary change: {f} runs automatically (ledger {staged['id']})"
                 for f in (staged["data"]["autorun"] if staged else [])]
     changed = _changed(project, task_id, entries)

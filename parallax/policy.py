@@ -20,6 +20,10 @@ DEFAULT_LIMITS = {
 }
 DEFAULT_BUDGET = {"drafting_usd": 2.0, "small_cap_usd": 5.0, "large_cap_usd": 20.0}  # estimated dollars
 DEFAULT_LAUNCH = {"auto_launch_usd": 3.0, "review_paths": [], "review_plans": False}
+DEFAULT_UI_TESTER = {
+    "enabled": False, "start": "", "url": "", "paths": [], "tests": "tests/ui_flows",
+    "model": "claude-sonnet-5-5", "max_usd": 1.5,
+}
 DEFAULT_CHECK = {
     "model": "claude-sonnet-5-5",  # a different Claude model from the maker's; the eval measures it
     "diff_cap": 400,               # changed lines a blind review can take reliably
@@ -76,6 +80,17 @@ model = "claude-sonnet-5-5"  # the blind checker, a different Claude model from 
 diff_cap = 400               # a bigger diff comes to you to split, or to accept the risk
 rework_cap = 3               # rework cycles before a failing check comes to you
 # test_command = "python -m pytest -q -p no:cacheprovider -o junit_family=xunit1 --junitxml={junit} {tests}"
+
+[ui_tester]
+# a blind agent that uses your app in a real browser after the build, on tasks whose plan changes
+# a UI, and leaves Playwright tests that every later check reruns with no model. off until you
+# turn it on here. it runs in the sandbox, with network only to the app's local address.
+enabled = false
+start = ""                 # starts the app, from the built tree's folder, e.g. "npm run dev"
+url = ""                   # where the app answers, on this machine only, e.g. "http://127.0.0.1:5173/"
+paths = []                 # a plan changing any of these paths or globs changes the UI
+# tests = "tests/ui_flows" # where its tests go
+# max_usd = 1.50           # the most one run of the tester may use, inside the task's cap
 """
 
 
@@ -95,6 +110,37 @@ def normalize_detail(action: str, detail: str, worktree: str | Path | None = Non
     return detail
 
 
+LOCAL_URL = re.compile(r"^http://(127\.0\.0\.1|localhost):\d+(/|$)")
+
+
+def _ui_tester(cfg: dict) -> dict:
+    if set(cfg) - set(DEFAULT_UI_TESTER):
+        raise ValueError(f"unknown [ui_tester] settings: {sorted(set(cfg) - set(DEFAULT_UI_TESTER))}")
+    out = {**DEFAULT_UI_TESTER, **cfg}
+    if not isinstance(out["enabled"], bool):
+        raise ValueError("[ui_tester] enabled must be true or false")
+    for key in ("start", "url", "tests", "model"):
+        if not isinstance(out[key], str):
+            raise ValueError(f"[ui_tester] {key} must be text")
+    if not isinstance(out["paths"], list) or not all(isinstance(x, str) and x.strip() for x in out["paths"]):
+        raise ValueError("[ui_tester] paths must be a list of paths or globs")
+    if not isinstance(out["max_usd"], (int, float)) or isinstance(out["max_usd"], bool) or out["max_usd"] <= 0:
+        raise ValueError("[ui_tester] max_usd must be a dollar amount above 0")
+    tests = out["tests"].strip("/")
+    if not tests or tests.startswith((".", "/")) or ".." in tests.split("/") or tests.split("/")[0] == "docs":
+        raise ValueError("[ui_tester] tests must be a folder inside the repo, like tests/ui_flows")
+    out["tests"] = tests
+    if out["enabled"]:
+        if not out["start"].strip():
+            raise ValueError("[ui_tester] needs start: the command that starts your app")
+        if not LOCAL_URL.match(out["url"]):
+            raise ValueError("[ui_tester] url must be on this machine, like http://127.0.0.1:5173/: the tester's "
+                             "network reaches nothing else")
+        if not out["paths"]:
+            raise ValueError("[ui_tester] needs paths: which files make up your UI, so Parallax knows a plan changes it")
+    return out
+
+
 def _check_table(where: str, table: dict[str, str]) -> None:
     bad = {a: r for a, r in table.items() if not isinstance(r, str) or r not in RULINGS}
     if bad:
@@ -106,7 +152,8 @@ def _check_table(where: str, table: dict[str, str]) -> None:
 class Policy:
     def __init__(self, actions: dict[str, str], limits: dict[str, int] | None = None,
                  exact: dict[str, dict[str, str]] | None = None, budget: dict[str, float] | None = None,
-                 build: dict[str, str] | None = None, check: dict | None = None, launch: dict | None = None):
+                 build: dict[str, str] | None = None, check: dict | None = None, launch: dict | None = None,
+                 ui_tester: dict | None = None):
         _check_table("[actions]", actions)
         self.exact = {action: dict(table) for action, table in (exact or {}).items() if table}
         if "git.merge" in self.exact:
@@ -156,6 +203,7 @@ class Policy:
         if not isinstance(launch.get("review_plans", False), bool):
             raise ValueError("[launch] review_plans must be true or false")
         self.launch = {**DEFAULT_LAUNCH, **launch}
+        self.ui_tester = _ui_tester(dict(ui_tester or {}))
 
     @classmethod
     def from_dict(cls, data: dict) -> "Policy":
@@ -163,7 +211,7 @@ class Policy:
             raise ValueError("profiles are gone. every task uses [actions]; remove [profiles]")
         return cls(data.get("actions", {}), data.get("limits", {}), data.get("exact", {}), data.get("budget", {}),
                    data.get("build", {}), data.get("check", {}),
-                   data.get("launch", {}))
+                   data.get("launch", {}), data.get("ui_tester", {}))
 
     @classmethod
     def load(cls, path: Path) -> "Policy":

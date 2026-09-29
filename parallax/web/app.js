@@ -230,6 +230,7 @@ function renderCard() {
     list("Not looked at", c.unseen.length === 1 && c.unseen[0].text === "nothing" ? [] : c.unseen),
     list("Changed since last time", c.changed),
     list("Found", c.found),
+    shotsSection(c),
     docs(c),
     c.details.length ? el("details", { class: "more" }, el("summary", {}, "Details"),
       el("ul", { class: "plain" }, c.details.map(cited))) : null,
@@ -239,6 +240,32 @@ function renderCard() {
   restoreFocus(key);
   const r = document.getElementById("reason");
   if (r && state.pending) r.value = state.pending.text || "";
+}
+
+// what the UI tester saw: images need the token, so they come as blobs (the CSP allows blob: images only)
+const shotURLs = {};
+function shotsSection(c) {
+  if (!c.shots || !c.shots.length) return null;
+  return [el("h3", {}, "What the UI tester saw"),
+    el("div", { class: "shots" }, c.shots.map(s => {
+      const img = el("img", { alt: s.caption, loading: "lazy" });
+      loadShot(img, c.task, s.name);
+      return el("figure", { class: s.works === false ? "broken" : null }, img,
+        el("figcaption", {}, s.works === false ? el("span", { class: "tag bad" }, "Didn't work") : null, " ", s.caption));
+    }))];
+}
+
+async function loadShot(img, task, name) {
+  const key = task + "/" + name;
+  if (!shotURLs[key]) {
+    try {
+      const res = await fetch(`/api/task/${encodeURIComponent(task)}/shot/${encodeURIComponent(name)}`,
+        { headers: { "X-Parallax-Token": state.token } });
+      if (!res.ok) return;
+      shotURLs[key] = URL.createObjectURL(await res.blob());
+    } catch (err) { return; }
+  }
+  img.src = shotURLs[key];
 }
 
 function filesTable(files) {

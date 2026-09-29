@@ -49,7 +49,11 @@ def doing(entries: list[dict]) -> tuple[str, str, str]:
             what, since = f"maker reworking ({d.get('cycle', 1)} of {REWORK_CAP})", e["ts"]
         elif k == "check.started":
             what, since = "running the plan's tests", e["ts"]
-        elif k == "tests.recorded":
+        elif k == "uitest.started":
+            what, since = "UI tester using the app", e["ts"]
+        elif k == "flows.started":
+            what, since = "running the UI flow tests", e["ts"]
+        elif k in ("tests.recorded", "flows.recorded"):
             what, since = "checker reviewing the change", e["ts"]
     return what, why, since
 

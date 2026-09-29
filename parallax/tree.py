@@ -92,9 +92,9 @@ def _symlinks(worktree: Path, treeish: str) -> set[str]:
     return {row.split("\t", 1)[1] for row in out.split("\0") if row.startswith("120000 ")}
 
 
-def conform(s: Staged, plan: dict, diff_cap: int) -> Staged:
+def conform(s: Staged, plan: dict, diff_cap: int, verifier: set[str] = frozenset()) -> Staged:
     """Record every blocking problem the plan makes visible. Code, not a model."""
-    listed = set(plan["files"])  # plus verifier tests, once the test-writer exists (eval only for now)
+    listed = set(plan["files"]) | set(verifier)  # verifier: the UI tester's tests, hashed by Parallax
 
     def problem(cause: str, path: str, text: str) -> None:
         s.problems.append(text)

@@ -17,7 +17,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Callable
 
-from . import build, costs, lifecycle, lint, review, sandbox, status, testrun, tree
+from . import build, costs, lifecycle, lint, review, sandbox, status, testrun, tree, uitest
 from .agents.base import BlindChecker, CheckerError, Review
 from .core import ParallaxError, Project
 
@@ -54,6 +54,12 @@ def _path(where: str) -> str:
     return where.split(":", 1)[0].strip()
 
 
+def _staged(project: Project, task_id: str, p, plan: dict, settings: dict) -> tree.Staged:
+    """Stage the worktree and check it against the plan. The UI tester's tests count as planned."""
+    return tree.conform(tree.stage(p.worktree, p.task["base"], p.home / "check.index"), plan, settings["diff_cap"],
+                        verifier=set(uitest.guarded(project, task_id)))
+
+
 def rework_cycles(project: Project, task_id: str) -> int:
     """Rework cycles in this attempt."""
     return sum(e["kind"] == "rework.started" for e in status.attempt(project.ledger.entries(), task_id))
@@ -75,7 +81,22 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
     if removed:
         project.ledger.append("sandbox.cleaned", "parallax", "removed the sandbox's empty placeholder files before the check",
                               task=task_id, files=removed)
-    s = tree.conform(tree.stage(p.worktree, t["base"], p.home / "check.index"), plan, settings["diff_cap"])
+    s = _staged(project, task_id, p, plan, settings)
+    if not s.problems and uitest.applies(project, plan) and not uitest.recorded(project, task_id):
+        try:  # the UI tester, once per attempt, before anything else is paid for
+            outcome, why = uitest.test(project, task_id, p, uitest.TESTER)
+        except uitest.UITestError as err:
+            return _to_you(project, task_id, "check", f"the UI tester couldn't run: {err}", tree=s.tree), []
+        if outcome == "app":
+            project.ledger.append("check.found", "parallax", why, task=task_id, tree=s.tree, findings=[f"blocker: {why}"])
+            return "rework", [f"blocker: {why}"]
+        if outcome == "you":
+            return _to_you(project, task_id, "check", why, tree=s.tree), []
+        s = _staged(project, task_id, p, plan, settings)  # now with its tests
+    changed = uitest.tampered(project, task_id, p.worktree)
+    if changed:
+        return _to_you(project, task_id, "guard", f"the UI tester's tests changed after it wrote them: {', '.join(changed)}",
+                       tree=s.tree), []
     risk = bool(s.problems) and accepted_risk(project, task_id, s.tree)
     project.ledger.append("check.staged", "parallax", "", task=task_id, tree=s.tree, base=s.base,
                                    files=s.files, lines=s.lines, binaries=s.binaries, symlinks=s.symlinks,
@@ -93,13 +114,29 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
         last = (results.tail.splitlines() or ["no output"])[-1]
         return _to_you(project, task_id, "check", f"the plan's tests couldn't run (exit {results.exit}): {last}",
                        tree=s.tree), []
+    try:
+        flows = uitest.run_flows(project, task_id, p, s.tree, uitest.FLOW_RUNNER)
+    except uitest.UITestError as err:
+        return _to_you(project, task_id, "check", f"the UI flow tests couldn't run: {err}", tree=s.tree), []
+    flow_fix = []
+    if flows is not None:
+        project.ledger.append("flows.recorded", "parallax", flows.tail, task=task_id, tree=s.tree, ran=flows.ran,
+                              app_failed=flows.app_failed, passed=len(flows.cases) - len(flows.failed),
+                              total=len(flows.cases), failed=flows.failed)
+        if flows.app_failed:
+            flow_fix = [f"blocker: the app didn't start for the UI flow tests:\n{flows.tail}"]
+        elif not flows.ran:
+            return _to_you(project, task_id, "check", f"the UI flow tests couldn't run: {lint.one_sentence(flows.tail or 'no report')}",
+                           tree=s.tree), []
+        else:
+            flow_fix = [f"blocker {c['file']}: the UI flow \"{c['name']}\" fails: {c['message']}" for c in flows.failed]
 
     # code findings first: they go straight back to the maker, and the checker isn't paid to spot them
     dashes = [f"blocker {path}:{line}: an em dash was added; use a comma or a colon"
               for path, line, text in tree.added_lines(s.diff) if lint.EM_DASH in text]
     if dashes:
         project.ledger.append("check.found", "parallax", "; ".join(dashes), task=task_id, tree=s.tree, findings=dashes)
-        return "rework", dashes + ([] if results.ok else [f"tests failed (exit {results.exit})"])
+        return "rework", dashes + flow_fix + ([] if results.ok else [f"tests failed (exit {results.exit})"])
 
     intent = lifecycle.doc_path(project, task_id, "intent").read_text(encoding="utf-8")
     review_text = review.load(project.root)
@@ -136,11 +173,11 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
         return _to_you(project, task_id, "conflict",
                        f"intent and plan disagree: the checker says {f.where} goes against the intent "
                        f"({' '.join(f.text.split())}), but your approved plan lists {_path(f.where)}", tree=s.tree), []
-    if results.ok and not blockers:
+    if results.ok and not blockers and not flow_fix:
         project.ledger.append("check.finished", "parallax", "", task=task_id, status="ready", tree=s.tree)
         return "ready", []
 
-    fix = [f"{f.severity} {f.where}: {f.text}".replace(" :", ":") for f in blockers]
+    fix = [f"{f.severity} {f.where}: {f.text}".replace(" :", ":") for f in blockers] + flow_fix
     for f, (passed, counted, _) in results.per_file.items():
         if passed < counted:
             fix.append(f"tests: {f} has {counted - passed} of {counted} failing")

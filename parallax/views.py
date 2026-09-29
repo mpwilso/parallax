@@ -118,7 +118,28 @@ def card(project: Project, task_id: str) -> dict:
             "actions": actions, "merge": merge, "files": files,
             "live": live.line(project, task_id) if state in ("drafting", "building", "checking") else "",
             "has_change": any(e["kind"] == "check.staged" for e in entries) or t["status"] in ("accepted", "merged"),
+            "shots": shots(project, task_id),
             "docs": [d for d in ("intent", "spec", "plan", "record") if lifecycle.found_doc(project, task_id, d)]}
+
+
+def shots(project: Project, task_id: str) -> list[dict]:
+    """What the UI tester saw, this attempt: one screenshot per flow, with what it said about it."""
+    from . import uitest
+    rec = uitest.recorded(project, task_id)
+    if not rec:
+        return []
+    saw = {f"{f.get('name')}.png": f for f in rec["data"].get("flows") or [] if isinstance(f, dict)}
+    folder = uitest.evidence(project, task_id)
+    return [{"name": n, "caption": str(saw.get(n, {}).get("saw") or n.removesuffix(".png").replace("-", " ")),
+             "works": saw.get(n, {}).get("works")} for n in rec["data"].get("shots") or [] if (folder / n).is_file()]
+
+
+def shot(project: Project, task_id: str, name: str) -> bytes:
+    """One screenshot, only by a name the tester's record lists."""
+    from . import uitest
+    if name not in {s["name"] for s in shots(project, task_id)}:
+        raise ValueError(f"no screenshot {name!r}")
+    return (uitest.evidence(project, task_id) / name).read_bytes()
 
 
 def _cited(item: str) -> dict:

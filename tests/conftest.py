@@ -43,3 +43,15 @@ def no_background_agents(monkeypatch):
         raise AssertionError(f"a test tried to start a real background process: {' '.join(argv[-3:])}. fake build._spawn")
 
     monkeypatch.setattr(build, "_spawn", refuse)
+
+
+@pytest.fixture(autouse=True)
+def no_real_ui_tester(monkeypatch):
+    """The UI tester is a model, and its flows need a browser: tests fake both, or fail loudly."""
+    from parallax import uitest
+
+    def refuse(*a, **k):
+        raise AssertionError("a test reached the real UI tester. fake uitest.TESTER")
+
+    monkeypatch.setattr(uitest, "TESTER", refuse)
+    monkeypatch.setattr(uitest, "ensure_tools", lambda: (_ for _ in ()).throw(AssertionError("fake uitest.ensure_tools")))

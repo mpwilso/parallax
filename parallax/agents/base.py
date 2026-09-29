@@ -70,6 +70,12 @@ class BlindChecker(Protocol):
     def check(self, brief: str) -> Review: ...
 
 
+class UITester(Protocol):
+    """Uses the app through one MCP browser server, writes tests in cwd. allowed(tool, input) rules every call."""
+
+    def run(self, goal: str, cwd: Path, server: dict, allowed) -> AgentResult: ...
+
+
 class Agent(Protocol):
     def run(self, goal: str, cwd: Path, permission_fn: PermissionFn, stage: str = "build",
             env: dict[str, str] | None = None) -> AgentResult: ...
