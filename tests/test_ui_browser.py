@@ -4,6 +4,7 @@ No model and no cost: agents are fakes, and a task's life is played into the led
 with the reason, where Playwright or Chromium isn't installed (inside a task's sandbox, say).
 """
 import json
+import os
 import re
 import threading
 from pathlib import Path
@@ -26,8 +27,8 @@ WAIT = 12_000  # ms: the page polls every 2s
 @pytest.fixture(scope="module")
 def browser():
     with sync_playwright() as p:
-        try:
-            b = p.chromium.launch()
+        try:  # inside Parallax's check, the UI tester's pinned browser (see testrun.py)
+            b = p.chromium.launch(executable_path=os.environ.get("PARALLAX_BROWSER") or None)
         except Exception as err:  # the browser or its system libraries aren't installed here
             pytest.skip(f"Chromium can't start: {str(err).splitlines()[0]}. "
                         "See README: sudo apt-get install -y libnss3 libnspr4 libasound2t64")

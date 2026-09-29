@@ -125,6 +125,11 @@ def run(worktree: Path, base: str, reviewed: str, plan: dict, home: Path, venv: 
     rules = sandbox.rules(copy, targets, git_dir=None, venv=venv, reads=reads, domains=plan["domains"])
     rules.allow_write.append(str(tmp))
     rules.allow_read.append(str(tmp))
+    from .uitest import installed  # the UI tester's pinned browser, for a repo's own browser tests
+    tools = installed()
+    if tools:
+        rules.allow_read.append(str(tools.dir))
+        env = {**env, "PARALLAX_BROWSER": str(tools.exe), **({"LD_LIBRARY_PATH": str(tools.lib)} if tools.lib else {})}
     cfg = home / "tests-srt.json"
     cfg.write_text(json.dumps(rules.srt()))
     # the tests' TMPDIR is set inside the sandbox: srt keeps its own short one for its sockets,

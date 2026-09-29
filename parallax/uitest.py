@@ -183,6 +183,14 @@ def _fetch_libs(missing: list[str], into: Path) -> None:
             _run(["dpkg", "-x", str(deb), str(into)])
 
 
+def installed() -> Tools | None:
+    """The tools, if they're already here, without installing anything."""
+    d = tools_dir()
+    shells = sorted(glob.glob(str(d / "browsers" / "chromium_headless_shell-*" / "*" / "chrome-headless-shell")))
+    lib = d / "lib" / "usr" / "lib" / "x86_64-linux-gnu"
+    return Tools(d, Path(shells[-1]), lib if lib.exists() else None) if shells else None
+
+
 def ensure_tools() -> Tools:
     """Install the pinned tools once, as you, outside the sandbox (npm with scripts off)."""
     d = tools_dir()

@@ -228,3 +228,22 @@ def test_junit_from_the_playwright_runner(tmp_path):
     assert uitest.parse_junit(j) == [{"file": "a.spec.js", "name": "ok", "ok": True, "message": ""},
                                      {"file": "a.spec.js", "name": "bad", "ok": False, "message": "expected 1"}]
 
+
+
+def test_a_repos_own_browser_tests_get_the_pinned_browser_in_the_check(repo):
+    """a live run: this repo's plan tests drive Chromium, and the check's sandbox had none."""
+    from parallax import testrun, tree
+    shell = uitest.tools_dir() / "browsers" / "chromium_headless_shell-1" / "linux" / "chrome-headless-shell"
+    shell.parent.mkdir(parents=True)
+    shell.write_text("")
+    seen = {}
+
+    def runner(config, cwd, cmd, env):
+        seen.update(env=env, cfg=json.loads(Path(config).read_text()))
+        return 0, ""
+    base = tree.stage(repo, "HEAD", repo / ".git" / "i").tree
+    head = __import__("subprocess").run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    plan = {"tests": [], "outside_reads": [], "domains": []}
+    testrun.run(repo, head, base, plan, repo.parent / "home", None, {"PATH": "/usr/bin"}, "true {junit} {tests}", runner)
+    assert seen["env"]["PARALLAX_BROWSER"] == str(shell)
+    assert str(uitest.tools_dir()) in seen["cfg"]["filesystem"]["allowRead"]
