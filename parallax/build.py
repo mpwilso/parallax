@@ -152,7 +152,7 @@ def launch(project: Project, p: Prepared, spawn: Callable | None = None, mode: s
     """Start the builder in the background with a scrubbed environment. Returns its pid.
 
     mode: "build" builds, then checks; "check" only checks what's already built."""
-    argv = [sys.executable, "-u", "-m", "parallax.build", str(project.root), p.task["task"], mode]
+    argv = [sys.executable, "-P", "-u", "-m", "parallax.build", str(project.root), p.task["task"], mode]
     pid = (spawn or _spawn)(argv, scrubbed_env(p.venv), project.root, p.home / "build.log")
     project.ledger.append("build.started", "parallax", "", task=p.task["task"], pid=pid, budget_usd=p.left,
                           settings=str(p.settings), mode=mode)

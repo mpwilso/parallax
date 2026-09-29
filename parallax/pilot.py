@@ -151,7 +151,7 @@ def _spawn_pilot(project: Project, task_id: str, spawn: Callable | None = None) 
     home = sandbox.task_home(project.root, task_id)
     home.mkdir(parents=True, exist_ok=True)
     os.chmod(home, 0o700)
-    argv = [sys.executable, "-u", "-m", "parallax.build", str(project.root), task_id, "pilot"]
+    argv = [sys.executable, "-P", "-u", "-m", "parallax.build", str(project.root), task_id, "pilot"]
     env = build.scrubbed_env(None, path=os.environ.get("PATH", build.SYSTEM_PATH))
     pid = (spawn or build._spawn)(argv, env, project.root, home / "pilot.log")
     project.ledger.append("build.started", "parallax", "", task=task_id, pid=pid, mode="pilot")

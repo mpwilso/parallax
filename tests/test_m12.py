@@ -327,3 +327,10 @@ def test_a_rejected_task_leaves_the_inbox(proj, monkeypatch, capsys):
     main(["task", "list"])
     out = capsys.readouterr().out
     assert f"{tid}  [rejected]" in out and f"{old}  [rejected]" in out
+
+def test_the_background_process_runs_the_installed_parallax_never_the_repos(proj, monkeypatch):
+    """2da12f: in a repo with its own parallax/ package, `python -m` from the repo's folder ran that copy."""
+    seen = []
+    monkeypatch.setattr(build, "_spawn", lambda argv, env, cwd, log: seen.append(argv) or 9)
+    pilot.intake(proj, WANT)
+    assert seen[0][1:4] == ["-P", "-u", "-m"]  # -P: the working folder never goes on sys.path
