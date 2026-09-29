@@ -37,9 +37,9 @@ def test_ledger_chain_survives_parallel_processes(tmp_path):
 
 
 def test_limits_have_defaults_and_are_validated():
-    assert Policy().limits == {"max_parallel": 4, "stuck_after": 3, "stale_minutes": 60}
-    assert Policy(limits={"max_parallel": 2}).limits["max_parallel"] == 2
-    for bad in ({"max_parallel": 0}, {"max_paralel": 2}, {"stuck_after": True}):
+    assert Policy().limits == {"stuck_after": 3, "stale_minutes": 60}
+    assert Policy(limits={"stuck_after": 2}).limits["stuck_after"] == 2
+    for bad in ({"stuck_after": 0}, {"stuck_aftr": 2}, {"stuck_after": True}, {"max_parallel": 4}):
         with pytest.raises(ValueError):
             Policy(limits=bad)
 
@@ -52,7 +52,20 @@ def test_the_old_per_action_policy_is_refused_with_a_way_forward():
 
 def test_default_policy_file_loads(repo):
     proj = Project.init(repo)
-    assert proj.policy.limits["max_parallel"] == 4
+    assert proj.policy.limits["stuck_after"] == 3
+
+
+def test_the_example_policy_is_the_default_and_init_copies_it(repo):
+    """parallax.policy.example.toml is what init writes: they can't drift apart."""
+    from parallax.core import EXAMPLE_POLICY_FILE, POLICY_FILE
+    from parallax.policy import DEFAULT_POLICY
+    example = (Path(__file__).resolve().parents[1] / EXAMPLE_POLICY_FILE).read_text()
+    assert example == DEFAULT_POLICY
+    settings = [l for l in example.splitlines() if l and not l.startswith(("#", "["))]
+    assert settings and all("  # " in l for l in settings)  # one comment per setting
+    (repo / EXAMPLE_POLICY_FILE).write_text(example.replace("rework_cap = 3 ", "rework_cap = 2 "))
+    assert Project.init(repo).policy.check["rework_cap"] == 2  # a repo's own example wins
+    assert (repo / POLICY_FILE).read_text() == (repo / EXAMPLE_POLICY_FILE).read_text()
 
 
 # spawn depth 1 ---------------------------------------------------------------

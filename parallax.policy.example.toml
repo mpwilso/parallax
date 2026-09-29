@@ -1,0 +1,36 @@
+# Parallax policy: your rules for this repo. Agents do routine work inside their worktree; anything
+# that crosses the boundary must be in the approved plan. Merging is not a setting: it is always yours.
+# Costs are estimated US dollars at API list prices, as Claude Code computes them.
+
+[limits]
+stuck_after = 3                # the same refused call this many times stops the task
+stale_minutes = 60             # a running task silent this long is flagged stuck
+
+[budget]
+drafting_usd = 2.00            # the most one drafting call (intent, spec or plan) may spend
+small_cap_usd = 5.00           # the highest cap a small task's plan may set
+large_cap_usd = 20.00          # the highest cap a large task's plan may set
+
+[launch]
+auto_launch_usd = 3.00         # a plan whose cap is at most this launches without asking you
+review_paths = []              # paths or globs: a plan touching any of them waits for your review
+review_plans = false           # true: every plan waits for your review
+
+[build]
+setup = ""                     # a command, run as you on the base commit, that makes the venv at $PARALLAX_VENV
+
+[draft]
+model = "claude-sonnet-5-5"    # the drafters' model: they write the intent, spec and plan
+
+[check]
+model = "claude-sonnet-5-5"    # the blind checker's model
+diff_cap = 400                 # a bigger diff comes to you to split, or to accept the risk
+rework_cap = 3                 # rework cycles before a failing check comes to you
+test_command = "python -m pytest -q -p no:cacheprovider -o junit_family=xunit1 --junitxml={junit} {tests}"  # runs the plan's tests
+
+[ui_tester]
+enabled = false                # true: a blind agent uses your app in a real browser on user-flow tasks
+start = ""                     # starts the app from the built tree's folder, like "npm run dev"
+url = ""                       # where the app answers, on this machine only, like "http://127.0.0.1:5173/"
+model = "claude-sonnet-5-5"    # the UI tester's model
+max_usd = 0.50                 # the most one tester run may spend, and what a plan's cap keeps for it

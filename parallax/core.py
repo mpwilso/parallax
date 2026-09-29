@@ -18,6 +18,7 @@ from .policy import DEFAULT_POLICY, Policy
 
 STATE_DIR = ".parallax"
 POLICY_FILE = "parallax.policy.toml"
+EXAMPLE_POLICY_FILE = "parallax.policy.example.toml"
 INBOX_KINDS = {"disagreement.raised", "stuck.raised"}
 TASK_ENV, ROOT_ENV = "PARALLAX_TASK", "PARALLAX_ROOT"  # set for every maker process
 
@@ -92,8 +93,9 @@ class Project:
         refuse_inside_task(root)
         _git(root, "rev-parse", "--is-inside-work-tree")
         policy_path = root / POLICY_FILE
-        if not policy_path.exists():
-            policy_path.write_text(DEFAULT_POLICY)
+        if not policy_path.exists():  # the repo's own example if it has one, else the defaults
+            example = root / EXAMPLE_POLICY_FILE
+            policy_path.write_text(example.read_text() if example.is_file() else DEFAULT_POLICY)
         from .review import REVIEW_FILE, TEMPLATE as REVIEW_TEMPLATE
         if not (root / REVIEW_FILE).exists():
             (root / REVIEW_FILE).write_text(REVIEW_TEMPLATE, encoding="utf-8")

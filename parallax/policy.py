@@ -10,7 +10,7 @@ import re
 import tomllib
 from pathlib import Path
 
-DEFAULT_LIMITS = {"max_parallel": 4, "stuck_after": 3, "stale_minutes": 60}
+DEFAULT_LIMITS = {"stuck_after": 3, "stale_minutes": 60}
 DEFAULT_BUDGET = {"drafting_usd": 2.0, "small_cap_usd": 5.0, "large_cap_usd": 20.0}  # estimated dollars
 DEFAULT_LAUNCH = {"auto_launch_usd": 3.0, "review_paths": [], "review_plans": False}
 DEFAULT_DRAFT = {"model": "claude-sonnet-5-5"}  # a fifth of Opus's drafting cost, no more redrafts (docs/plan.md)
@@ -26,49 +26,42 @@ DEFAULT_CHECK = {
 }
 
 DEFAULT_POLICY = """\
-# Parallax policy. Agents do routine work inside their worktree; anything that crosses the
-# boundary must be in the approved plan. Merging is not a setting: it is always yours.
+# Parallax policy: your rules for this repo. Agents do routine work inside their worktree; anything
+# that crosses the boundary must be in the approved plan. Merging is not a setting: it is always yours.
+# Costs are estimated US dollars at API list prices, as Claude Code computes them.
 
 [limits]
-max_parallel  = 4    # tasks running at once
-stuck_after   = 3    # the same call refused this many times stops the task
-stale_minutes = 60   # a running task silent this long is flagged stuck
+stuck_after = 3                # the same refused call this many times stops the task
+stale_minutes = 60             # a running task silent this long is flagged stuck
 
 [budget]
-# estimated US dollars at API list prices, as Claude Code computes them. not a charge.
-drafting_usd = 2.00   # the most one drafting call (intent, spec or plan) may use
-small_cap_usd = 5.00  # the most a small task's plan may set as its cap
-large_cap_usd = 20.00 # the same, for a large task
+drafting_usd = 2.00            # the most one drafting call (intent, spec or plan) may spend
+small_cap_usd = 5.00           # the highest cap a small task's plan may set
+large_cap_usd = 20.00          # the highest cap a large task's plan may set
 
 [launch]
-# when code may approve a plan and start the build without you. everything else waits for you.
-auto_launch_usd = 3.00  # a plan whose budget cap is at most this launches on its own
-review_paths = []       # paths or globs: a plan touching any of them waits for you to review it
-review_plans = false    # true: every plan waits for you
+auto_launch_usd = 3.00         # a plan whose cap is at most this launches without asking you
+review_paths = []              # paths or globs: a plan touching any of them waits for your review
+review_plans = false           # true: every plan waits for your review
 
 [build]
-# a shell command that makes the task's Python environment before the build. it runs as you,
-# outside the sandbox, in the task's worktree, with $PARALLAX_VENV set to where the venv goes.
-# the maker gets the venv on its PATH and can read it, nothing more. empty: no venv.
-setup = ""
+setup = ""                     # a command, run as you on the base commit, that makes the venv at $PARALLAX_VENV
 
 [draft]
-model = "claude-sonnet-5-5"  # the drafters: they write the intent, the spec and the plan
+model = "claude-sonnet-5-5"    # the drafters' model: they write the intent, spec and plan
 
 [check]
-model = "claude-sonnet-5-5"  # the blind checker, a different Claude model from the maker
-diff_cap = 400               # a bigger diff comes to you to split, or to accept the risk
-rework_cap = 3               # rework cycles before a failing check comes to you
-# test_command = "python -m pytest -q -p no:cacheprovider -o junit_family=xunit1 --junitxml={junit} {tests}"
+model = "claude-sonnet-5-5"    # the blind checker's model
+diff_cap = 400                 # a bigger diff comes to you to split, or to accept the risk
+rework_cap = 3                 # rework cycles before a failing check comes to you
+test_command = "python -m pytest -q -p no:cacheprovider -o junit_family=xunit1 --junitxml={junit} {tests}"  # runs the plan's tests
 
 [ui_tester]
-# a blind agent that uses your app in a real browser after the build, on tasks whose plan names
-# user flows, and leaves Playwright tests that every later check reruns with no model. off until you
-# turn it on here. it runs in the sandbox, with network only to the app's local address.
-enabled = false
-start = ""                 # starts the app, from the built tree's folder, e.g. "npm run dev"
-url = ""                   # where the app answers, on this machine only, e.g. "http://127.0.0.1:5173/"
-# max_usd = 0.50           # the most one run of the tester may spend, and what a plan's cap keeps for it
+enabled = false                # true: a blind agent uses your app in a real browser on user-flow tasks
+start = ""                     # starts the app from the built tree's folder, like "npm run dev"
+url = ""                       # where the app answers, on this machine only, like "http://127.0.0.1:5173/"
+model = "claude-sonnet-5-5"    # the UI tester's model
+max_usd = 0.50                 # the most one tester run may spend, and what a plan's cap keeps for it
 """
 
 
