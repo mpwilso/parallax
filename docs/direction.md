@@ -88,7 +88,7 @@ Under those, code approves the plan and launches, under the rule in the policy f
 Build it into the eval first. It joins the live loop only if the eval shows it catches what the checker misses.
 
 **Approvals.** Only I approve, or code under a rule I set in the policy file. Approval requires a secret the sandbox can't read or write, not an environment variable or a check the maker can run. The UI:
-- uses a per-launch token,
+- uses a token only the page holder has (kept beside the approval key so a bookmark survives restarts; `parallax ui --new-token` replaces it),
 - checks Host and Origin headers,
 - escapes all agent-written text,
 - sets a strict content security policy.

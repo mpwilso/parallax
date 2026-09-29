@@ -163,16 +163,27 @@ Worktrees live outside your repo, in `~/.local/share/parallax/worktrees/`.
 parallax ui
 ```
 
-In WSL it prints a link; open it in your Windows browser (WSL forwards `localhost`). Keep the terminal open while you use it.
+In WSL it prints a link; open it in your Windows browser (WSL forwards `localhost`). Keep the terminal open while you use it. The link stays the same between runs, so you can bookmark it; `parallax ui --new-token` replaces it.
 
 The page has three things and nothing else:
 - **An intake box.** Describe the work, press Enter. That's `parallax do`.
-- **A board** of every task by state: drafting, building, checking, ready, needs you, done. What waits on you is highlighted, and the tab shows how many.
-- **A decision card** for each task: the bottom line, what the work was, what changed, the tests, the checker's verdict and findings, and what wasn't looked at, readable in 30 seconds. The change, the intent and the plan are one click away. At Ready you accept in one click, or reject with a reason; a Decision needed shows its question and options, with the recommended one first. Accepted tasks show the merge command to run yourself.
+- **A queue.** What waits on you comes first, riskiest on top: a secrets file in the change, then other decisions, then Ready. Under it, each working task in one live line: which agent has it, for how long, and what it has spent against its cap ("maker reworking (1 of 3), 2m, $0.40 of $2.00"). Done tasks fold away, and an accepted one says the merge is still yours. The tab shows how many wait on you.
+- **A decision card** for each task: the bottom line, one question with its options, what each option does and which one code recommends, then what wasn't looked at and what was found. A change outside the plan lists every file, and says whether a secrets file has content. The change, the intent and the plan are one click away. After you decide, the next card that waits on you opens. Accepted tasks show the merge command to run yourself.
 
-Keys: `/` the intake box, `j` and `k` move between tasks, `a` accept, `r` reject, `1` to `9` choose an option, `d` the change, `Esc` close. It updates on its own while agents work.
+Keys: `/` the intake box, `n` the next task that waits on you, `j` and `k` move between tasks, `a` moves to Accept, `1` to `9` move to an option, `Enter` presses it, `r` reject, `d` the change, `Esc` back. No single key decides anything, and keys are off while you type. It updates on its own while agents work, without losing what you're typing.
 
-The page runs on your machine only, behind a token that's in the link and nowhere else, and a strict content security policy. Every action is recorded as yours, the same way the terminal records it, and no agent can reach the page.
+The page runs on your machine only, behind a token that's in the link, and a strict content security policy. Every action is recorded as yours, the same way the terminal records it, and no agent can reach the page.
+
+### Testing the UI
+
+The UI's tests drive a real, headless Chromium through Playwright, with fake agents: no model, no cost. Once per machine:
+
+```bash
+uv run --with playwright python -m playwright install chromium
+sudo apt-get install -y libnss3 libnspr4 libasound2t64   # the libraries Chromium needs on Ubuntu 24.04
+```
+
+Then run everything with `uv run --with pytest --with playwright --with-editable . python -m pytest -q`. Without Playwright or Chromium, the browser tests skip and say why.
 
 ## Maker and blind checker (Milestone 2)
 

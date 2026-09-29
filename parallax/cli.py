@@ -77,7 +77,8 @@ def main(argv: list[str] | None = None) -> int:
     rn.add_argument("--model", default=None)
     sub.add_parser("inbox", help="what waits on you: one item per task")
     ui = sub.add_parser("ui", help="the main way to use parallax: intake, the board, and each task's decision card")
-    ui.add_argument("--port", type=int, default=0)
+    ui.add_argument("--port", type=int, default=None, help="default: this project's own port, the same every time")
+    ui.add_argument("--new-token", action="store_true", help="replace the link's token; old links stop working")
     ui.add_argument("--no-open", action="store_true", help="don't open the browser, just print the link")
     for name in ("approve", "reject"):
         r = sub.add_parser(name, help="approve a plan that waits for you" if name == "approve" else
@@ -228,7 +229,7 @@ def _run(args) -> int:
     if args.cmd == "ui":
         from . import doctor
         from .ui import UI
-        app = UI(proj.root, args.port)
+        app = UI(proj.root, args.port, new_token=args.new_token)
         wsl = doctor.is_wsl(doctor.Machine())  # with interop off, WSL can't open your Windows browser
         opening = not (args.no_open or wsl)
         if wsl:

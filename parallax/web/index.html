@@ -3,23 +3,26 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>Parallax</title>
 <link rel="stylesheet" href="/app.css">
 <script src="/app.js" defer></script>
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span id="project">parallax</span><span id="waiting" class="badge" hidden></span></div>
+  <h1><span id="project">parallax</span> <span id="count" class="count" hidden></span></h1>
   <form id="intake" autocomplete="off">
-    <input id="work" name="work" placeholder="Describe the work, then press Enter" aria-label="Describe the work">
-    <kbd title="press / to type here">/</kbd>
+    <label for="work" class="vh">Describe the work</label>
+    <input id="work" name="work" placeholder="Describe the work, then press Enter" enterkeyhint="send">
   </form>
-  <p id="flash" role="status" hidden></p>
 </header>
-<main>
-  <section id="board" aria-label="Tasks by state"></section>
-  <aside id="card" aria-label="Decision card" hidden></aside>
+<p id="status" class="status" role="status" aria-live="polite"></p>
+<p id="offline" class="offline" role="alert" hidden>Can't reach <code>parallax ui</code>. Is it still running? Trying again.</p>
+<main id="app">
+  <nav id="queue" aria-label="Tasks"></nav>
+  <article id="card" aria-labelledby="card-title" hidden></article>
+  <p id="idle" class="idle" hidden></p>
 </main>
-<p id="locked" class="locked" hidden>Open the link that <code>parallax ui</code> printed. This page needs its token.</p>
+<p id="locked" class="locked" hidden>This page needs its link. Run <code>parallax ui</code> and open the link it prints; it stays the same between runs, so you can bookmark it.</p>
 </body>
 </html>

@@ -68,7 +68,8 @@ class Ledger:
     def __init__(self, path: Path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.touch(exist_ok=True)
+        if not self.path.exists():  # never touch an existing ledger: its mtime is the UI's version
+            self.path.touch()
 
     def entries(self) -> list[dict]:
         with self.path.open() as f:

@@ -68,7 +68,7 @@ def test_the_report_carries_the_drafted_files_not_looked_at(proj):
     long["plan"] = long["plan"].replace("Not looked at: nothing", "Not looked at: anything under docs/tasks/.")
     tid = lifecycle.new_intent(proj, WANT, FakeDrafter(long))["task"]
     text = lifecycle.report(proj, tid)
-    assert "Not looked at: what the drafters list under Found (2)" in text
+    assert "Not looked at: see Found (2)" in text
     assert f"- docs/tasks/{tid}/intent.md:2 not looked at: {gap}." in text
     assert f"- docs/tasks/{tid}/plan.md:2 not looked at: anything under docs/tasks/." in text
     assert lint_ok(proj, text)
@@ -80,7 +80,7 @@ def test_very_long_gaps_move_to_details_and_still_lint(proj):
     long["plan"] = long["plan"].replace("Not looked at: nothing", f"Not looked at: {gap}.")
     tid = lifecycle.new_intent(proj, WANT, FakeDrafter(long))["task"]
     text = lifecycle.report(proj, tid)
-    assert "under Details (1)" in text and "\nDetails\n" in text and gap in text
+    assert "see Details (1)" in text and "\nDetails\n" in text and gap in text
     assert lint_ok(proj, text)
 
 

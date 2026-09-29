@@ -116,9 +116,18 @@ def file_hash(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def found_doc(project: Project, task_id: str, doc: str) -> Path | None:
+    """The doc's file, or the copy accept moved out of your checkout until you merge."""
+    from .sandbox import task_home
+    for path in (doc_path(project, task_id, doc), task_home(project.root, task_id) / "docs-at-accept" / f"{doc}.md"):
+        if path.exists():
+            return path
+    return None
+
+
 def _read(project: Project, task_id: str, doc: str) -> str:
-    path = doc_path(project, task_id, doc)
-    return path.read_text(encoding="utf-8") if path.exists() else ""
+    path = found_doc(project, task_id, doc)
+    return path.read_text(encoding="utf-8") if path else ""
 
 
 def lifecycle_task(project: Project, task_id: str) -> dict:

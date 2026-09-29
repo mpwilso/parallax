@@ -200,7 +200,7 @@ def describe(s: Staged, worktree: Path) -> tuple[str, list[dict]]:
     for cause, text in CAUSES.items():  # each file counts once, under its worst cause
         paths = [p for c, p in s.issues if c == cause and p not in seen]
         seen.update(paths)
-        files += [{"path": p, "cause": cause, "size": sizes[p]} for p in paths]
+        files += [{"path": p, "cause": cause, "size": sizes[p], "secret": sensitive(p)} for p in paths]
         if len(paths) == 1:
             p = paths[0]
             one = s.problems[s.issues.index((cause, p))]

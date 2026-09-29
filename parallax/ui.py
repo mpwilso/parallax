@@ -1,9 +1,11 @@
-"""`parallax ui`: the main way to use Parallax. An intake box, a board, and a decision card.
+"""`parallax ui`: the main way to use Parallax. An intake box, a queue, and a decision card.
 
 Only the person at the browser can decide (invariant 5):
 - it listens on 127.0.0.1 only;
-- a random token is made at launch and kept in memory, never written to disk. The browser gets
-  it in the URL fragment (which browsers never send to the server) and passes it back in a header;
+- a random token, kept with the project's port in a private file beside the approval key (which
+  the sandbox can't read), so your bookmark keeps working across restarts; `parallax ui
+  --new-token` replaces it. The browser gets it in the URL fragment (which browsers never send to
+  the server) and passes it back in a header;
 - requests with a wrong token, a foreign Host (DNS rebinding) or a foreign Origin are refused;
 - a strict content security policy: scripts and styles only from this server's own files, no
   inline code, no frames. Agent-written text is only ever set as text, never as HTML;
@@ -12,10 +14,12 @@ Every action goes through the same functions as the CLI, so it's recorded the sa
 """
 from __future__ import annotations
 
+import hashlib
 import hmac
 import json
 import os
 import secrets
+import stat
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -31,14 +35,52 @@ CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'se
        "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 
 
+def link_path(root: Path) -> Path:
+    from .approvals import key_path
+    root = Path(root).resolve()
+    return key_path().parent / "ui" / f"{root.name}-{hashlib.sha256(str(root).encode()).hexdigest()[:8]}.json"
+
+
+def _saved_link(root: Path) -> dict:
+    path = link_path(root)
+    try:
+        if stat.S_IMODE(path.stat().st_mode) & 0o077:
+            return {}  # someone else could have read it: start over
+        data = json.loads(path.read_text())
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_link(root: Path, port: int, token: str) -> None:
+    path = link_path(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    os.chmod(path.parent, 0o700)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        json.dump({"port": port, "token": token}, f)
+
+
+def home_port(root: Path) -> int:
+    """This project's own port, the same every time, so a bookmark finds it."""
+    return 20000 + int(hashlib.sha256(str(Path(root).resolve()).encode()).hexdigest()[:8], 16) % 20000
+
+
 class UI:
-    def __init__(self, root: Path, port: int = 0):
+    def __init__(self, root: Path, port: int | None = None, new_token: bool = False):
         refuse_inside_task(root)
         self.root = Path(root)
         Project(self.root)  # fail early if this isn't a parallax project
-        self.token = secrets.token_urlsafe(24)
-        self.server = ThreadingHTTPServer(("127.0.0.1", port), _handler(self))
+        saved = {} if new_token else _saved_link(self.root)
+        token = saved.get("token")
+        self.token = token if isinstance(token, str) and len(token) >= 24 else secrets.token_urlsafe(24)
+        want = port if port is not None else int(saved.get("port") or home_port(self.root))
+        try:
+            self.server = ThreadingHTTPServer(("127.0.0.1", want), _handler(self))
+        except OSError:  # taken, likely by another program: any free port, and the link says which
+            self.server = ThreadingHTTPServer(("127.0.0.1", 0), _handler(self))
         self.port = self.server.server_address[1]
+        _save_link(self.root, self.port, self.token)
 
     @property
     def url(self) -> str:
@@ -156,6 +198,8 @@ def _handler(ui: UI):
                     self._json(404, {"error": "not found"})
             except (ParallaxError, ValueError) as err:
                 self._json(400, {"error": str(err)})
+            except Exception as err:  # never a dropped connection: the page says what broke
+                self._json(500, {"error": f"parallax hit an error: {type(err).__name__}: {err}"})
 
         def do_POST(self):
             if not self._allowed(needs_token=True):
@@ -172,5 +216,7 @@ def _handler(ui: UI):
                 self._json(200, act(ui.project(), self.path, body))
             except ParallaxError as err:
                 self._json(404 if str(err) == "not found" else 400, {"error": str(err)})
+            except Exception as err:
+                self._json(500, {"error": f"parallax hit an error: {type(err).__name__}: {err}"})
 
     return Handler

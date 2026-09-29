@@ -88,7 +88,10 @@ def decision(project: Project, task_id: str) -> Decision | None:
                          Option("plan", "the plan wins: that finding stops blocking, and the check runs again"), DROP],
                         "intent", "the check", item)
     if stage == "scope":
-        return Decision("scope", "The change goes outside the approved plan: accept that, or redraft?",
+        secret = any(f.get("secret") and f.get("size") for f in d.get("files") or [])
+        question = ("The change holds a secrets file with content: accept that, or redraft?" if secret else
+                    "The change goes outside the approved plan: accept that, or redraft?")
+        return Decision("scope", question,
                         [Option("accept", "accepts the risk for this exact change, and the check goes on", True),
                          REJECT, DROP], "reject", "the check", item)
     if stage == "check" and why.startswith("the check still fails after"):
@@ -108,6 +111,11 @@ def decision(project: Project, task_id: str) -> Decision | None:
     if why.startswith("drafting"):
         return Decision("drafting", "The drafters couldn't get the plan right: redraft with a hint from you?",
                         [REJECT, DROP], "reject", "the whole task", item)
+    if d.get("error"):  # the same error twice means running it again won't help
+        again = sum(e["kind"] == "stuck.raised" and " ".join(e["reason"].split()) == why
+                    for e in project.ledger.entries() if e["data"].get("task") == task_id) > 1
+        return Decision("error", "It stopped on an error: run it again once the cause is fixed, or drop it?",
+                        [RETRY, REJECT, DROP], "drop" if again else "retry", "the whole task", item)
     return Decision("stuck", "It stopped: run it again, or redraft?", [RETRY, REJECT, DROP], "retry",
                     "the whole task", item)
 

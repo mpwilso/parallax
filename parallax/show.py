@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from . import costs, decide, lifecycle, lint, tree
+from .status import attempt as _attempt
 from .core import Project
 
 
@@ -85,14 +86,25 @@ def _next(task_id: str, dec) -> str:
     return f"you run parallax decide {task_id} with {', '.join(names[:-1])} or {names[-1]}."
 
 
+def lead(why: str) -> str:
+    """The first clause of a reason, up to 16 words: "error: the sandbox exited (srt: ...)" leads
+    with "the sandbox exited", never with "error"."""
+    for generic in ("error: ", "checker error: "):
+        if why.lower().startswith(generic):
+            why = why[len(generic):]
+    first = why.split(": ", 1)[0].split("; ", 1)[0]
+    if first.count("(") > first.count(")"):
+        first = first.rsplit(" (", 1)[0]
+    return " ".join(first.split()[:16])
+
+
 def _decision(project: Project, task_id: str, dec, found: list[str], gaps: list[tuple[str, str]],
               changed: list[str] = (), extra: list[str] = ()) -> str:
     """One Decision needed: the problem up top, the question and its options, then the evidence."""
     options = [f"{o.name}: {o.does}" + (" (needs a reason)" if o.needs_reason else "") for o in dec.options]
     if dec.item:
         why = " ".join(dec.item["reason"].split())
-        lead = why.split(": ", 1)[0].split("; ", 1)[0].split()
-        bottom = lint.one_sentence("Needs you: " + " ".join(lead[:16]))  # the real problem, never a placeholder
+        bottom = lint.one_sentence("Needs you: " + lead(why))  # the real problem, never a placeholder
         found = [f"{why} (ledger {dec.item['id']})"] + list(found)
     else:
         bottom = "The plan waits for you before it runs."
@@ -147,6 +159,9 @@ def report(project: Project, task_id: str) -> str:
                 for f in (staged["data"]["autorun"] if staged else [])]
     changed = _changed(project, task_id, entries)
     if dec is not None:
+        if dec.item and not _last(_attempt(entries, task_id), "verdict.recorded", stage="check"):  # it stopped before the checker: say so, never "nothing"
+            gaps = gaps + [("the plan's tests and the blind checker, which haven't run",
+                            f"not looked at: the plan's tests and the blind checker haven't run (ledger {dec.item['id']})")]
         return _decision(project, task_id, dec, found, gaps, changed, boundary + findings)
     if status == "ready":
         found = _the_work(project, task_id, staged) + found

@@ -67,7 +67,9 @@ def test_the_board_holds_every_task_by_state(proj):
     assert list(b["columns"]) == ["drafting", "building", "checking", "ready", "needs you", "done"]
     assert [t["task"] for t in b["columns"]["ready"]] == [ready]
     assert [t["task"] for t in b["columns"]["drafting"]] == [working]
-    assert b["waiting"] == 1 and b["columns"]["ready"][0]["title"] == "fixing the README install steps"
+    assert b["count"] == 1 and [t["task"] for t in b["waiting"]] == [ready]
+    assert b["waiting"][0]["line"].startswith("the checker passed") and b["waiting"][0]["kind"] == "ready"
+    assert [t["task"] for t in b["working"]] == [working] and b["working"][0]["line"].startswith("drafters writing")
 
 
 def test_the_card_is_exactly_parallax_show(proj):
@@ -208,3 +210,38 @@ def test_sandboxed_bash_cant_reach_the_ui(server, tmp_path):
                          capture_output=True, text=True, timeout=120)
     assert "REACHED" not in out.stdout
     assert call(app, "GET", "/api/version")[0] == 200  # while the page itself is up
+
+
+def test_version_holds_still_when_nothing_happens(server):
+    """Live in the UI pass: every request touched the ledger, so every poll rebuilt the page."""
+    app, proj = server
+    first = call(app, "GET", "/api/version")[1]["version"]
+    call(app, "GET", "/api/board")
+    assert call(app, "GET", "/api/version")[1]["version"] == first
+
+
+def test_the_link_survives_a_restart_and_stays_private(proj):
+    from parallax.ui import home_port, link_path
+    one = UI(proj.root)
+    one.server.server_close()
+    two = UI(proj.root)
+    two.server.server_close()
+    assert (two.port, two.token) == (one.port, one.token) and one.port == home_port(proj.root)
+    path = link_path(proj.root)
+    assert oct(path.stat().st_mode & 0o777) == "0o600" and oct(path.parent.stat().st_mode & 0o777) == "0o700"
+    from parallax.approvals import key_path
+    assert path.parent.parent == key_path().parent  # beside the key, where the sandbox can't read
+    three = UI(proj.root, new_token=True)
+    three.server.server_close()
+    assert three.token != one.token and three.port == one.port
+
+
+def test_a_crash_is_an_answer_not_a_dropped_connection(server, monkeypatch):
+    app, proj = server
+    tid = ready_task(proj)
+
+    def broken(project, task_id):
+        raise RuntimeError("boom")
+    monkeypatch.setattr(views, "card", broken)
+    status, body, _ = call(app, "GET", f"/api/task/{tid}")
+    assert status == 500 and "boom" in body["error"]

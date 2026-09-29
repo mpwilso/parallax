@@ -346,13 +346,12 @@ def shaped(type_: str, bottom: str, gaps: list[tuple[str, str]], next_: str, fou
             if fits(text, "body is"):
                 return text
             return report(type_, bottom, inline, next_, found, extra + details, **kw)
-        verb = "list" if who.endswith("s") else "lists"
-        cited, header = [c for _, c in gaps], f"what {who} {verb} under Found ({len(gaps)})"
+        cited, header = [c for _, c in gaps], f"see Found ({len(gaps)})"
         for f, d in ((found + extra + cited, details), (found + cited, extra + details)):
             text = report(type_, bottom, header, next_, f, d, **kw)
             if fits(text, "body is"):
                 return text
-        return report(type_, bottom, f"what {who} {verb} under Details ({len(gaps)})", next_, found, extra + cited + details, **kw)
+        return report(type_, bottom, f"see Details ({len(gaps)})", next_, found, extra + cited + details, **kw)
     text = report(type_, bottom, "nothing", next_, found + extra, details, **kw)
     return text if fits(text, "body is") else report(type_, bottom, "nothing", next_, found, extra + details, **kw)
 
