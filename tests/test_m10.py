@@ -203,7 +203,7 @@ def test_show_at_ready_is_the_plans_shape(repo, monkeypatch, capsys):
         "Found\n"
         f"- the work: fixing the README install steps (docs/tasks/{tid}/intent.md:1)\n"
         f"- changed: README.md, 1 line; parallax diff {tid} shows it (ledger {kinds(proj, 'check.staged')[-1]['id']})\n"
-        f"- tests/test_readme.py: 3 of 3 passed (ledger {t['id']})\n"
+        f"- tests: 3 of 3 passed (ledger {t['id']})\n"
         f"- checker: pass, no findings (ledger {v['id']})\n")
 
 
@@ -286,9 +286,9 @@ def test_a_task_stops_at_its_cap(repo):
     maker = ScriptedAgent(steps=[("write", "README.md", "ok\n")], cost=1.9)
     assert build.run_build(proj, tid, lambda left, settings: maker) == "stuck"
     [item] = proj.inbox()
-    assert item["reason"] == "the budget cap is reached: $2.10 of $2.00 estimated" and item["data"]["budget"]
+    assert item["reason"] == "the budget cap ran out ($2.10 of $2.00 estimated)" and item["data"]["budget"]
     assert proj.task(tid)["status"] == "stuck" and checker.briefs == []
-    assert show.report(proj, tid).startswith("Type: Decision needed\nBottom line: Needs you: the budget cap is reached")
+    assert show.report(proj, tid).startswith("Type: Decision needed\nBottom line: Needs you: the budget cap ran out")
 
 
 def test_the_checkers_cost_can_stop_a_rework_before_it_starts(repo):
@@ -299,7 +299,7 @@ def test_the_checkers_cost_can_stop_a_rework_before_it_starts(repo):
     costly = Review("fail", [Finding("blocker", "README.md:1", "wrong")], "nothing", cost_usd=0.5)
     assert run(proj, tid, maker, FakeChecker(reviews=[costly])) == "stuck"
     assert len(maker.goals) == 1 and not kinds(proj, "rework.started")  # the maker wasn't launched again
-    assert "budget cap is reached" in proj.inbox()[0]["reason"]
+    assert "budget cap ran out" in proj.inbox()[0]["reason"]
 
 
 def test_every_call_gets_what_is_left_as_its_ceiling(repo):
@@ -317,7 +317,7 @@ def test_the_sdk_stopping_at_its_budget_comes_to_you(repo):
     proj, tid, wt = approved(repo)
     maker = ScriptedAgent(status="error", summary="stopped at the budget cap ($1.8)", cost=0.1)
     assert build.run_build(proj, tid, lambda left, settings: maker) == "stuck"
-    assert "budget cap is reached" in proj.inbox()[0]["reason"]
+    assert "budget cap ran out" in proj.inbox()[0]["reason"]
 
 
 def test_approval_refuses_a_cap_drafting_already_spent(repo):
@@ -414,3 +414,22 @@ def test_results_name_files_even_when_the_plan_names_a_folder(tmp_path):
     x.write_text('<testsuites><testsuite><testcase classname="tests.test_m11" name="a"/>'
                  '<testcase classname="tests.test_m12.TestX" name="b"><failure/></testcase></testsuite></testsuites>')
     assert testrun.parse_junit(x, ["tests/"]) == {"tests/test_m11.py": [1, 1, 0], "tests/test_m12.py": [0, 1, 0]}
+
+
+def test_the_card_leads_with_what_matters(repo):
+    """ee8178: the lead line said only that the cap was reached, and 12 per-file lines buried the failures."""
+    proj, tid, wt = approved(repo, plan_edit=lambda p: p.replace('tests = ["tests/test_readme.py"]',
+                                                                'tests = ["tests/test_readme.py", "tests/test_a.py", "tests/test_b.py"]'))
+    maker = built(proj, tid, [("write", "README.md", "ok\n")])
+    maker.cost = 1.6
+    failing = junit_runner({"tests/test_readme.py": (3, 0), "tests/test_a.py": (7, 3), "tests/test_b.py": (1, 1)},
+                           exit_code=1)
+    assert run(proj, tid, maker, runner=failing) == "stuck"
+    card = show.report(proj, tid)
+    lines = card.splitlines()
+    assert lines[1].startswith("Bottom line: Needs you: the budget cap ran out")
+    [reason] = [l for l in lines if l.startswith("- the budget cap ran out")]
+    assert "while rework was fixing failing tests in test_a, test_b" in reason
+    assert "- tests: 11 of 15 passed; failures in test_a, test_b (ledger " in card
+    assert "- no failing test file is one the diff changed; they may fail without this change too" in card
+    assert "test_readme" not in card.split("failures in", 1)[1].split("\n", 1)[0]

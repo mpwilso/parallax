@@ -5,7 +5,9 @@ didn't allow, and a cap that didn't match the budget the intent named. So:
 - every file and test the plan lists is inside the intent's scope;
 - every numbered outcome in the intent is covered by the plan's `covers`, and nothing else is;
 - if the intent names a budget, the plan's cap is that budget;
-- the cap is above what drafting already spent, and at most the policy's cap for the task's size.
+- the cap is above what drafting already spent, and at most the policy's cap for the task's size;
+- the cap leaves room for one rework round: at least the drafting so far plus twice the rest of the
+  estimate (task ee8178's $0.60 cap was spent by one rework).
 A mismatch goes back to the drafter automatically. Code decides; no model.
 """
 from __future__ import annotations
@@ -24,6 +26,11 @@ def in_scope(path: str, scope: list[str]) -> bool:
         if pattern.endswith("/") and path.startswith(pattern):
             return True
     return False
+
+
+def rework_floor(estimate: float, spent: float) -> float:
+    """The smallest cap with room for one rework round: drafting so far, plus the rest twice."""
+    return round(spent + 2 * max(estimate - spent, 0), 2)
 
 
 def problems(intent: str, plan: dict, spent: float, budget_policy: dict) -> list[str]:
@@ -46,6 +53,10 @@ def problems(intent: str, plan: dict, spent: float, budget_policy: dict) -> list
         out.append(f"the intent names a budget of ${named:.2f}, but the plan's cap is ${cap:.2f}; they must match")
     if cap <= spent:
         out.append(f"the cap (${cap:.2f}) isn't above what drafting already spent (${spent:.2f})")
+    floor = rework_floor(float(plan["estimated_cost_usd"]), spent)
+    if spent < cap < floor:
+        out.append(f"the cap (${cap:.2f}) leaves no room for a rework round: make it at least ${floor:.2f} "
+                   f"(drafting so far, plus twice the rest of the estimate)")
     size = lint.intent_fields(intent).get("size", "small")
     limit = budget_policy["large_cap_usd" if size == "large" else "small_cap_usd"]
     if cap > limit:

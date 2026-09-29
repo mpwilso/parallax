@@ -182,6 +182,19 @@ def run_check(project: Project, task_id: str, checker_for: CheckerFor, maker_for
                            f"the rework removed {', '.join(gone)}, which your approved plan lists")
 
 
+def summarize(fix: list[str]) -> str:
+    """What a rework is fixing, in one clause: failing test files by name, then the findings."""
+    files = [line.split(":", 1)[1].split(" has ", 1)[0].strip().rsplit("/", 1)[-1].removesuffix(".py")
+             for line in fix if line.startswith("tests:") and " has " in line]
+    other = [line.splitlines()[0] for line in fix if not line.startswith(("tests:", "test output"))]
+    parts = []
+    if files:
+        parts.append(f"failing tests in {', '.join(files[:4])}" + (f" and {len(files) - 4} more" if len(files) > 4 else ""))
+    if other:
+        parts.append(other[0] + (f" and {len(other) - 1} more findings" if len(other) > 1 else ""))
+    return "; ".join(parts) or "the check's findings"
+
+
 def can_check(project: Project, task_id: str) -> None:
     if not any(e["kind"] == "build.finished" and e["data"].get("task") == task_id for e in project.ledger.entries()):
         raise ParallaxError(f"task {task_id} hasn't been built. run parallax build {task_id}")

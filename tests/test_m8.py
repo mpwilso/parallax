@@ -50,7 +50,7 @@ binaries = []
 symlinks = []
 dependencies = []
 review_tightening = "{tightening}"
-estimated_cost_usd = 1.5
+estimated_cost_usd = 0.9
 budget_cap_usd = 2.0
 covers = {{ "1" = ["tests/test_readme.py"] }}
 ```
@@ -295,7 +295,7 @@ def test_lint_lifecycle_files():
     assert "size:" in messages(lint.lint_lifecycle(docs()["intent"].replace("size: small", "size: huge"), "intent"))
     assert "## Outcome" in messages(lint.lint_lifecycle(docs()["intent"].replace("## Outcome", "## Result"), "intent"))
     plan = docs()["plan"]
-    for change, why in [(("budget_cap_usd = 2.0", "budget_cap_usd = 1.0"), "below estimated"),
+    for change, why in [(("budget_cap_usd = 2.0", "budget_cap_usd = 0.5"), "below estimated"),
                         (("lines_changed = 30\n", ""), "missing lines_changed"),
                         (('domains = []', 'domains = ["not a host"]'), "plain host name"),
                         (('"README.md", ', '"../outside.md", '), "inside the repo"),

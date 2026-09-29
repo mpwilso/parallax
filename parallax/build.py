@@ -195,10 +195,18 @@ def run_build(project: Project, task_id: str, maker_for: Callable[[float, str], 
     first = res.summary.strip().splitlines()[0][:200] if res.summary.strip() else ""
     project.ledger.append("build.finished", "parallax", first, task=task_id, status=status)
     if status == "over budget":
-        return costs.stop_at_cap(project, task_id, p.cap)
+        return costs.stop_at_cap(project, task_id, p.cap, _doing(extra))
     if status == "blocked":  # a refusal made the task impossible: it comes to you now, not after rework
         project.ledger.append("stuck.raised", "parallax", first, task=task_id)
     return status
+
+
+def _doing(extra: str) -> str:
+    """A short 'what the rework was fixing', from the rework's instructions."""
+    if not extra:
+        return ""
+    from .check import summarize
+    return "rework was fixing " + summarize([l[2:] for l in extra.splitlines() if l.startswith("- ")])
 
 
 def _alive(pid: int) -> bool:

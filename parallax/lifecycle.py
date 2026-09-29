@@ -85,8 +85,8 @@ files lists every file the change touches, tests included. Never list CLAUDE.md,
 docs/tasks/: the maker can never write them. domains, outside_reads, binaries, symlinks and
 dependencies stay empty unless the work needs them; say why in the steps. Costs are estimated
 US dollars for the whole task: the drafting so far, then building, checking and any rework. The
-cap stops the task, so set it a little above the estimate. If the intent names a budget, the cap
-is that budget. files and tests must all be inside the intent's scope, and covers must name every
+cap stops the task, and it must leave room for one rework round: at least the drafting so far plus
+twice the rest of the estimate. If the intent names a budget, the cap is that budget. files and tests must all be inside the intent's scope, and covers must name every
 numbered outcome in the intent with the tests or steps that prove it.
 Keep the header as two lines, with no blank line between them.""",
 }
@@ -304,6 +304,9 @@ def plan_data(project: Project, task_id: str) -> dict | None:
 
 
 def status_line(project: Project, task_id: str) -> str:
+    status = project.task(task_id)["status"]
+    if status in ("rejected", "stopped", "closed", "accepted", "merged", "drafting", "needs you", "stuck"):
+        return status  # the task's own state says more than where its gates stand
     st = state(project, task_id)
     if st.gate is None:
         status = project.task(task_id)["status"]

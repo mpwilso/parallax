@@ -22,8 +22,11 @@ def budget(project: Project, task_id: str, plan: dict) -> tuple[float, float]:
     return cap, round(cap - spent(project, task_id), 4)
 
 
-def stop_at_cap(project: Project, task_id: str, cap: float) -> str:
-    """The task stops here and comes to you. Returns the task's new status."""
-    why = f"the budget cap is reached: ${spent(project, task_id):.2f} of ${cap:.2f} estimated"
+def stop_at_cap(project: Project, task_id: str, cap: float, doing: str = "") -> str:
+    """The task stops here and comes to you. Returns the task's new status.
+
+    doing: what the work was trying to do when the money ran out, such as a rework's fix."""
+    why = f"the budget cap ran out (${spent(project, task_id):.2f} of ${cap:.2f} estimated)"
+    why += f" while {doing}" if doing else ""
     project.ledger.append("stuck.raised", "parallax", why, task=task_id, budget=True)
     return "stuck"

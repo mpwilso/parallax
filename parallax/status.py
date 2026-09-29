@@ -31,8 +31,10 @@ def derive(entries: list[dict]) -> dict[str, dict]:
             t["status"] = "checking"
         elif kind == "rework.started":
             t["status"] = "reworking"
-        elif kind == "task.rejected":
-            t["status"] = "rejected"
+        elif kind in ("task.rejected", "gate.rejected"):
+            t["status"] = "rejected"  # out of the inbox; parallax task list still shows it
+        elif kind in ("draft.recorded", "gate.approved") and t["status"] == "rejected":
+            t["status"] = "open"  # an old gate rejected, then redrafted by hand (before M13)
         elif kind == "task.accepted":
             t["status"] = "accepted"
         elif kind == "merge.confirmed":

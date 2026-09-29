@@ -153,7 +153,7 @@ def test_outside_the_launch_rule_the_plan_waits_for_you(repo, monkeypatch, capsy
     assert kinds(proj, "review.requested")[0]["reason"] == why
     card = show.report(proj, tid)
     assert card.startswith("Type: Decision needed\nBottom line: The plan waits for you before it runs.")
-    assert f"why it waits: {why}" in card and "cost: estimated $1.50, cap $2.00" in card
+    assert f"why it waits: {why}" in card and "cost: estimated $0.90, cap $2.00" in card
 
     monkeypatch.setattr(preflight, "run_srt", good_probe)
     monkeypatch.chdir(proj.root)
@@ -286,3 +286,24 @@ def test_an_error_in_the_background_comes_to_you(proj, monkeypatch):
     assert kinds(proj, "stuck.raised")[0]["data"]["error"] is True
     [item] = proj.inbox()
     assert "the adapter fell over" in item["reason"] and inbox.items(proj)[0]["state"] == "needs you"
+
+
+def test_the_cap_leaves_room_for_one_rework(proj):
+    """ee8178: a $0.60 cap for work estimated just under it; one rework spent it."""
+    plan = {**lint.plan_block(docs()["plan"])[0], "estimated_cost_usd": 0.55, "budget_cap_usd": 0.6}
+    found = planfit.problems(docs()["intent"], plan, 0.22, proj.policy.budget)
+    assert found == ["the cap ($0.60) leaves no room for a rework round: make it at least $0.88 "
+                     "(drafting so far, plus twice the rest of the estimate)"]
+    assert planfit.problems(docs()["intent"], {**plan, "budget_cap_usd": 0.88}, 0.22, proj.policy.budget) == []
+
+
+def test_a_rejected_task_leaves_the_inbox(proj, monkeypatch, capsys):
+    """ef4163: rejected at its gate, and still shown as needs you."""
+    tid = lifecycle.new_intent(proj, WANT, FakeDrafter(docs()))["task"]
+    assert inbox.items(proj)[0]["task"] == tid
+    monkeypatch.chdir(proj.root)
+    main(["reject", tid, "--reason", "superseded"])
+    capsys.readouterr()
+    assert inbox.items(proj) == []
+    main(["task", "list"])
+    assert f"{tid}  [rejected]" in capsys.readouterr().out

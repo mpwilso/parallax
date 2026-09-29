@@ -17,13 +17,27 @@ def _last(entries: list[dict], kind: str, **match) -> dict | None:
     return hits[-1] if hits else None
 
 
-def _tests(e: dict | None) -> list[str]:
+def _tests(e: dict | None, staged: dict | None = None) -> list[str]:
+    """The tests in one line: how many passed, and only the files that failed.
+
+    When some fail, a second line says whether any failing test file is one the diff changed:
+    if none is, the failures may not be this change's doing."""
     if not e or e["data"]["exit"] not in (0, 1):  # they didn't run: the reason says why, counts would mislead
         return []
-    out = []
-    for f, (passed, counted, skipped) in e["data"]["per_file"].items():
-        more = f", {skipped} skipped" if skipped else ""
-        out.append(f"{f}: {passed} of {counted} passed{more} (ledger {e['id']})")
+    d, cite = e["data"], f"(ledger {e['id']})"
+    failing = [f for f, (passed, counted, _) in d["per_file"].items() if passed < counted]
+    skipped = sum(v[2] for v in d["per_file"].values())
+    line = f"tests: {d['passed']} of {d['total']} passed"
+    line += f", {skipped} skipped" if skipped else ""
+    if not failing:
+        return [f"{line} {cite}"]
+    names = [f.rsplit("/", 1)[-1].removesuffix(".py") for f in failing]
+    more = f" and {len(names) - 5} more" if len(names) > 5 else ""
+    out = [f"{line}; failures in {', '.join(names[:5])}{more} {cite}"]
+    changed = set(staged["data"]["files"]) if staged else set()
+    touched = [f for f in failing if f in changed]
+    out.append(f"failing test files the diff changed: {', '.join(touched)} {cite}" if touched
+               else f"no failing test file is one the diff changed; they may fail without this change too {cite}")
     return out
 
 
@@ -104,7 +118,7 @@ def report(project: Project, task_id: str) -> str:
     verdict = _last(entries, "verdict.recorded", stage="check")
     staged = _last(entries, "check.staged")
     head, findings, gaps = _checker(verdict)
-    found = _tests(tests) + head
+    found = _tests(tests, staged) + head
     boundary = [f"boundary change: {f} runs automatically (ledger {staged['id']})"
                 for f in (staged["data"]["autorun"] if staged else [])]
     changed = _changed(project, task_id, entries)
@@ -113,9 +127,8 @@ def report(project: Project, task_id: str) -> str:
     if open_items:  # the short label goes up top; the whole reason goes under Found, cited
         item = open_items[-1]
         why = " ".join(item["reason"].split())
-        bottom = lint.one_sentence(f"Needs you: {why.split(':')[0].split(';')[0]}")
-        if len(bottom.split()) > 15:
-            bottom = "Needs you: an item is waiting in your inbox."
+        lead = why.split(": ", 1)[0].split("; ", 1)[0].split()
+        bottom = lint.one_sentence("Needs you: " + " ".join(lead[:16]))  # the real problem, never a placeholder
         return lint.shaped("Decision needed", bottom, gaps,
                            "you approve (accept the risk) or reject it in parallax inbox, with a reason.", [f"{why} (ledger {item['id']})"] + found, changed, "the checker",
                            boundary + findings)
