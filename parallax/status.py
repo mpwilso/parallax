@@ -20,7 +20,11 @@ def derive(entries: list[dict]) -> dict[str, dict]:
         if kind == "task.closed":
             t["status"] = d["outcome"]
         elif kind in ("build.started", "maker.started"):
-            t["status"] = "running"
+            t["status"] = "drafting" if d.get("mode") == "pilot" else "running"
+        elif kind == "pilot.started":
+            t["status"] = "drafting"
+        elif kind == "review.requested":
+            t["status"] = "needs you"
         elif kind in ("build.finished", "check.finished"):
             t["status"] = d["status"]
         elif kind == "check.started":
@@ -51,3 +55,16 @@ def derive(entries: list[dict]) -> dict[str, dict]:
             elif about == "stuck.raised":
                 t["status"] = "open" if approved else "closed"
     return out
+
+
+BOARD = ("drafting", "building", "checking", "ready", "needs you", "done")
+_TO_BOARD = {
+    "drafting": "drafting", "running": "building", "reworking": "building", "built": "checking",
+    "checking": "checking", "ready": "ready", "accepted": "done", "merged": "done", "rejected": "done",
+    "stopped": "done", "closed": "done",
+}
+
+
+def board(status: str) -> str:
+    """Where a task's status puts it on the board. Anything unknown waits on you, never hides."""
+    return _TO_BOARD.get(status, "needs you")

@@ -123,24 +123,19 @@ Then in PowerShell run `wsl --terminate parallax`, wait 8 seconds, and open the 
 In the folder of a git repo you want agents to work on:
 
 ```bash
-parallax init                                  # writes parallax.policy.toml and .parallax/
-parallax intent new "the install steps are wrong for WSL"
-                                               # a task, with its intent and plan drafted in docs/tasks/<id>/
-parallax approve <task-id>                     # approve intent and plan (a large task: intent first, then spec and plan)
-parallax reject <task-id> --reason "..."       # or reject, then edit the files or run parallax draft <task-id>
-parallax preflight <task-id>                   # test both sandbox layers with the build's own rules
-parallax build <task-id>                       # the maker builds the approved plan in the sandbox, then it's checked
-parallax show <task-id>                        # where it stands: ready, or what needs you
-parallax recheck <task-id>                     # check a built task again
+parallax init                                  # writes parallax.policy.toml, REVIEW.md and .parallax/
+parallax do "the install steps are wrong for WSL"   # describe the work once; it runs without you
+parallax inbox                                 # what waits on you: one item per task
+parallax show <task-id>                        # its card: the work, what changed, tests, the checker, risks
+parallax diff <task-id>                        # the change itself
 parallax accept <task-id>                      # commit exactly what was reviewed; it prints the merge for you to run
-parallax stop                                  # end every running build now
-parallax lint docs/tasks/<task-id>/plan.md     # check a file against the output shape
-parallax task list                             # every task, its status, and what it cost (estimated)
-parallax log                                   # the ledger
-parallax verify                                # confirm the ledger hasn't been edited
+parallax reject <task-id> --reason "..."       # or send it back with your reason
+parallax stats                                 # human touches per task; the target is 1
 ```
 
-Read the drafted files before approving, and edit them if needed: the approval records each file's hash and is signed with your approval key.
+That's the whole loop for a normal small task: you describe it, and you accept or reject it. In between, without you: drafters write the intent and plan to `docs/tasks/<id>/`; Parallax normalizes and lints them and checks the plan against the intent by code (every file inside the intent's scope, every outcome covered, the budget right), sending any problem back to the drafter up to 2 times; then the policy's launch rule decides. A small task whose budget cap is at most `auto_launch_usd` (default $3) and that touches nothing in `review_paths` launches on its own; the approval is signed and names the rule. A large task, a plan touching `review_paths`, or `review_plans = true` waits for you: `parallax approve <task-id>` starts it.
+
+Power use: `parallax stop` ends every running task, and `preflight`, `build`, `recheck`, `lint`, `log` and `verify` are there when you need them.
 
 `parallax build` runs preflight first and refuses to launch if either layer would let a protected path be written. The maker runs in Claude Code's sandbox with rules generated from the plan: writes only in the task's worktree (never the protected files), no reads of your home folder except the worktree and the task's venv, and no network unless the plan names the domains. Nothing waits on you mid-build: an action that needs your approval is refused and recorded. The maker never commits. The build's log is in `~/.local/share/parallax/tasks/`.
 

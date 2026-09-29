@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from . import costs, guard, lifecycle, preflight, sandbox
+from . import costs, guard, lifecycle, lint, preflight, sandbox
 from .agents.base import Agent
 from .core import ROOT_ENV, TASK_ENV, ParallaxError, Project, inside_task, refuse_inside_task
 from .gate import Scope, make_permission_fn
@@ -30,6 +30,7 @@ from .runner import _make
 KEEP_ENV = ("HOME", "USER", "LOGNAME", "LANG", "LANGUAGE", "TERM", "SHELL", "TZ",
             "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_RUNTIME_DIR")
 SYSTEM_PATH = "/usr/local/bin:/usr/bin:/bin"
+QUIET_BUILD = {"PYTHONDONTWRITEBYTECODE": "1", "PYTEST_ADDOPTS": "-p no:cacheprovider"}  # no byproducts in the worktree
 
 
 @dataclass
@@ -46,14 +47,17 @@ class Prepared:
     left: float
 
 
-def scrubbed_env(venv: Path | None, environ: dict | None = None) -> dict[str, str]:
-    """Only what a build needs: identity, locale, where Parallax keeps things, and a plain PATH."""
+def scrubbed_env(venv: Path | None, environ: dict | None = None, path: str | None = None) -> dict[str, str]:
+    """Only what a build needs: identity, locale, where Parallax keeps things, and a plain PATH.
+
+    path: keep this PATH instead (the pilot, whose setup command needs your tools)."""
     environ = dict(os.environ if environ is None else environ)
     env = {k: v for k, v in environ.items() if k in KEEP_ENV or k.startswith("LC_")}
-    env["PATH"] = (f"{venv}/bin:" if venv else "") + SYSTEM_PATH
+    env["PATH"] = path or ((f"{venv}/bin:" if venv else "") + SYSTEM_PATH)
     if venv:
         env["VIRTUAL_ENV"] = str(venv)
     env["CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"] = "1"
+    env.update(QUIET_BUILD)
     return env
 
 
@@ -156,7 +160,10 @@ def run_build(project: Project, task_id: str, maker_for: Callable[[float, str], 
     p = prepare(project, task_id, setup=False, launching=False)
     if p.left <= 0:
         return costs.stop_at_cap(project, task_id, p.cap)
-    env = {TASK_ENV: task_id, ROOT_ENV: str(project.root)}
+    env = {TASK_ENV: task_id, ROOT_ENV: str(project.root), **QUIET_BUILD,
+           "PATH": (f"{p.venv}/bin:" if p.venv else "") + SYSTEM_PATH}  # set here, whatever the pilot's PATH
+    if p.venv:
+        env["VIRTUAL_ENV"] = str(p.venv)
     fn = make_permission_fn(project, task_id, p.worktree, scope=p.scope)
     before = sandbox.untracked(p.worktree)
     res = _make(project, task_id, maker_for(p.left, str(p.settings)), goal(project, task_id) + (f"\n\n{extra}" if extra else ""), "build",
@@ -246,20 +253,46 @@ def _maker(left: float, settings: str) -> Agent:
     return ClaudeAgent(max_budget_usd=left, settings=settings)
 
 
+def _drafter(cap: float) -> Agent:
+    from .agents.claude import ClaudeAgent
+    return ClaudeAgent(max_budget_usd=cap)
+
+
 def _checker(left: float, model: str):
     from .agents.claude import ClaudeChecker
     return ClaudeChecker(model=model, max_budget_usd=left)
 
 
-def main(argv: list[str]) -> int:
-    from .check import run_check
+def run_mode(project: Project, task_id: str, mode: str, drafter_for, maker_for, checker_for, *,
+             test_runner=None, preflight_runner=None) -> str:
+    """What a background process runs, start to finish. The last entry marks it finished, whatever happened.
 
+    mode: "pilot" (draft, launch rule, build, check), "build" (build, then check), or "check"."""
+    from .check import run_check
+    from .pilot import run
+
+    status = "error"
+    try:
+        if mode == "pilot":
+            status = run(project, task_id, drafter_for, maker_for, checker_for,
+                         test_runner=test_runner, preflight_runner=preflight_runner)
+        else:
+            status = run_build(project, task_id, maker_for) if mode == "build" else "built"
+            if status == "built":
+                status = run_check(project, task_id, checker_for, maker_for,
+                                   test_runner=test_runner, preflight_runner=preflight_runner)
+    except Exception as err:  # nothing fails quietly in the background: it comes to you
+        project.ledger.append("stuck.raised", "parallax", lint.one_sentence(
+            f"Parallax hit an error and stopped the task: {type(err).__name__}: {err}"), task=task_id, error=True)
+        status = "stuck"
+    finally:
+        project.ledger.append("builder.finished", "parallax", "", task=task_id, status=status)
+    return status
+
+
+def main(argv: list[str]) -> int:
     root, task_id, mode = argv
-    project = Project(Path(root))
-    status = run_build(project, task_id, _maker) if mode == "build" else "built"
-    if status == "built":
-        status = run_check(project, task_id, _checker, _maker)
-    project.ledger.append("builder.finished", "parallax", "", task=task_id, status=status)
+    status = run_mode(Project(Path(root)), task_id, mode, _drafter, _maker, _checker)
     print(f"{mode} {task_id}: {status}", flush=True)
     return 0
 

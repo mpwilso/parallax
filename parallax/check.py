@@ -17,7 +17,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Callable
 
-from . import build, costs, lifecycle, review, testrun, tree
+from . import build, costs, lifecycle, lint, review, testrun, tree
 from .agents.base import BlindChecker, CheckerError, Review
 from .core import ParallaxError, Project
 
@@ -87,6 +87,13 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
         last = (results.tail.splitlines() or ["no output"])[-1]
         return _to_you(project, task_id, "check", f"the plan's tests couldn't run (exit {results.exit}): {last}",
                        tree=s.tree), []
+
+    # code findings first: they go straight back to the maker, and the checker isn't paid to spot them
+    dashes = [f"blocker {path}:{line}: an em dash was added; use a comma or a colon"
+              for path, line, text in tree.added_lines(s.diff) if lint.EM_DASH in text]
+    if dashes:
+        project.ledger.append("check.found", "parallax", "; ".join(dashes), task=task_id, tree=s.tree, findings=dashes)
+        return "rework", dashes + ([] if results.ok else [f"tests failed (exit {results.exit})"])
 
     intent = lifecycle.doc_path(project, task_id, "intent").read_text(encoding="utf-8")
     review_text = review.load(project.root)

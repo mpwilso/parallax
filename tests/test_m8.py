@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from fakes import FakeDrafter
-from parallax import approvals, cli, lifecycle, lint
+from parallax import approvals, lifecycle, lint
 from parallax.agents.claude import tool_to_action
 from parallax.cli import main
 from parallax.core import POLICY_FILE, ROOT_ENV, TASK_ENV, ParallaxError, Project
@@ -18,12 +18,13 @@ Not looked at: nothing
 kind: docs
 size: {size}
 title: fixing the README install steps
+scope: README.md, tests/**, Makefile, extra.py, pytest.ini, tox.ini
 
 ## Problem
 The steps assume PowerShell.
 
 ## Outcome
-A new user on WSL can follow them.
+1. A new user on WSL can follow them.
 
 ## Constraints
 Keep the macOS steps.
@@ -51,6 +52,7 @@ dependencies = []
 review_tightening = "{tightening}"
 estimated_cost_usd = 1.5
 budget_cap_usd = 2.0
+covers = {{ "1" = ["tests/test_readme.py"] }}
 ```
 """
 WANT = "the README install steps are wrong for WSL"
@@ -80,19 +82,10 @@ def kinds(proj, kind):
 
 # intent new and the small gate -------------------------------------------------------------
 
-def test_intent_new_drafts_intent_and_plan_for_a_small_task(proj, monkeypatch, capsys):
+def test_drafting_writes_intent_and_plan_for_a_small_task(proj, monkeypatch, capsys):
+    """Drafting itself; `parallax do` (M12) is what runs it now. See test_m12."""
     drafter = FakeDrafter(docs())
-    monkeypatch.setattr(cli, "_drafter", lambda model: drafter)
-    monkeypatch.chdir(proj.root)
-    assert main(["intent", "new", WANT]) == 0
-    [t] = proj.tasks().values()
-    tid = t["task"]
-    assert capsys.readouterr().out == (
-        f"task {tid} on branch parallax/{tid}-readme-install-steps\n"
-        "Type: Decision needed\n"
-        "Bottom line: Intent and plan are drafted for fixing the README install steps.\n"
-        "Not looked at: nothing\n"
-        f"Next: you read docs/tasks/{tid}/, then run parallax approve {tid}.\n")
+    tid = lifecycle.new_intent(proj, WANT, drafter)["task"]
     folder = proj.root / "docs" / "tasks" / tid
     assert (folder / "intent.md").read_text() == docs()["intent"]
     assert sorted(p.name for p in folder.iterdir()) == ["intent.md", "plan.md"]
@@ -100,7 +93,9 @@ def test_intent_new_drafts_intent_and_plan_for_a_small_task(proj, monkeypatch, c
     assert [e["data"]["doc"] for e in kinds(proj, "draft.recorded")] == ["intent", "plan"]
     assert proj.task(tid)["cost_usd"] == pytest.approx(0.2)
     assert drafter.caps == [proj.policy.budget["drafting_usd"]] * 2
+    assert proj.task(tid)["branch"] == f"parallax/{tid}-readme-install-steps"
 
+    monkeypatch.chdir(proj.root)
     assert main(["lint", f"docs/tasks/{tid}/plan.md"]) == 0
     assert capsys.readouterr().out == "ok\n"
 
@@ -110,11 +105,7 @@ def test_approving_the_gate_needs_no_reason_and_signs_the_file_hashes(proj, monk
     tid = t["task"]
     monkeypatch.chdir(proj.root)
     assert main(["approve", tid]) == 0
-    out = capsys.readouterr().out
-    assert out.startswith(f"approved intent and plan for {tid} (ledger ")
-    assert "estimated cost $1.50 (unverified), budget cap $2.00." in out
-    assert "review tightening for this task: check the WSL steps by hand" in out
-    assert out.endswith(f"next: parallax build {tid}\n")
+    assert capsys.readouterr().out.startswith(f"approved intent and plan for {tid} (ledger ")
 
     [g] = kinds(proj, "gate.approved")
     folder = lifecycle.task_dir(proj, tid)
@@ -129,23 +120,14 @@ def test_approving_the_gate_needs_no_reason_and_signs_the_file_hashes(proj, monk
 
 # the large gate ------------------------------------------------------------------------------
 
-def test_a_large_task_approves_intent_then_spec_and_plan(proj, monkeypatch, capsys):
+def test_a_large_task_approves_intent_then_spec_and_plan(proj):
     drafter = FakeDrafter(docs(size="large"))
-    monkeypatch.setattr(cli, "_drafter", lambda model: drafter)
-    monkeypatch.chdir(proj.root)
-    main(["intent", "new", WANT])
-    tid = next(iter(proj.tasks()))
-    out = capsys.readouterr().out
-    assert "Bottom line: Intent is drafted for fixing the README install steps." in out
+    tid = lifecycle.new_intent(proj, WANT, drafter)["task"]
     assert not lifecycle.doc_path(proj, tid, "plan").exists()
-
-    assert main(["approve", tid]) == 0
-    out = capsys.readouterr().out
-    assert out.startswith(f"approved intent for {tid}")
-    assert "Bottom line: Spec and plan are drafted for fixing the README install steps." in out
+    assert lifecycle.approve(proj, tid)["data"]["gate"] == "intent"
+    lifecycle.draft(proj, tid, ["spec", "plan"], drafter)
     assert "The spec:" in drafter.requests[-1]  # the plan drafter sees the spec
-
-    main(["approve", tid])
+    lifecycle.approve(proj, tid)
     assert [g["data"]["gate"] for g in kinds(proj, "gate.approved")] == ["intent", "spec+plan"]
     assert lifecycle.state(proj, tid).gate is None
 
@@ -199,17 +181,12 @@ def test_a_task_cant_approve_its_own_gate(proj, monkeypatch):
 
 # lint, reject, redraft ----------------------------------------------------------------------------
 
-def test_a_plan_that_fails_lint_cant_be_approved(proj, monkeypatch, capsys):
+def test_a_plan_that_fails_lint_cant_be_approved(proj):
     bad = docs()
     bad["plan"] = bad["plan"].replace('"README.md", ', '"README.md", "CLAUDE.md", ')
-    drafter = FakeDrafter(bad)
-    monkeypatch.setattr(cli, "_drafter", lambda model: drafter)
-    monkeypatch.chdir(proj.root)
-    main(["intent", "new", WANT])
-    tid = next(iter(proj.tasks()))
-    out = capsys.readouterr().out
-    assert "but lint found problems" in out
-    assert f"- docs/tasks/{tid}/plan.md:10 files: CLAUDE.md is protected" in out
+    tid = lifecycle.new_intent(proj, WANT, FakeDrafter(bad))["task"]
+    assert f"docs/tasks/{tid}/plan.md:10 files: CLAUDE.md is protected" in "\n".join(
+        lifecycle.lint_problems(proj, tid, ["plan"]))
     with pytest.raises(ParallaxError, match="CLAUDE.md is protected"):
         lifecycle.approve(proj, tid)
 
@@ -219,34 +196,22 @@ def test_reject_needs_a_reason_and_the_redraft_hears_it(proj, monkeypatch, capsy
     monkeypatch.chdir(proj.root)
     assert main(["reject", tid]) == 1
     assert "a rejection needs a reason" in capsys.readouterr().err
-    intent = lifecycle.doc_path(proj, tid, "intent")
-    intent.write_text(intent.read_text().replace("Keep the macOS steps.", "Keep the macOS steps. Mine."))
     assert main(["reject", tid, "--reason", "the plan skips the uv step"]) == 0
     [r] = kinds(proj, "gate.rejected")
     assert r["reason"] == "the plan skips the uv step" and r["data"]["gate"] == "intent+plan"
 
     drafter = FakeDrafter(docs())
-    monkeypatch.setattr(cli, "_drafter", lambda model: drafter)
-    assert main(["draft", tid]) == 0
-    assert len(drafter.requests) == 1 and "the plan skips the uv step" in drafter.requests[0]
-    assert "Mine." in intent.read_text()  # your edit to the intent stays
+    lifecycle.draft(proj, tid, ["intent", "plan"], drafter)  # M13 runs this on its own after a reject
+    assert "the plan skips the uv step" in drafter.requests[0] and "the plan skips the uv step" in drafter.requests[1]
 
 
-def test_a_failed_draft_is_decision_needed_and_can_be_retried(proj, monkeypatch, capsys):
-    monkeypatch.setattr(cli, "_drafter", lambda model: FakeDrafter(docs(), fail={"plan"}))
-    monkeypatch.chdir(proj.root)
-    main(["intent", "new", WANT])
-    tid = next(iter(proj.tasks()))
-    out = capsys.readouterr().out
-    assert "Type: Decision needed" in out
-    assert "Bottom line: Drafting plan.md stopped: stopped at the budget cap ($2.0)." in out
-    assert f"Next: you run parallax draft {tid} to try again" in out
+def test_a_failed_draft_is_decision_needed(proj):
+    tid = lifecycle.new_intent(proj, WANT, FakeDrafter(docs(), fail={"plan"}))["task"]
+    text = lifecycle.report(proj, tid)
+    assert "Type: Decision needed" in text
+    assert "Bottom line: Drafting plan.md stopped: stopped at the budget cap ($2.0)." in text
     [f] = kinds(proj, "draft.failed")
     assert f["data"]["doc"] == "plan" and f["data"]["cost_usd"] == 0.1
-
-    monkeypatch.setattr(cli, "_drafter", lambda model: FakeDrafter(docs()))
-    main(["draft", tid])
-    assert "Intent and plan are drafted" in capsys.readouterr().out
 
 
 # the drafters' boundary ----------------------------------------------------------------------------
@@ -298,7 +263,7 @@ def test_lint_report_header_rules():
     assert "Type must be one of" in messages(lint.lint_report(GOOD.replace("FYI", "Urgent")))
     assert "Not looked at is empty" in messages(lint.lint_report(GOOD.replace("nothing", "")))
     assert "one sentence" in messages(lint.lint_report(GOOD.replace("All good.", "All good. Really.")))
-    assert "no em dashes" in messages(lint.lint_report(GOOD + "—\n"))
+    assert "no em dashes" in messages(lint.lint_report(GOOD + "\u2014\n"))
     long = GOOD.replace("All good.", " ".join(["word"] * 40) + ".")
     assert "keep it under 40" in messages(lint.lint_report(long))
 

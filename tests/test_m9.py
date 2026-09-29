@@ -46,10 +46,10 @@ def good_probe(config, cwd, spec, env):
 
 # the two M8 bugs --------------------------------------------------------------------------------
 
-def test_init_points_to_intent_new(repo, monkeypatch, capsys):
+def test_init_points_to_do(repo, monkeypatch, capsys):
     monkeypatch.chdir(repo)
     main(["init"])
-    assert 'next: parallax intent new "what you want done"' in capsys.readouterr().out
+    assert 'next: parallax do "what you want done"' in capsys.readouterr().out
 
 
 def test_the_report_carries_the_drafted_files_not_looked_at(proj):
@@ -182,7 +182,7 @@ def test_the_builder_gets_a_scrubbed_environment():
     env = build.scrubbed_env(Path("/v"), {"HOME": "/h", "USER": "me", "LC_ALL": "C", "ANTHROPIC_API_KEY": "sk-ant-x",
                                           "GITHUB_TOKEN": "ghp_x", "AWS_SECRET_ACCESS_KEY": "x", "PATH": "/evil"})
     assert env == {"HOME": "/h", "USER": "me", "LC_ALL": "C", "PATH": "/v/bin:/usr/local/bin:/usr/bin:/bin",
-                   "VIRTUAL_ENV": "/v", "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1"}
+                   "VIRTUAL_ENV": "/v", "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1", **build.QUIET_BUILD}
 
 
 # the tool layer during a build ----------------------------------------------------------------------

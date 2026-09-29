@@ -40,4 +40,4 @@ This is a personal project built on personal time and accounts. Don't reference,
 
 ## Current milestone
 
-Follow docs/plan.md. M7 to M11 are built. Next is M12: hands-free in the terminal (`parallax do` through one inbox item).
+Follow docs/plan.md. M7 to M12 are built. Next is M13: the one decision.

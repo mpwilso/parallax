@@ -13,6 +13,7 @@ Checks that need no model, all against the approved plan:
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
@@ -22,6 +23,8 @@ from .core import ParallaxError
 from .guard import is_protected
 
 EXCLUDE = ":(exclude)docs/tasks"
+# build byproducts never count as the change, whatever the repo's .gitignore says (seen live in M12)
+BYPRODUCTS = (":(exclude,glob)**/__pycache__/**", ":(exclude,glob)**/*.pyc", ":(exclude,glob)**/.pytest_cache/**")
 DEPENDENCY_FILES = ("pyproject.toml", "setup.py", "setup.cfg", "requirements*.txt", "Pipfile", "Pipfile.lock",
                     "poetry.lock", "uv.lock", "package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
                     "go.mod", "go.sum", "Cargo.toml", "Cargo.lock", "Gemfile", "Gemfile.lock")
@@ -64,7 +67,7 @@ def stage(worktree: Path, base: str, index: Path) -> Staged:
     if index.exists():
         index.unlink()
     _git(worktree, "read-tree", base, index=index)
-    _git(worktree, "add", "-A", "--", ".", index=index)
+    _git(worktree, "add", "-A", "--", ".", *BYPRODUCTS, index=index)
     tree = _git(worktree, "write-tree", index=index).strip()
     diff = _git(worktree, "diff", "--cached", "--binary", base, "--", ".", EXCLUDE, index=index)
     files, lines, binaries = [], 0, []
@@ -135,3 +138,20 @@ def show_file(worktree: Path, treeish: str, path: str) -> bytes:
 
 def changed_between(worktree: Path, old: str, new: str) -> list[str]:
     return [p for p in _git(worktree, "diff", "--name-only", "-z", old, new, "--", ".", EXCLUDE).split("\0") if p]
+
+
+def added_lines(diff: str) -> list[tuple[str, int, str]]:
+    """(path, line number, text) for every line a unified diff adds."""
+    out, path, line = [], "", 0
+    for raw in diff.splitlines():
+        if raw.startswith("+++ "):
+            path = raw[6:] if raw.startswith("+++ b/") else raw[4:]
+        elif raw.startswith("@@"):
+            m = re.search(r"\+(\d+)", raw)
+            line = int(m.group(1)) if m else 0
+        elif raw.startswith("+"):
+            out.append((path, line, raw[1:]))
+            line += 1
+        elif not raw.startswith("-"):
+            line += 1
+    return out

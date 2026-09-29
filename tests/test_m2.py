@@ -122,7 +122,7 @@ def test_checker_is_blind_to_maker_explanation(repo):
 
     review_md = review.TEMPLATE.rstrip() + "\n\n## This task only\n\ncheck the WSL steps"
     expected = [
-        f"Outcome:\nA new user on WSL can follow them.\n\nConstraints:\nKeep the macOS steps.\n\n"
+        f"Outcome:\n1. A new user on WSL can follow them.\n\nConstraints:\nKeep the macOS steps.\n\n"
         f"REVIEW.md:\n{review_md}\n\nDiff:\n{_new_file_diff('README.md', content)}\n"
         for content in ("first\n", "second\n")
     ]

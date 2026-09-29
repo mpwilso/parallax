@@ -26,19 +26,20 @@ KINDS = ("bug", "feature", "docs", "chore")
 SIZES = ("small", "large")
 INTENT_SECTIONS = ("Problem", "Outcome", "Constraints")
 HEADER_WORDS, BODY_WORDS = 40, 150
-EM_DASH = "—"
+EM_DASH = "\u2014"
 
 DECIDE = re.compile(r"^Decide: .+[.?] Recommend: .+\. Blocks: .+\.$")
 FILE_LINE = re.compile(r"([\w./-]+\.\w+):(\d+)")
 LEDGER_ID = re.compile(r"\bledger ([0-9a-f]{8})\b")
 LIST_ITEM = re.compile(r"^\s*(?:[-*]|\d+\.)\s+(.*)$")
-FIELD = re.compile(r"^(kind|size|title):\s*(.*?)\s*$", re.I)
+FIELD = re.compile(r"^(kind|size|title|scope|budget):\s*(.*?)\s*$", re.I)
+OUTCOME_ITEM = re.compile(r"^\s*(\d+)[.)]\s+\S")
 HOST = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$")
 
 PLAN_FIELDS = {
     "files": list, "tests": list, "lines_changed": int, "domains": list, "outside_reads": list,
     "binaries": list, "symlinks": list, "dependencies": list, "review_tightening": str,
-    "estimated_cost_usd": (int, float), "budget_cap_usd": (int, float),
+    "estimated_cost_usd": (int, float), "budget_cap_usd": (int, float), "covers": dict,
 }
 PLAN_TEMPLATE = '''```toml
 files = ["path/to/file.py"]      # every file the change touches
@@ -52,6 +53,7 @@ dependencies = []                # new dependencies
 review_tightening = ""           # extra review rule for this task only; can't loosen REVIEW.md
 estimated_cost_usd = 1.50
 budget_cap_usd = 2.00
+covers = { "1" = ["tests/test_file.py"] }   # each numbered outcome in the intent -> the tests or steps that prove it
 ```'''
 
 Problem = tuple[int, str]
@@ -230,6 +232,9 @@ def check_plan_data(data: dict) -> list[str]:
             out.append(f"{key} has the wrong type")
         elif kind is list and not all(isinstance(x, str) and x.strip() for x in v):
             out.append(f"{key} must be a list of non-empty strings")
+        elif kind is dict and not all(isinstance(x, list) and x and all(isinstance(y, str) and y.strip() for y in x)
+                                      for x in v.values()):
+            out.append(f"{key} must map each outcome number to a list of tests or steps")
     if out:
         return out
     if not data["files"]:
@@ -265,6 +270,12 @@ def lint_lifecycle(text: str, doc: str) -> list[Problem]:
             problems.append((1, f"intent needs 'size:' set to one of {', '.join(SIZES)}"))
         if not fields.get("title"):
             problems.append((1, "intent needs 'title:', a short phrase like 'fixing the README install steps'"))
+        if not scope_of(text):
+            problems.append((1, "intent needs 'scope:', the paths or globs the work may touch, comma separated"))
+        if "budget" in fields and _money(fields["budget"]) is None:
+            problems.append((1, "intent's 'budget:' must be a dollar amount, like 4.00"))
+        if not outcomes_of(text):
+            problems.append((1, "intent's '## Outcome' needs a numbered list: 1. ..., 2. ..."))
         names = [s for s, _ in _sections(lines, 0)]
         for name in INTENT_SECTIONS:
             if name not in names:
@@ -340,3 +351,121 @@ def shaped(type_: str, bottom: str, gaps: list[tuple[str, str]], next_: str, fou
         return report(type_, bottom, f"what {who} {verb} under Details ({len(gaps)})", next_, found, extra + cited, changed)
     text = report(type_, bottom, "nothing", next_, found + extra, changed=changed)
     return text if fits(text, "body is") else report(type_, bottom, "nothing", next_, found, extra, changed)
+
+
+def _money(text: str) -> float | None:
+    try:
+        v = float(text.strip().lstrip("$"))
+    except ValueError:
+        return None
+    return v if v > 0 else None
+
+
+def scope_of(intent: str) -> list[str]:
+    """The intent's scope: the paths or globs the work may touch."""
+    return [p.strip().strip("`") for p in intent_fields(intent).get("scope", "").split(",") if p.strip().strip("`")]
+
+
+def budget_of(intent: str) -> float | None:
+    """A budget the human named, if the intent carries one."""
+    return _money(intent_fields(intent).get("budget", ""))
+
+
+def outcomes_of(intent: str) -> list[str]:
+    """The numbers of the intent's numbered outcomes."""
+    lines = intent.splitlines()
+    return [m.group(1) for _, line in _section_lines(lines, _sections(lines, 0), "Outcome")
+            if (m := OUTCOME_ITEM.match(line))]
+
+
+# normalizing and fitting: Parallax never shows or saves its own output failing its own lint -----------
+
+_HEAD = re.compile(r"^\**\s*(Type|Bottom line|Not looked at|Next)\s*:\**\s*(.*)$", re.I)
+
+
+def normalize(text: str, doc: str | None = None) -> str:
+    """Repair the slips drafters make, before a drafted file is saved.
+
+    Unwraps a fence around the whole reply, trims trailing spaces, pulls the header lines
+    together at the top (a blank line inside it failed lint in task ef4163), and turns em
+    dashes into commas. Content is otherwise untouched; what still fails goes back to the drafter.
+    """
+    m = re.fullmatch(r"\s*```(?:markdown|md)?\s*\n(.*)\n```\s*", text, re.S)
+    text = m.group(1) if m else text
+    text = text.replace(" " + EM_DASH + " ", ", ").replace(EM_DASH, ", ")
+    lines = [l.rstrip() for l in text.strip().splitlines()]
+    keys = LIFECYCLE_HEADER if doc in LIFECYCLE_DOCS else HEADER
+    head, rest, seen = {}, [], 0
+    for i, line in enumerate(lines):
+        hm = _HEAD.match(line) if seen < len(keys) and i < 15 else None
+        name = next((k for k in keys if hm and hm.group(1).lower() == k.lower()), None)
+        if name and name not in head:
+            head[name] = hm.group(2).strip()
+            seen += 1
+        else:
+            rest.append(line)
+    if len(head) < len(keys):
+        return "\n".join(lines) + "\n"  # can't repair a missing header line; lint says what's missing
+    title = [rest.pop(0)] if rest and rest[0].startswith("# ") else []
+    while rest and not rest[0].strip():
+        rest.pop(0)
+    gap = [""] if doc in LIFECYCLE_DOCS and rest else []  # drafted files keep a blank line after the header
+    out = title + [f"{k}: {head[k]}" for k in keys] + gap + rest
+    return "\n".join(out) + "\n"
+
+
+def _truncate(text: str, words: int) -> str:
+    kept = text.split()[:max(words, 3)]
+    return one_sentence(" ".join(kept))
+
+
+def fit(text: str, root: Path | None = None, ledger_ids: set[str] | None = None) -> tuple[str, list[str]]:
+    """A report of Parallax's own, repaired until it lints. Returns (text, what had to be repaired).
+
+    Shortens header fields to the cap, labels uncited Found items Unverified, moves Found items to
+    Details when the body is over its cap, and replaces em dashes. If none of that is enough, it
+    falls back to the header alone with everything else under Details.
+    """
+    fixed: list[str] = []
+    text = normalize(text)
+    if EM_DASH in text:
+        text = text.replace(EM_DASH, ",")
+    for _ in range(40):
+        problems = lint_report(text, root=root, ledger_ids=ledger_ids)
+        if not problems:
+            return text, fixed
+        lines = text.splitlines()
+        msg = problems[0][1]
+        n = problems[0][0] - 1
+        if msg.startswith("header is"):
+            fields = [(i, _HEAD.match(l)) for i, l in enumerate(lines[:4])]
+            i, hm = max(((i, hm) for i, hm in fields if hm), key=lambda x: len(x[1].group(2).split()))
+            lines[i] = f"{hm.group(1)}: {_truncate(hm.group(2), len(hm.group(2).split()) - 4)}"
+            fixed.append("shortened the header")
+        elif "cites no source" in msg and 0 <= n < len(lines):
+            lines[n] = lines[n] + " (Unverified)"
+            fixed.append("labeled an uncited item Unverified")
+        elif msg.startswith("body is"):
+            found = [i for i, l in enumerate(lines) if l.strip() == "Found" or l.strip() == "## Found"]
+            items = [i for i in range(found[0] + 1, len(lines)) if LIST_ITEM.match(lines[i])] if found else []
+            if not items:
+                break
+            moved = lines.pop(items[-1])
+            if not any(l.strip() in ("Details", "## Details") for l in lines):
+                lines.append("Details")
+            lines.append(moved)
+            fixed.append("moved a Found item to Details")
+        elif "one sentence" in msg:
+            i = next(i for i, l in enumerate(lines[:4]) if l.startswith("Bottom line:"))
+            lines[i] = "Bottom line: " + one_sentence(lines[i][len("Bottom line:"):])
+            fixed.append("made the bottom line one sentence")
+        else:
+            break
+        text = "\n".join(lines)
+    head = [l for l in text.splitlines()[:4]]
+    body = [f"- {l.lstrip('- ')}" for l in text.splitlines()[4:] if l.strip() and l.strip() not in SECTIONS]
+    fallback = "\n".join(head + (["Details"] + body if body else []))
+    if lint_report(fallback, root=root, ledger_ids=ledger_ids):
+        fallback = report("FYI", "Parallax couldn't fit this report into its own shape.", "the report itself",
+                          "run parallax log to see the raw record.")
+    return fallback, fixed + ["fell back to the header alone"]

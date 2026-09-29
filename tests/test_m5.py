@@ -158,4 +158,4 @@ def test_diffs_with_non_ascii_text_work(repo):
 def test_bare_parallax_prints_a_guide(capsys):
     assert main([]) == 0
     out = capsys.readouterr().out
-    assert "start here:" in out and 'parallax task new "what you want"' in out
+    assert "start here:" in out and 'parallax do "the work"' in out

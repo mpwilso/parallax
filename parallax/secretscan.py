@@ -13,6 +13,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from .tree import added_lines
+
 PATTERNS = {
     "private key": re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
     "anthropic key": re.compile(r"sk-ant-[A-Za-z0-9_\-]{20,}"),
@@ -27,21 +29,11 @@ PATTERNS = {
 
 def scan_diff(diff: str) -> list[str]:
     """'path:line kind' for every added line that matches a pattern."""
-    hits, path, line = [], "", 0
-    for raw in diff.splitlines():
-        if raw.startswith("+++ "):
-            path = raw[6:] if raw.startswith("+++ b/") else raw[4:]
-        elif raw.startswith("@@"):
-            m = re.search(r"\+(\d+)", raw)
-            line = int(m.group(1)) if m else 0
-        elif raw.startswith("+"):
-            for kind, pattern in PATTERNS.items():
-                if pattern.search(raw):
-                    hits.append(f"{path}:{line} {kind}")
-                    break
-            line += 1
-        elif not raw.startswith("-"):
-            line += 1
+    hits = []
+    for path, line, text in added_lines(diff):
+        kind = next((k for k, pattern in PATTERNS.items() if pattern.search(text)), None)
+        if kind:
+            hits.append(f"{path}:{line} {kind}")
     return hits
 
 

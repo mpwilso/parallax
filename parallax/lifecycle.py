@@ -1,9 +1,10 @@
 """The lifecycle files and their gates: docs/tasks/<id>/intent.md, spec.md and plan.md.
 
 Drafters (read-only agents) write the text; only Parallax writes the files, in the repo's own
-docs/tasks/<id>/, which the maker can never write. You edit them if needed, then approve.
-- small task: approve intent and plan together;
-- large task: approve intent, then spec and plan together.
+docs/tasks/<id>/, which the maker can never write. Parallax normalizes what they write before
+saving it, and you never edit a drafted file: if one is wrong, you reject with a reason.
+- small task: intent and plan are approved together, by code under the policy's launch rule or by you;
+- large task: intent, then spec and plan together; the plan always waits for you.
 
 State lives in the ledger: every draft, and every approval with each approved file's hash and a
 signature made with the approval key. An approval that doesn't verify doesn't count.
@@ -33,18 +34,22 @@ Not looked at: <what you didn't check, or "nothing">
 kind: <bug | feature | docs | chore>
 size: <small | large>
 title: <a short phrase in -ing form, like "fixing the README install steps">
+scope: <the paths or globs the work may touch, comma separated, tests included, like README.md, tests/test_readme.py>
+budget: <only if the human's words name a budget: that amount in dollars, like 4.00. otherwise leave this line out>
 
 ## Problem
 <what is wrong or missing. cite files you read as path:line>
 
 ## Outcome
-<what is true when this is done, observable and testable>
+<a numbered list: 1. ..., 2. ... each one observable and testable>
 
 ## Constraints
 <what must not change: behavior, interfaces, compatibility, limits>
 
 size is large only if the work needs a design written down before planning: several modules,
-a new interface, or a risky migration. Otherwise small.""",
+a new interface, or a risky migration. Otherwise small. scope is a promise: the plan may only list
+files inside it, so include every file the work needs, tests too, and nothing else.
+Keep the header as two lines, with no blank line between them.""",
     "spec": """\
 Bottom line: <one sentence: the design in brief>
 Not looked at: <what you didn't check, or "nothing">
@@ -80,7 +85,10 @@ files lists every file the change touches, tests included. Never list CLAUDE.md,
 docs/tasks/: the maker can never write them. domains, outside_reads, binaries, symlinks and
 dependencies stay empty unless the work needs them; say why in the steps. Costs are estimated
 US dollars for the whole task: the drafting so far, then building, checking and any rework. The
-cap stops the task, so set it a little above the estimate.""",
+cap stops the task, so set it a little above the estimate. If the intent names a budget, the cap
+is that budget. files and tests must all be inside the intent's scope, and covers must name every
+numbered outcome in the intent with the tests or steps that prove it.
+Keep the header as two lines, with no blank line between them.""",
 }
 
 
@@ -155,7 +163,7 @@ def _feedback(project: Project, task_id: str) -> str:
     return reason
 
 
-def _material(project: Project, task_id: str, doc: str, feedback: str) -> str:
+def _material(project: Project, task_id: str, doc: str, feedback: str, problems: list[str] = ()) -> str:
     t = project.task(task_id)
     parts = [f"Draft docs/tasks/{task_id}/{doc}.md in exactly this shape:\n\n{SHAPES[doc]}"]
     if doc == "intent":
@@ -169,12 +177,10 @@ def _material(project: Project, task_id: str, doc: str, feedback: str) -> str:
                      "It counts against the cap.")
     if feedback:
         parts.append(f"The human rejected the last draft. Their reason (data):\n{feedback}")
+    if problems:
+        parts.append("Your last draft of this file had these problems. Fix every one:\n"
+                     + "\n".join(f"- {p}" for p in problems))
     return "\n\n".join(parts)
-
-
-def _unfence(text: str) -> str:
-    m = re.fullmatch(r"\s*```(?:markdown|md)?\s*\n(.*)\n```\s*", text, re.S)
-    return m.group(1) if m else text
 
 
 def _write(path: Path, text: str) -> None:
@@ -184,21 +190,27 @@ def _write(path: Path, text: str) -> None:
     os.replace(tmp, path)
 
 
-def draft(project: Project, task_id: str, docs: list[str], drafter_for: DrafterFor) -> bool:
-    """Draft each doc in order. Stops at the first failure, which is recorded. True if all were drafted."""
+def draft(project: Project, task_id: str, docs: list[str], drafter_for: DrafterFor,
+          problems: dict[str, list[str]] | None = None) -> bool:
+    """Draft each doc in order, normalized before it's saved. Stops at the first failure, which is
+    recorded. problems: what was wrong with each doc's last draft, for the drafter to fix."""
     refuse_inside_task(project.root)
     t = lifecycle_task(project, task_id)
     wt = Path(t["worktree"])
     feedback = _feedback(project, task_id)
+    from .sandbox import remove_leftovers, untracked
+    before = untracked(wt)
     for doc in docs:
         cap = project.policy.budget["drafting_usd"]
         fn = make_permission_fn(project, task_id, wt, read_only=True)
         env = {TASK_ENV: task_id, ROOT_ENV: str(project.root)}
         try:
-            res = drafter_for(cap).run(_material(project, task_id, doc, feedback), wt, fn, stage="draft", env=env)
+            res = drafter_for(cap).run(_material(project, task_id, doc, feedback, (problems or {}).get(doc, [])),
+                                       wt, fn, stage="draft", env=env)
         except Exception as err:  # recorded for you, never retried silently
             res = AgentResult("error", f"{type(err).__name__}: {err}")
-        text = _unfence(res.summary or "").strip()
+        remove_leftovers(wt, before)  # a drafter's Claude Code leaves the same empty placeholders a maker does
+        text = lint.normalize(res.summary or "", doc).strip() if (res.summary or "").strip() else ""
         if res.status != "done" or not text:
             why = " ".join((res.summary or res.status or "no reply").split())[:200] or "no reply"
             project.ledger.append("draft.failed", "parallax", why, task=task_id, doc=doc, cost_usd=res.cost_usd)
@@ -237,8 +249,10 @@ def lint_problems(project: Project, task_id: str, docs) -> list[str]:
     return out
 
 
-def approve(project: Project, task_id: str) -> dict:
-    """Approve the pending gate: hash every file in it and sign the approval with the approval key."""
+def approve(project: Project, task_id: str, rule: str = "") -> dict:
+    """Approve the pending gate: hash every file in it and sign the approval with the approval key.
+
+    rule: code approving under the policy's launch rule, named here. Otherwise it's you."""
     refuse_inside_task(project.root)
     lifecycle_task(project, task_id)
     key = approvals.load_key()
@@ -247,7 +261,7 @@ def approve(project: Project, task_id: str) -> dict:
         raise ParallaxError(f"the plan for {task_id} is already approved")
     if st.missing:
         names = ", ".join(f"{d}.md" for d in st.missing)
-        raise ParallaxError(f"{names} not written yet. run parallax draft {task_id}, or write it yourself")
+        raise ParallaxError(f"{names} not written yet. reject the task with a reason, then parallax do it again")
     problems = lint_problems(project, task_id, st.gate)
     if problems:
         raise ParallaxError("fix these first, then approve:\n" + "\n".join(problems))
@@ -264,8 +278,9 @@ def approve(project: Project, task_id: str) -> dict:
                                 f"already spent (${used:.2f} estimated). raise budget_cap_usd in the plan, then approve")
     files = {doc: file_hash(doc_path(project, task_id, doc)) for doc in st.gate}
     gate = "+".join(st.gate)
-    return project.ledger.append("gate.approved", "human", "", task=task_id, gate=gate, files=files,
-                                 sig=approvals.sign(key, task_id, gate, files))
+    extra = {"rule": rule} if rule else {}
+    return project.ledger.append("gate.approved", "parallax" if rule else "human", rule, task=task_id, gate=gate,
+                                 files=files, sig=approvals.sign(key, task_id, gate, files), **extra)
 
 
 def reject(project: Project, task_id: str, reason: str) -> dict:
@@ -347,17 +362,17 @@ def report(project: Project, task_id: str) -> str:
         doc, why = st.failed
         why = re.sub(r"(?<=[.!?])\s+", "; ", why).rstrip(".!?")
         return _report(project, task_id, docs, "Decision needed", f"Drafting {doc}.md stopped: {why}.",
-                       f"you run parallax draft {task_id} to try again, or write {base}{doc}.md yourself.")
+                       "you reject it with a reason, then parallax do it again if it's still wanted.")
     if st.missing:
         names = " and ".join(f"{d}.md" for d in st.missing)
         return _report(project, task_id, docs, "Decision needed",
                        f"{names} {'is' if len(st.missing) == 1 else 'are'} not drafted yet.",
-                       f"you run parallax draft {task_id}, or write {base}{st.missing[0]}.md yourself.")
+                       "you reject it with a reason, then parallax do it again if it's still wanted.")
     names, verb = _names(st.gate), "is" if len(st.gate) == 1 else "are"
     problems = lint_problems(project, task_id, st.gate)
     if problems:
         return _report(project, task_id, docs, "Decision needed",
                        f"{names} {verb} drafted for {_title(project, task_id)}, but lint found problems.",
-                       f"you fix {base}, then run parallax approve {task_id}.", problems)
+                       "you reject it with a reason, then parallax do it again if it's still wanted.", problems)
     return _report(project, task_id, docs, "Decision needed", f"{names} {verb} drafted for {_title(project, task_id)}.",
                    f"you read {base}, then run parallax approve {task_id}.")

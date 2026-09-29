@@ -78,6 +78,7 @@ class FakeChecker:
 
 class FakeDrafter:
     """Returns canned file text per doc ("intent", "spec", "plan"), read from the request's first line.
+    A doc's text may be a list: successive drafts, the last one repeating.
 
     reads: paths it tries to read through the gate first. fail: docs it fails on.
     """
@@ -100,7 +101,10 @@ class FakeDrafter:
             self.results.append((path, permission_fn("fs.read", path, [])))
         if doc in self.fail:
             return AgentResult("error", "stopped at the budget cap ($2.0)", self.cost)
-        return AgentResult("done", self.docs[doc], self.cost)
+        text = self.docs[doc]
+        if isinstance(text, list):  # successive drafts: the first, then each redraft; the last repeats
+            text = text.pop(0) if len(text) > 1 else text[0]
+        return AgentResult("done", text, self.cost)
 
 
 def blocker(text="the steps are wrong", where="README.md:3"):

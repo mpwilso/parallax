@@ -18,7 +18,8 @@ DEFAULT_LIMITS = {
     "max_parallel": 4, "stuck_after": 3, "stale_minutes": 60,
     "promote_after": 10, "evidence_days": 30, "law_after": 3,
 }
-DEFAULT_BUDGET = {"drafting_usd": 2.0}  # estimated dollars
+DEFAULT_BUDGET = {"drafting_usd": 2.0, "small_cap_usd": 5.0, "large_cap_usd": 20.0}  # estimated dollars
+DEFAULT_LAUNCH = {"auto_launch_usd": 3.0, "review_paths": [], "review_plans": False}
 DEFAULT_CHECK = {
     "model": "claude-sonnet-5-5",  # a different Claude model from the maker's; the eval measures it
     "diff_cap": 400,               # changed lines a blind review can take reliably
@@ -54,7 +55,15 @@ stale_minutes = 60   # a running task silent this long is flagged stuck
 
 [budget]
 # estimated US dollars at API list prices, as Claude Code computes them. not a charge.
-drafting_usd = 2.00  # the most one drafting call (intent, spec or plan) may use
+drafting_usd = 2.00   # the most one drafting call (intent, spec or plan) may use
+small_cap_usd = 5.00  # the most a small task's plan may set as its cap
+large_cap_usd = 20.00 # the same, for a large task
+
+[launch]
+# when code may approve a plan and start the build without you. everything else waits for you.
+auto_launch_usd = 3.00  # a plan whose budget cap is at most this launches on its own
+review_paths = []       # paths or globs: a plan touching any of them waits for you to review it
+review_plans = false    # true: every plan waits for you
 
 [build]
 # a shell command that makes the task's Python environment before the build. it runs as you,
@@ -97,7 +106,7 @@ def _check_table(where: str, table: dict[str, str]) -> None:
 class Policy:
     def __init__(self, actions: dict[str, str], limits: dict[str, int] | None = None,
                  exact: dict[str, dict[str, str]] | None = None, budget: dict[str, float] | None = None,
-                 build: dict[str, str] | None = None, check: dict | None = None):
+                 build: dict[str, str] | None = None, check: dict | None = None, launch: dict | None = None):
         _check_table("[actions]", actions)
         self.exact = {action: dict(table) for action, table in (exact or {}).items() if table}
         if "git.merge" in self.exact:
@@ -135,13 +144,26 @@ class Policy:
             if not isinstance(check.get(key, ""), str):
                 raise ValueError(f"[check] {key} must be text")
         self.check = {**DEFAULT_CHECK, **check}
+        launch = dict(launch or {})
+        if set(launch) - set(DEFAULT_LAUNCH):
+            raise ValueError(f"unknown [launch] settings: {sorted(set(launch) - set(DEFAULT_LAUNCH))}")
+        v = launch.get("auto_launch_usd", DEFAULT_LAUNCH["auto_launch_usd"])
+        if not isinstance(v, (int, float)) or isinstance(v, bool) or v < 0:
+            raise ValueError("[launch] auto_launch_usd must be a dollar amount of 0 or more (0: always ask)")
+        paths = launch.get("review_paths", [])
+        if not isinstance(paths, list) or not all(isinstance(x, str) and x.strip() for x in paths):
+            raise ValueError("[launch] review_paths must be a list of paths or globs")
+        if not isinstance(launch.get("review_plans", False), bool):
+            raise ValueError("[launch] review_plans must be true or false")
+        self.launch = {**DEFAULT_LAUNCH, **launch}
 
     @classmethod
     def from_dict(cls, data: dict) -> "Policy":
         if "profiles" in data:
             raise ValueError("profiles are gone. every task uses [actions]; remove [profiles]")
         return cls(data.get("actions", {}), data.get("limits", {}), data.get("exact", {}), data.get("budget", {}),
-                   data.get("build", {}), data.get("check", {}))
+                   data.get("build", {}), data.get("check", {}),
+                   data.get("launch", {}))
 
     @classmethod
     def load(cls, path: Path) -> "Policy":

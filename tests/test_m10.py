@@ -198,6 +198,8 @@ def test_show_at_ready_is_the_plans_shape(repo, monkeypatch, capsys):
         "Not looked at: nothing\n"
         f"Next: you run parallax accept {tid}, or reject it with a reason.\n"
         "Found\n"
+        f"- the work: fixing the README install steps (docs/tasks/{tid}/intent.md:1)\n"
+        f"- changed: README.md, 1 line; parallax diff {tid} shows it (ledger {kinds(proj, 'check.staged')[-1]['id']})\n"
         f"- tests/test_readme.py: 3 of 3 passed (ledger {t['id']})\n"
         f"- checker: pass, no findings (ledger {v['id']})\n")
 
@@ -381,3 +383,23 @@ def test_a_rework_that_drops_an_approved_file_comes_to_you(repo):
     assert run(proj, tid, maker, checker) == "disputed"
     assert len(checker.briefs) == 1  # stopped before the re-check
     assert proj.inbox()[0]["reason"] == "the rework removed tests/test_readme.py, which your approved plan lists"
+
+
+def test_no_report_means_the_tests_didnt_run_not_that_they_failed(repo):
+    """python -m pytest without pytest exits 1, like a failure. Without a report it's not the maker's to fix."""
+    proj, tid, wt = approved(repo)
+    maker = built(proj, tid, [("write", "README.md", "ok\n")])
+    assert run(proj, tid, maker, runner=lambda c, cwd, cmd, env: (1, "No module named pytest")) == "disputed"
+    assert len(maker.goals) == 1 and "couldn't run" in proj.inbox()[0]["reason"]
+
+
+def test_build_byproducts_are_never_the_change(repo):
+    """Live in M12: pytest's bytecode in a repo with no .gitignore became a scope problem for the human."""
+    proj, tid, wt = approved(repo)
+    (wt / "README.md").write_text("ok\n")
+    (wt / "tests" / "__pycache__").mkdir(parents=True)
+    (wt / "tests" / "__pycache__" / "test_readme.cpython-312.pyc").write_bytes(b"\x00\x01")
+    (wt / ".pytest_cache").mkdir()
+    (wt / ".pytest_cache" / "README.md").write_text("cache")
+    s = tree.stage(wt, proj.task(tid)["base"], wt.parent / "idx")
+    assert s.files == ["README.md"] and s.binaries == []

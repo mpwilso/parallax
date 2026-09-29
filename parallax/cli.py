@@ -8,7 +8,6 @@ from pathlib import Path
 from . import lifecycle, lint
 from .agents.base import AgentUnavailable
 from .core import ParallaxError, Project, inside_task, refuse_inside_task
-from .inbox import batched, label
 
 MARK = {"allow": "ALLOWED", "ask": "NEEDS YOU", "deny": "REFUSED"}
 LOG_FIELDS = ("task", "action", "stage", "status", "verdict", "outcome", "why")
@@ -18,19 +17,16 @@ GUIDE = """\
 parallax: agents do the work. you make the calls.
 
 start here:
-  parallax doctor                       check this machine can run agents in a sandbox
-  parallax init                         set up parallax in your repo's folder
-  parallax intent new "what you want"   a task: agents draft its intent and plan
-  parallax task new "what you want"     the old way: run straight from its goal
-  parallax approve <task>               approve the task's pending gate
-  parallax reject <task> --reason "..." reject it, with a reason
-  parallax preflight <task>             test the sandbox for an approved task
-  parallax build <task>                 build it in the sandbox, then check it. parallax stop ends it
-  parallax show <task>                  where it stands: ready, or what needs you
+  parallax do "the work"                describe it once. drafting, building and checking run without you
+  parallax inbox                        what waits on you: one item per task
+  parallax show <task>                  its card: everything you need to decide
   parallax accept <task>                commit what was reviewed. merging is yours
-  parallax lint <file>                  check a report or task file against the output shape
+  parallax reject <task> --reason "..." send it back with your reason
+  parallax stats                        how many touches each task took. the target is 1
+  parallax ui                           the same, in your browser
 
-more: parallax run, inbox, ui, draft, log, verify, eval. `parallax <command> -h` for details.
+setup: parallax doctor, init. power use: diff, stop, approve, preflight, build, recheck, lint, log, verify, eval.
+`parallax <command> -h` for details.
 """
 
 
@@ -54,14 +50,12 @@ def main(argv: list[str] | None = None) -> int:
     td = tsub.add_parser("diff", help="show a task's diff against its base")
     td.add_argument("task")
 
-    it = sub.add_parser("intent", help="start a task from what you want: agents draft its intent and plan")
-    isub = it.add_subparsers(dest="icmd", required=True)
-    inew = isub.add_parser("new", help="create the task, branch and worktree, and draft the intent and plan")
-    inew.add_argument("text", help="a few rough sentences")
-    inew.add_argument("--model", default=None)
-    dr = sub.add_parser("draft", help="draft what the task's pending gate still needs, again")
-    dr.add_argument("task")
-    dr.add_argument("--model", default=None)
+    dw = sub.add_parser("do", help="describe the work once; it's drafted, built and checked without you")
+    dw.add_argument("work", help="a few plain sentences")
+    dw.add_argument("--wait", action="store_true", help="stay and show where it is until it needs you")
+    df = sub.add_parser("diff", help="the change a task made: the reviewed tree against its base")
+    df.add_argument("task")
+    sub.add_parser("stats", help="human touches per task, from the ledger")
     ln = sub.add_parser("lint", help="check a file against the output shape")
     ln.add_argument("file")
 
@@ -81,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
     rn = sub.add_parser("run", help="run the maker on a task, then the blind checker")
     rn.add_argument("task")
     rn.add_argument("--model", default=None)
-    sub.add_parser("inbox", help="everything waiting on you, grouped by task")
+    sub.add_parser("inbox", help="what waits on you: one item per task")
     ui = sub.add_parser("ui", help="open the inbox in your browser: every decision with what you need to make it")
     ui.add_argument("--port", type=int, default=0)
     ui.add_argument("--no-open", action="store_true", help="don't open the browser, just print the link")
@@ -129,7 +123,7 @@ def _run(args) -> int:
         print(f"initialized parallax in {proj.root}")
         print("  parallax.policy.toml  what agents may do. anything unlisted is denied.")
         print("  REVIEW.md             how the blind checker reviews, and what blocks ready. you own it.")
-        print('next: parallax intent new "what you want done"')
+        print('next: parallax do "what you want done"')
         return 0
 
     if args.cmd == "eval":
@@ -161,20 +155,24 @@ def _run(args) -> int:
             print(proj.diff(args.task) or "no changes")
         return 0
 
-    if args.cmd in ("intent", "draft"):
-        refuse_inside_task(proj.root)
-        drafter = _drafter(args.model)
-        if args.cmd == "intent":
-            t = lifecycle.new_intent(proj, args.text, drafter)
-        else:
-            t = lifecycle.lifecycle_task(proj, args.task)
-            st = lifecycle.state(proj, args.task)
-            if st.gate is None:
-                raise ParallaxError(f"the plan for {args.task} is already approved")
-            lifecycle.draft(proj, args.task, lifecycle.redraft_docs(st), drafter)
-        print(f"task {t['task']} on branch {t['branch']}")
-        _shaped(proj, lifecycle.report(proj, t["task"]))
+    if args.cmd == "do":
+        from . import pilot
+        t = pilot.intake(proj, args.work)
+        print(f"task {t['task']}: on it. drafting, building and checking run without you.")
+        print("it comes to parallax inbox when it needs you." if not args.wait else "watching it. Ctrl+C stops watching, not the task.")
+        return _watch(proj, t["task"]) if args.wait else 0
+
+    if args.cmd == "diff":
+        print(_reviewed_diff(proj, args.task) or "no changes")
         return 0
+
+    if args.cmd == "stats":
+        from . import stats
+        print("\n".join(stats.report(proj)))
+        return 0
+
+    if args.cmd in ("preflight", "build", "recheck") and proj.tasks().get(args.task, {}).get("intent"):
+        proj.ledger.append("human.command", "human", f"parallax {args.cmd}", task=args.task)  # a touch, for stats
 
     if args.cmd in ("preflight", "build"):
         from . import build, preflight
@@ -229,13 +227,18 @@ def _run(args) -> int:
         return 0
 
     if args.cmd == "inbox":
-        groups = batched(proj)
-        if not groups:
-            print("inbox empty. nothing waiting on you.")
-        for header, items in groups:
-            print(header)
-            for e in items:
-                print(f"  {e['id']}  {label(e)}  {_line(e['reason'])}")
+        from . import inbox
+        items, busy, merges = inbox.items(proj), inbox.working(proj), inbox.to_merge(proj)
+        if not items:
+            print("nothing waits on you.")
+        for it in items:
+            print(f"{it['task']}  {it['state']:<10}{_line(it['title'], 90)}")
+        if items:
+            print("parallax show <task> for its card.")
+        if busy:
+            print(f"{busy} working without you.")
+        for m in merges:
+            print(f"to merge, task {m['task']}: {m['command']}")
         return 0
 
     if args.cmd in ("approve", "reject"):
@@ -279,21 +282,45 @@ def _line(text: str, width: int = 160) -> str:
     return text if len(text) <= width else text[:width - 3] + "..."
 
 
-def _drafter(model: str | None):
-    """Drafters for the lifecycle files: read-only agents, each call capped. Tests swap this out."""
-    from .agents.claude import ClaudeAgent
-    extra = {"model": model} if model else {}
-    return lambda cap: ClaudeAgent(**extra, max_budget_usd=cap)
-
-
 def _shaped(proj: Project, text: str) -> None:
-    """Print a report only if it passes lint. A lint failure blocks the output."""
+    """Print a report of Parallax's own, fitted until it lints. You never see a lint failure of
+    Parallax's own making; if it had to repair something, that's recorded as a Parallax bug."""
     ids = {e["id"] for e in proj.ledger.entries()}
-    problems = lint.lint_report(text, root=proj.root, ledger_ids=ids)
-    if problems:
-        raise ParallaxError("this output failed lint, so it isn't shown: "
-                            + "; ".join(f"line {n}: {m}" for n, m in problems))
-    print(text)
+    fitted, repairs = lint.fit(text, root=proj.root, ledger_ids=ids)
+    if repairs:
+        proj.ledger.append("lint.fitted", "parallax", "; ".join(dict.fromkeys(repairs)), original=text)
+    print(fitted.rstrip("\n"))
+
+
+def _reviewed_diff(proj: Project, task_id: str) -> str:
+    """The reviewed tree against its base, once there is one; the worktree before that."""
+    import subprocess
+    staged = [e for e in proj.ledger.entries() if e["kind"] == "check.staged" and e["data"].get("task") == task_id]
+    if not staged:
+        return proj.diff(task_id)
+    t = proj.task(task_id)
+    return subprocess.run(["git", "-C", t["worktree"], "diff", t["base"], staged[-1]["data"]["tree"]],
+                          capture_output=True, text=True, encoding="utf-8", errors="replace").stdout.strip()
+
+
+def _watch(proj: Project, task_id: str, every: float = 5.0) -> int:
+    """--wait: say where the task is whenever that changes, until it needs you or is done."""
+    import time
+    from . import status
+    last = ""
+    try:
+        while True:
+            where = status.board(proj.task(task_id)["status"])
+            if where != last:
+                print(f"{task_id}: {where}", flush=True)
+                last = where
+            if where in ("ready", "needs you", "done"):
+                print(f"parallax show {task_id} for its card.")
+                return 0
+            time.sleep(every)
+    except KeyboardInterrupt:
+        print("stopped watching. the task goes on.")
+        return 0
 
 
 def _gate(proj: Project, task_id: str, args) -> None:
@@ -302,22 +329,20 @@ def _gate(proj: Project, task_id: str, args) -> None:
         if e["kind"] == "task.rejected":
             print(f"rejected task {task_id} (ledger {e['id']}). your reason stays in the ledger.")
             return
-        print(f"rejected {e['data']['gate'].replace('+', ' and ')} for {task_id} (ledger {e['id']}).")
-        print(f"next: edit docs/tasks/{task_id}/ and approve it, or run parallax draft {task_id} to redraft with your reason.")
+        print(f"rejected {e['data']['gate'].replace('+', ' and ')} for {task_id} (ledger {e['id']}). your reason stays in the ledger.")
         return
+    waited = proj.task(task_id)["status"] == "needs you"
     e = lifecycle.approve(proj, task_id)
     print(f"approved {e['data']['gate'].replace('+', ' and ')} for {task_id} (ledger {e['id']}).")
-    st = lifecycle.state(proj, task_id)
-    if st.gate is not None:  # a large task: the spec and plan are drafted now
-        lifecycle.draft(proj, task_id, lifecycle.redraft_docs(st), _drafter(None))
-        _shaped(proj, lifecycle.report(proj, task_id))
-        return
-    plan = lifecycle.plan_data(proj, task_id) or {}
-    if plan:
-        print(f"estimated cost ${plan['estimated_cost_usd']:.2f} (unverified), budget cap ${plan['budget_cap_usd']:.2f}.")
-        if plan.get("review_tightening"):
-            print(f"review tightening for this task: {_line(plan['review_tightening'])}")
-    print(f"next: parallax build {task_id}")
+    if waited and lifecycle.state(proj, task_id).gate is None:  # the plan waited for you: now it runs
+        from . import build, preflight
+        p = build.prepare(proj, task_id)
+        lines = preflight.report(build.run_preflight(proj, p))
+        if not lines[-1].startswith("ready"):
+            print("\n".join(lines))
+            raise ParallaxError("preflight failed, so it didn't launch")
+        build.launch(proj, p)
+        print(f"building {task_id} without you, estimated budget ${p.left:.2f}. it comes back to parallax inbox.")
 
 
 def _lint(path: Path, cwd: Path) -> int:

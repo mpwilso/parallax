@@ -1,20 +1,50 @@
-"""The inbox, batched for a human: items grouped by task."""
+"""The inbox: exactly one item per task, derived from the ledger.
+
+A task is in the inbox only when it's waiting on you: Ready (accept or reject it), or needs you
+(one Decision needed). Everything else is working without you, or done.
+"""
 from __future__ import annotations
 
+from . import lint, status
 from .core import Project
 
 
+def title(project: Project, task_id: str) -> str:
+    from .lifecycle import _read
+    t = project.task(task_id)
+    name = lint.intent_fields(_read(project, task_id, "intent")).get("title") if t.get("intent") else ""
+    return " ".join((name or t["goal"]).split())
+
+
+def items(project: Project) -> list[dict]:
+    """One per task waiting on you, oldest first: {task, state, title}."""
+    out = []
+    for tid, t in project.tasks().items():
+        where = status.board(t["status"])
+        if where in ("ready", "needs you"):
+            out.append({"task": tid, "state": where, "title": title(project, tid)})
+    return out
+
+
+def working(project: Project) -> int:
+    return sum(status.board(t["status"]) in ("drafting", "building", "checking") for t in project.tasks().values())
+
+
+def to_merge(project: Project) -> list[dict]:
+    """Accepted tasks you haven't merged yet: merging is yours, so they're listed, not queued as items."""
+    from .accept import merge_command
+    accepted = {e["data"]["task"]: e for e in project.ledger.entries() if e["kind"] == "task.accepted"}
+    return [{"task": tid, "command": merge_command(accepted[tid])}
+            for tid, t in project.tasks().items() if t["status"] == "accepted" and tid in accepted]
+
+
 def batched(project: Project) -> list[tuple[str, list[dict]]]:
-    """Inbox items grouped, one group per task."""
+    """The raw inbox entries grouped by task, for the old visual inbox until M14 replaces it."""
     tasks = project.tasks()
     groups: dict[str, list[dict]] = {}
     for e in project.inbox():
         tid = e["data"].get("task")
-        if tid in tasks:
-            t = tasks[tid]
-            header = f"task {tid}  [{t['status']}]  {t['goal']}"
-        else:
-            header = "other"
+        header = f"task {tid}  [{tasks[tid]['status']}]  {tasks[tid]['goal']}" if tid in tasks else "other"
         groups.setdefault(header, []).append(e)
     return list(groups.items())
 

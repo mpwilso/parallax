@@ -30,6 +30,7 @@ class Results:
     exit: int
     per_file: dict[str, list[int]] = field(default_factory=dict)  # file -> [passed, counted, skipped]
     tail: str = ""
+    reported: bool = True  # the run wrote its JUnit report. without one, exit 1 may just mean no pytest
 
     @property
     def passed(self) -> int:
@@ -41,7 +42,7 @@ class Results:
 
     @property
     def ran(self) -> bool:
-        return self.exit in (0, 1)
+        return self.exit in (0, 1) and self.reported
 
     @property
     def ok(self) -> bool:
@@ -118,7 +119,7 @@ def run(worktree: Path, base: str, reviewed: str, plan: dict, home: Path, venv: 
     # the tests' TMPDIR is set inside the sandbox: srt keeps its own short one for its sockets,
     # which break on long paths (Unix socket paths top out near 108 characters)
     code, output = (runner or _srt)(cfg, copy, f"export TMPDIR={shlex.quote(str(tmp))}; {cmd}", env)
-    results = Results(code, parse_junit(junit, tests), "\n".join(output.strip().splitlines()[-15:]))
+    results = Results(code, parse_junit(junit, tests), "\n".join(output.strip().splitlines()[-15:]), junit.exists())
     shutil.rmtree(copy, ignore_errors=True)
     return results, reset
 
