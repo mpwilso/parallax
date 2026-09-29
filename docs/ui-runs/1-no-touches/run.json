@@ -1,0 +1,58 @@
+{
+ "work": "remove the em dash on README.md line 81",
+ "mode": "accept",
+ "reason": "",
+ "events": [
+  {
+   "t": 1790651382.6,
+   "what": "intake"
+  },
+  {
+   "t": 1790651383.6,
+   "what": "task",
+   "id": "032849"
+  },
+  {
+   "t": 1790651383.6,
+   "what": "state",
+   "row": "remove the em dash on README.md line 81 drafters writing the intent, 0s"
+  },
+  {
+   "t": 1790651445.4,
+   "what": "state",
+   "row": "removing the em dash from README line 81 drafters writing the plan, 2s, $0.25 spent"
+  },
+  {
+   "t": 1790651495.9,
+   "what": "state",
+   "row": "removing the em dash from README line 81 maker building, 1s, $0.41 of $1.20"
+  },
+  {
+   "t": 1790651580.2,
+   "what": "state",
+   "row": "removing the em dash from README line 81 running the plan's tests, 0s, $0.89 of $1.20"
+  },
+  {
+   "t": 1790651584.1,
+   "what": "state",
+   "row": "removing the em dash from README line 81 checker reviewing the change, 1s, $0.89 of $1.20"
+  },
+  {
+   "t": 1790651587.9,
+   "what": "state",
+   "row": "removing the em dash from README line 81 Ready the checker passed and 23 of 23 plan tests pass."
+  },
+  {
+   "t": 1790651588.8,
+   "what": "waiting",
+   "row": "removing the em dash from README line 81 Ready the checker passed and 23 of 23 plan tests pass.",
+   "seconds": 206
+  },
+  {
+   "t": 1790651590.0,
+   "what": "accepted",
+   "merge": "git merge --ff-only parallax/032849-remove-em-dash"
+  }
+ ],
+ "task": "032849"
+}

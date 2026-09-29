@@ -1,0 +1,55 @@
+{
+ "work": "x",
+ "mode": "accept",
+ "reason": "",
+ "events": [
+  {
+   "t": 1790705726.5,
+   "what": "attached",
+   "id": "3bbc03"
+  },
+  {
+   "t": 1790705726.6,
+   "what": "state",
+   "row": "showing a task count beside each queue heading Over your launch limit The plan waits for you before it runs."
+  },
+  {
+   "t": 1790705728.5,
+   "what": "touch: launch",
+   "row": "showing a task count beside each queue heading Over your launch limit The plan waits for you before it runs.",
+   "reason": ""
+  },
+  {
+   "t": 1790705731.5,
+   "what": "state",
+   "row": "showing a task count beside each queue heading maker building, 1s, $1.11 of $3.90"
+  },
+  {
+   "t": 1790705942.6,
+   "what": "state",
+   "row": "showing a task count beside each queue heading UI tester using the app, 2s, $2.61 of $3.90"
+  },
+  {
+   "t": 1790705967.5,
+   "what": "state",
+   "row": "showing a task count beside each queue heading checker reviewing the change, 2s, $2.69 of $3.90"
+  },
+  {
+   "t": 1790705977.4,
+   "what": "state",
+   "row": "showing a task count beside each queue heading Ready the checker passed and 1 of 1 plan tests pass."
+  },
+  {
+   "t": 1790705978.2,
+   "what": "waiting",
+   "row": "showing a task count beside each queue heading Ready the checker passed and 1 of 1 plan tests pass.",
+   "seconds": 252
+  },
+  {
+   "t": 1790705979.5,
+   "what": "accepted",
+   "merge": "git merge --ff-only parallax/3bbc03-parallax-ui-show"
+  }
+ ],
+ "task": "3bbc03"
+}

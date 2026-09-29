@@ -1,0 +1,113 @@
+{
+ "work": "In parallax ui, show each task's id in small muted text at the end of its row in the queue.",
+ "mode": "reject",
+ "reason": "Only on rows that wait on you. Working and done rows stay as they are.",
+ "events": [
+  {
+   "t": 1790707840.0,
+   "what": "intake"
+  },
+  {
+   "t": 1790707841.0,
+   "what": "task",
+   "id": "29f523"
+  },
+  {
+   "t": 1790707841.0,
+   "what": "state",
+   "row": "In parallax ui, show each task's id in small muted text at the end of its row in the queue. drafters writing the intent, 1s"
+  },
+  {
+   "t": 1790707877.9,
+   "what": "state",
+   "row": "showing each task's id at the end of its queue row drafters writing the plan, 1s, $0.20 spent"
+  },
+  {
+   "t": 1790707935.8,
+   "what": "state",
+   "row": "showing each task's id at the end of its queue row maker building, 1s, $0.52 of $3.60"
+  },
+  {
+   "t": 1790708065.9,
+   "what": "state",
+   "row": "showing each task's id at the end of its queue row UI tester using the app, 1s, $1.45 of $3.60"
+  },
+  {
+   "t": 1790708165.9,
+   "what": "state",
+   "row": "showing each task's id at the end of its queue row running the UI flow tests, 1s, $1.55 of $3.60"
+  },
+  {
+   "t": 1790708169.8,
+   "what": "state",
+   "row": "showing each task's id at the end of its queue row checker reviewing the change, 0s, $1.55 of $3.60"
+  },
+  {
+   "t": 1790708176.6,
+   "what": "state",
+   "row": "showing each task's id at the end of its queue row Ready the checker passed and 23 of 23 plan tests pass."
+  },
+  {
+   "t": 1790708177.5,
+   "what": "waiting",
+   "row": "showing each task's id at the end of its queue row Ready the checker passed and 23 of 23 plan tests pass.",
+   "seconds": 338
+  },
+  {
+   "t": 1790708178.6,
+   "what": "rejected"
+  },
+  {
+   "t": 1790708180.7,
+   "what": "state",
+   "row": "showing each task's id at the end of its queue row drafters writing the intent, 2s, $0.00 of $3.60"
+  },
+  {
+   "t": 1790708295.7,
+   "what": "state",
+   "row": "showing the task id on the rows that wait on you drafters writing the plan, 2s, $0.45 of $3.60"
+  },
+  {
+   "t": 1790708428.7,
+   "what": "state",
+   "row": "showing the task id on the rows that wait on you maker building, 1s, $0.99 of $4.00"
+  },
+  {
+   "t": 1790708675.9,
+   "what": "state",
+   "row": "showing the task id on the rows that wait on you running the plan's tests, 0s, $2.65 of $4.00"
+  },
+  {
+   "t": 1790708679.8,
+   "what": "state",
+   "row": "showing the task id on the rows that wait on you UI tester using the app, 3s, $2.65 of $4.00"
+  },
+  {
+   "t": 1790708818.9,
+   "what": "state",
+   "row": "showing the task id on the rows that wait on you running the UI flow tests, 1s, $2.84 of $4.00"
+  },
+  {
+   "t": 1790708822.7,
+   "what": "state",
+   "row": "showing the task id on the rows that wait on you checker reviewing the change, 0s, $2.84 of $4.00"
+  },
+  {
+   "t": 1790708832.6,
+   "what": "state",
+   "row": "showing the task id on the rows that wait on you Ready the checker found nothing blocking and 25 of 25 plan tests pass."
+  },
+  {
+   "t": 1790708833.5,
+   "what": "back",
+   "row": "showing the task id on the rows that wait on you Ready the checker found nothing blocking and 25 of 25 plan tests pass.",
+   "seconds": 655
+  },
+  {
+   "t": 1790708834.7,
+   "what": "accepted",
+   "merge": "git merge --ff-only parallax/29f523-parallax-ui-show"
+  }
+ ],
+ "task": "29f523"
+}

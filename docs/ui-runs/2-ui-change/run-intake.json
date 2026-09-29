@@ -1,0 +1,22 @@
+{
+ "work": "In parallax ui, show how many tasks each queue section holds next to its heading, written like 'Working \u2014 2'.",
+ "mode": "accept",
+ "reason": "",
+ "events": [
+  {
+   "t": 1790704447.8,
+   "what": "intake"
+  },
+  {
+   "t": 1790704447.8,
+   "what": "task",
+   "id": "964571"
+  },
+  {
+   "t": 1790704447.9,
+   "what": "state",
+   "row": ""
+  }
+ ],
+ "task": "964571"
+}
