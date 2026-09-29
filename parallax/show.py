@@ -106,7 +106,20 @@ def _decision(project: Project, task_id: str, dec, found: list[str], gaps: list[
                 for doc, n, text in lifecycle.gaps(project, task_id, ("intent", "plan"))]
     who = "the checker" if dec.item else "the drafters"  # a plan under review hasn't met the checker yet
     return lint.shaped("Decision needed", bottom, gaps, _next(task_id, dec), found, changed, who,
-                       list(extra), decisions=[decide.line(dec)], details=options)
+                       list(extra), decisions=[decide.line(dec)], details=options + _files(dec))
+
+
+def _files(dec) -> list[str]:
+    """Every file behind a grouped scope problem, for Details: the card's lead line only counts them."""
+    files = (dec.item or {}).get("data", {}).get("files") or []
+    if len(files) < 2:
+        return []
+
+    def size(n):
+        return "deleted or not a file" if n is None else ("empty" if n == 0 else f"{n} bytes")
+    why = {"protected": "protected path", "outside": "not in the plan", "binary": "unlisted binary",
+           "symlink": "unlisted symlink", "dependency": "unlisted dependency"}
+    return [f"{f['path']}: {why.get(f['cause'], f['cause'])}, {size(f['size'])}" for f in files]
 
 
 def report(project: Project, task_id: str) -> str:

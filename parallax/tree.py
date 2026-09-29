@@ -45,6 +45,7 @@ class Staged:
     symlinks: list[str] = field(default_factory=list)
     autorun: list[str] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)  # blocking: they send the task to you
+    issues: list[tuple[str, str]] = field(default_factory=list)  # (cause, path) behind each problem
 
 
 def _git(wt: Path, *args: str, index: Path | None = None, text: bool = True) -> str:
@@ -94,23 +95,29 @@ def _symlinks(worktree: Path, treeish: str) -> set[str]:
 def conform(s: Staged, plan: dict, diff_cap: int) -> Staged:
     """Record every blocking problem the plan makes visible. Code, not a model."""
     listed = set(plan["files"])  # plus verifier tests, once the test-writer exists (eval only for now)
+
+    def problem(cause: str, path: str, text: str) -> None:
+        s.problems.append(text)
+        s.issues.append((cause, path))
+
     for f in s.files:
         if is_protected(f):
-            s.problems.append(f"{f} is a protected path")
+            problem("protected", f, f"{f} is a protected path")
         elif f not in listed:
-            s.problems.append(f"{f} changed but isn't in the plan's files")
+            problem("outside", f, f"{f} changed but isn't in the plan's files")
     for f in s.binaries:
         if f not in plan["binaries"]:
-            s.problems.append(f"{f} is a binary the plan didn't list")
+            problem("binary", f, f"{f} is a binary the plan didn't list")
     for f in s.symlinks:
         if f not in plan["symlinks"]:
-            s.problems.append(f"{f} is a symlink the plan didn't list")
+            problem("symlink", f, f"{f} is a symlink the plan didn't list")
     if not plan["dependencies"]:
         for f in s.files:
             if _matches(f, DEPENDENCY_FILES):
-                s.problems.append(f"{f} changed but the plan lists no new dependencies")
+                problem("dependency", f, f"{f} changed but the plan lists no new dependencies")
     if s.lines > diff_cap:
         s.problems.append(f"the diff is {s.lines} changed lines, over the cap of {diff_cap} for a reliable blind review")
+        s.issues.append(("size", ""))
     return s
 
 
@@ -155,3 +162,54 @@ def added_lines(diff: str) -> list[tuple[str, int, str]]:
         elif not raw.startswith("-"):
             line += 1
     return out
+
+
+# grouping the scope problems for the card: one line per cause, the full list under Details ------------
+
+SECRET_NAME = re.compile(r"(^|/)(\.env(\..*)?|[^/]*\.pem|[^/]*\.key|id_(rsa|ed25519|ecdsa)[^/]*|\.npmrc|\.pypirc|\.netrc"
+                         r"|credentials(\.json)?|[^/]*secret[^/]*|[^/]*token[^/]*)$", re.I)
+CAUSES = {  # in the order they matter: what's worst comes first
+    "protected": "touched a protected path", "outside": "changed outside the plan's files",
+    "binary": "are binaries the plan didn't list", "symlink": "are symlinks the plan didn't list",
+    "dependency": "changed dependencies the plan doesn't list",
+}
+
+
+def _size(worktree: Path, path: str) -> int | None:
+    target = Path(worktree) / path
+    return target.stat().st_size if target.is_file() and not target.is_symlink() else None
+
+
+def _what(n: int | None) -> str:
+    return "is deleted or not a file" if n is None else ("is empty" if n == 0 else f"has content ({n} bytes)")
+
+
+def sensitive(path: str) -> bool:
+    return is_protected(path) or bool(SECRET_NAME.search(path))
+
+
+def describe(s: Staged, worktree: Path) -> tuple[str, list[dict]]:
+    """(reason, files): one clause per cause with a count, the real cause first, not the first file.
+
+    A protected or secret-looking file (.env, a key, a token) always says whether it's empty or has
+    content, since that changes the decision completely. files: every path, for the card's Details."""
+    sizes = {p: _size(worktree, p) for _, p in s.issues if p}
+    clauses = [f"{p} looks like a secrets file and {_what(sizes[p])}"
+               for p in sorted(sizes) if sensitive(p) and sizes[p]]
+    files, seen = [], set()
+    for cause, text in CAUSES.items():  # each file counts once, under its worst cause
+        paths = [p for c, p in s.issues if c == cause and p not in seen]
+        seen.update(paths)
+        files += [{"path": p, "cause": cause, "size": sizes[p]} for p in paths]
+        if len(paths) == 1:
+            p = paths[0]
+            one = s.problems[s.issues.index((cause, p))]
+            clauses.append(one + (f", and it {_what(sizes[p])}" if sensitive(p) and not sizes[p] else ""))
+        elif paths:
+            known = [sizes[p] for p in paths]
+            full = sum(bool(k) for k in known)
+            state = ", all empty" if all(k == 0 for k in known) else (f", {full} with content" if full < len(paths) else "")
+            names = ", ".join(paths[:2]) + (f" and {len(paths) - 2} more" if len(paths) > 2 else "")
+            clauses.append(f"{len(paths)} files {text}{state} ({names})")
+    clauses += [t for c, t in zip((c for c, _ in s.issues), s.problems) if c == "size"]
+    return "; ".join(clauses), files

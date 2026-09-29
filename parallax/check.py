@@ -17,7 +17,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Callable
 
-from . import build, costs, lifecycle, lint, review, status, testrun, tree
+from . import build, costs, lifecycle, lint, review, sandbox, status, testrun, tree
 from .agents.base import BlindChecker, CheckerError, Review
 from .core import ParallaxError, Project
 
@@ -71,13 +71,18 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
     t, plan, settings = p.task, p.plan, project.policy.check
     project.ledger.append("check.started", "parallax", "", task=task_id)
 
+    removed = sandbox.remove_leftovers(p.worktree, set(plan["files"]))  # every placeholder, whenever it appeared (bb4040)
+    if removed:
+        project.ledger.append("sandbox.cleaned", "parallax", "removed the sandbox's empty placeholder files before the check",
+                              task=task_id, files=removed)
     s = tree.conform(tree.stage(p.worktree, t["base"], p.home / "check.index"), plan, settings["diff_cap"])
     risk = bool(s.problems) and accepted_risk(project, task_id, s.tree)
     project.ledger.append("check.staged", "parallax", "", task=task_id, tree=s.tree, base=s.base,
                                    files=s.files, lines=s.lines, binaries=s.binaries, symlinks=s.symlinks,
                                    autorun=s.autorun, problems=s.problems, risk_accepted=risk)
     if s.problems and not risk:
-        return _to_you(project, task_id, "scope", "; ".join(s.problems), tree=s.tree), []
+        why, files = tree.describe(s, p.worktree)
+        return _to_you(project, task_id, "scope", why, tree=s.tree, files=files), []
 
     results, reset = testrun.run(p.worktree, t["base"], s.tree, plan, p.home, p.venv,
                                  build.scrubbed_env(p.venv), settings["test_command"], test_runner)

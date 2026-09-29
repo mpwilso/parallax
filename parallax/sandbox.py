@@ -96,14 +96,24 @@ SANDBOX_LEFTOVERS = {
 }
 
 
-def untracked(worktree: Path) -> set[str]:
-    out = subprocess.run(["git", "-C", str(worktree), "ls-files", "--others", "--exclude-standard", "-z"],
-                         capture_output=True, text=True)
+def _paths(worktree: Path, *args: str) -> set[str]:
+    out = subprocess.run(["git", "-C", str(worktree), *args, "-z"], capture_output=True, text=True)
     return {p for p in out.stdout.split("\0") if p}
 
 
-def remove_leftovers(worktree: Path, before: set[str]) -> list[str]:
-    """Remove the sandbox's empty placeholder files. Returns what was removed."""
+def untracked(worktree: Path) -> set[str]:
+    """Files that aren't in the commit, including ones marked intent-to-add: `parallax diff`
+    marks new files that way, and bb4040's placeholders hid from the cleanup behind it."""
+    added = _paths(worktree, "ls-files", "--cached") - _paths(worktree, "ls-tree", "-r", "--name-only", "HEAD")
+    return _paths(worktree, "ls-files", "--others", "--exclude-standard") | added
+
+
+def remove_leftovers(worktree: Path, before: set[str] = frozenset()) -> list[str]:
+    """Remove the sandbox's empty placeholder files. Returns what was removed.
+
+    before: files to leave alone. The check passes the plan's files, not a snapshot, so it clears
+    every other placeholder whenever it appeared: a drafter's session can leave them after its own
+    cleanup ran (bb4040)."""
     removed = []
     for rel in sorted(untracked(worktree) - before):
         path = Path(worktree) / rel
@@ -111,6 +121,9 @@ def remove_leftovers(worktree: Path, before: set[str]) -> list[str]:
                 and path.stat().st_size == 0:
             path.unlink()
             removed.append(rel)
+    if removed:  # drop any intent-to-add entry, so the index doesn't keep a file that's gone
+        subprocess.run(["git", "-C", str(worktree), "rm", "--cached", "-q", "--ignore-unmatch", "--", *removed],
+                       capture_output=True)
     return removed
 
 
