@@ -217,7 +217,7 @@ function renderCard() {
   const waits = c.state === "ready" || c.state === "needs you";
   const chip = c.state === "ready" ? "good" : waits ? "wait" : c.state === "done" ? "plain" : "info";
   let bottom = c.report.bottom;
-  for (const p of ["Needs you: ", "Ready: "]) if (bottom.startsWith(p)) bottom = cap(bottom.slice(p.length));
+  for (const p of ["Needs you: ", "Ready again after your reject: ", "Ready: "]) if (bottom.startsWith(p)) bottom = cap(bottom.slice(p.length));
   box.replaceChildren(...[
     el("header", { class: "card-head" },
       el("button", { class: "back", onclick: closeCard, "data-focus": "back" }, "Back to tasks"),
@@ -225,10 +225,12 @@ function renderCard() {
         el("span", { class: "mono" }, c.task), c.cost_usd ? ` $${c.cost_usd.toFixed(2)} spent` : ""),
       el("h2", { id: "card-title", tabindex: "-1" }, c.title)),
     c.live ? el("p", { class: "live" }, c.live) : null,
+    c.redraft ? el("p", { class: "redraft" }, "Redrafted after you rejected it") : null,
     el("p", { class: "bottom" }, bottom),
+    c.redraft ? list("Since you rejected it", c.changed) : null,  // a redraft leads with what changed
     actions(c),
     list("Not looked at", c.unseen.length === 1 && c.unseen[0].text === "nothing" ? [] : c.unseen),
-    list("Changed since last time", c.changed),
+    c.redraft ? null : list("Changed since last time", c.changed),
     list("Found", c.found),
     shotsSection(c),
     docs(c),

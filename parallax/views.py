@@ -47,7 +47,7 @@ def board(project: Project) -> dict:
 
 def _headline(project: Project, task_id: str) -> str:
     bottom = parse_report(show.report(project, task_id))["bottom"]
-    for prefix in ("Needs you: ", "Ready: "):
+    for prefix in ("Needs you: ", "Ready again after your reject: ", "Ready: "):
         if bottom.startswith(prefix):
             return bottom[len(prefix):]
     return bottom
@@ -114,6 +114,8 @@ def card(project: Project, task_id: str) -> dict:
             "cost_usd": round(t.get("cost_usd") or 0, 2), "report": report, "unseen": [_cited(u) for u in unseen],
             "found": found,
             "changed": [_cited(i) for i in report["sections"].get("Changed since last time", [])],
+            "redraft": report["bottom"].startswith("Ready again after your reject") or any(
+                i.startswith("you rejected the last version") for i in report["sections"].get("Changed since last time", [])),
             "details": [_cited(i) for i in report["sections"].get("Details", [])],
             "actions": actions, "merge": merge, "files": files,
             "live": live.line(project, task_id) if state in ("drafting", "building", "checking") else "",

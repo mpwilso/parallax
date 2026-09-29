@@ -168,6 +168,9 @@ def redraft(project: Project, task_id: str, reason: str, spawn: Callable | None 
         raise ParallaxError(f"task {task_id} is working right now. parallax stop ends it first")
     t = lifecycle.lifecycle_task(project, task_id)
     e = project.ledger.append("task.redraft", "human", reason, task=task_id)
+    from . import since
+    since.keep(project, task_id, sum(x["kind"] == "task.redraft" and x["data"].get("task") == task_id
+                                     for x in project.ledger.entries()))  # before the drafters replace it
     wt = t["worktree"]
     import subprocess
     subprocess.run(["git", "-C", wt, "reset", "-q", "--hard", t["base"]], capture_output=True)

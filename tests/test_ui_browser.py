@@ -267,6 +267,12 @@ def test_reject_needs_a_reason_survives_live_updates_then_redrafts_and_comes_bac
     assert build.run_mode(proj, tid, "pilot", FakeDrafter(titled("fixing the README")), lambda left, s: maker,
                           FakeChecker(), test_runner=junit_runner(), preflight_runner=good_probe) == "ready"
     expect(row(page, tid)).to_contain_text("Ready", timeout=WAIT)
+    open_card(page, tid)
+    expect(page.locator("#card .redraft")).to_have_text("Redrafted after you rejected it")
+    lead = page.locator("#card h3").first
+    expect(lead).to_have_text("Since you rejected it")  # the first section, above the decision
+    expect(page.locator("#card ul.plain").first).to_contain_text('you rejected the last version: "also name the shell"')
+    assert page.locator("#card h3").first.bounding_box()["y"] < page.locator("#card .decide").bounding_box()["y"]
 
 
 def test_escape_keeps_a_half_typed_reason(page, proj):

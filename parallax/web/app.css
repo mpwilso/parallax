@@ -108,6 +108,7 @@ main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(18re
 #card-title:focus { outline: none; }
 #card-title:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 .live { color: var(--accent); margin-top: 0.5rem; font-weight: 550; }
+.redraft { margin-top: 0.5rem; font-weight: 650; color: var(--wait); }
 .bottom { font-size: 1.125rem; line-height: 1.45; margin-top: 0.5rem; }
 
 .decide { margin-top: 1.25rem; background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; padding: 1rem 1.125rem; }

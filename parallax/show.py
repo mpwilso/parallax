@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from . import costs, decide, lifecycle, lint, tree
+from . import costs, decide, lifecycle, lint, since, tree
 from .status import attempt as _attempt
 from .core import Project
 
@@ -179,7 +179,8 @@ def report(project: Project, task_id: str) -> str:
     found = _tests(tests, staged) + ui_found + head
     boundary = [f"boundary change: {f} runs automatically (ledger {staged['id']})"
                 for f in (staged["data"]["autorun"] if staged else [])]
-    changed = _changed(project, task_id, entries)
+    lead = since.lines(project, task_id, entries)  # after your reject, what changed comes first
+    changed = lead + _changed(project, task_id, _attempt(entries, task_id))
     if dec is not None:
         if dec.item and not _last(_attempt(entries, task_id), "verdict.recorded", stage="check"):  # it stopped before the checker: say so, never "nothing"
             gaps = gaps + [("the plan's tests and the blind checker, which haven't run",
@@ -193,6 +194,8 @@ def report(project: Project, task_id: str) -> str:
         if verdict and verdict["data"]["verdict"] in ("error", "fail"):
             how = f"said {verdict['data']['verdict']} and you accepted the risk"
         bottom = f"Ready: the checker {how} and {passed} of {total} plan tests pass."
+        if lead:
+            bottom = f"Ready again after your reject: the checker {how} and {passed} of {total} plan tests pass."
         return lint.shaped("Decision needed", bottom, gaps, f"you run parallax accept {task_id}, or reject it with a reason.",
                            found, changed, "the checker", boundary + findings)
     if status in ("accepted", "merged"):

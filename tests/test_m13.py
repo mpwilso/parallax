@@ -177,3 +177,33 @@ def test_options_and_reasons_are_checked(proj):
         decide.apply(proj, tid, "accept")
     assert decide.apply(proj, tid, "drop", "not needed") == f"dropped {tid}. it's out of the inbox."
     assert proj.task(tid)["status"] == "rejected" and inbox.items(proj) == []
+
+
+def test_a_redrafted_card_leads_with_what_changed_since_your_reject(proj):
+    """29f523: the redraft came back, and nothing on its card said it was one."""
+    tid = pilot.intake(proj, WANT)["task"]
+    assert pilot_run(proj, tid, maker=ScriptedAgent(steps=[("write", "README.md", "one\n")])) == "ready"
+    pilot.redraft(proj, tid, "say which shell each step runs in")
+    changed = {**docs(), "intent": docs()["intent"].replace("Keep the macOS steps.", "Keep the macOS steps. Name the shell.")}
+    maker = ScriptedAgent(steps=[("write", "README.md", "two\n")])
+    assert pilot_run(proj, tid, FakeDrafter(changed), maker) == "ready"
+    text = show.report(proj, tid)
+    assert lints(proj, text)
+    head, body = text.split("\nChanged since last time\n", 1)
+    assert "Bottom line: Ready again after your reject:" in head
+    lead = [l[2:] for l in body.splitlines() if l.startswith("- ")][:4]
+    assert lead[0].startswith('you rejected the last version: "say which shell each step runs in"')
+    assert lead[1].startswith("intent: Constraints changed (+1 -1 lines); header, Problem, Outcome the same")
+    assert lead[2].startswith("plan: unchanged")
+    assert lead[3].startswith("the change: differs from the rejected one in README.md")
+    assert text.index("Changed since last time") < text.index("\nFound\n")  # first, before the evidence
+    from parallax import views
+    card = views.card(proj, tid)
+    assert card["redraft"] and card["changed"][0]["text"].startswith("you rejected the last version")
+
+
+def test_a_first_attempt_card_says_nothing_about_redrafts(proj):
+    tid = pilot.intake(proj, WANT)["task"]
+    assert pilot_run(proj, tid) == "ready"
+    text = show.report(proj, tid)
+    assert "again after your reject" not in text and "you rejected" not in text
