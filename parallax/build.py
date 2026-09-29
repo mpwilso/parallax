@@ -175,8 +175,11 @@ def run_build(project: Project, task_id: str, maker_for: Callable[[float, str], 
     p = prepare(project, task_id, setup=False, launching=False)
     if p.left <= 0:
         return costs.stop_at_cap(project, task_id, p.cap)
-    if not all(line.ok for line in run_preflight(project, p, preflight_runner)):
-        project.ledger.append("stuck.raised", "parallax", "preflight failed, so the build didn't launch", task=task_id)
+    lines = run_preflight(project, p, preflight_runner)
+    if not all(line.ok for line in lines):
+        failed = "; ".join(f"{line.name}: {line.detail}" for line in lines if not line.ok)
+        project.ledger.append("stuck.raised", "parallax", f"preflight failed ({failed}), so the build didn't launch",
+                              task=task_id, preflight=[line.name for line in lines if not line.ok])
         return "stuck"
     env = {TASK_ENV: task_id, ROOT_ENV: str(project.root), **QUIET_BUILD,
            "PATH": (f"{p.venv}/bin:" if p.venv else "") + SYSTEM_PATH}  # set here, whatever the pilot's PATH

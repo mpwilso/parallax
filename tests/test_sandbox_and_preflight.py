@@ -356,7 +356,8 @@ def test_preflight_runs_in_one_place_for_every_way_an_agent_can_launch(proj, mon
     proj.ledger.append("task.redraft", "human", "once more", task=tid)
     assert build.run_mode(proj, tid, "pilot", fakes["drafter_for"], maker, FakeChecker(),
                           test_runner=junit_runner(), preflight_runner=lambda *a: None) == "stuck"
-    assert proj.inbox()[-1]["reason"] == "preflight failed, so the build didn't launch"
+    assert proj.inbox()[-1]["reason"].startswith("preflight failed (bash layer: the sandbox didn't run the probe") \
+        and proj.inbox()[-1]["reason"].endswith("so the build didn't launch") and proj.inbox()[-1]["data"]["preflight"] == ["bash layer", "network", "environment"]
 
 
 def test_cli_build_launches_the_builder_in_the_background(proj, monkeypatch, capsys):

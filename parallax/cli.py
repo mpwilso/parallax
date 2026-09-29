@@ -111,8 +111,9 @@ def _run(args) -> int:
         return _lint(Path(args.file), cwd)
 
     if args.cmd == "init":
+        already = (cwd / "parallax.policy.toml").exists() and (cwd / ".parallax").exists()
         proj = Project.init(cwd, confirm_setup=_confirm_setup)
-        print(f"initialized parallax in {proj.root}")
+        print(f"{'already set up' if already else 'initialized parallax'} in {proj.root}")
         print("  parallax.policy.toml  what agents may do. anything unlisted is denied.")
         print("  REVIEW.md             how Second Eye (the blind checker) reviews, and what blocks ready. you own it.")
         print('next: parallax do "what you want done"')

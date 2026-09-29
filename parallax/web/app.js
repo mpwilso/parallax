@@ -11,7 +11,7 @@ const DONE = { accepted: "accepted, the merge is yours", merged: "merged", rejec
 const READY_OPTIONS = [
   { name: "accept", does: "commits the reviewed change to its branch; merging stays yours" },
   { name: "reject", does: "Focus redrafts the intent and plan from your reason", needs_reason: true },
-  { name: "drop", does: "ends the task; it leaves the queue", needs_reason: true },
+  { name: "drop", does: "ends the task; it leaves the inbox", needs_reason: true },
 ];
 const SEND = { reject: "Reject and redraft", drop: "Drop it", accept: "Accept the risk", intent: "Redraft to the intent", remove: "Remove the test" };
 const LIVE_EVERY = 15000;  // working lines carry a clock: refresh them even when nothing new happened

@@ -1,5 +1,7 @@
 # Real UI runs (Part 2, step 7)
 
+The screenshots in `final-ui/` show the current UI on the demo project (fake agents, no model): the queue and a Ready card as the README shows them (`queue.png`, `ready.png`), a Needs you card in the dark theme (`needs-you-dark.png`), and the queue and a Ready card at phone width (`phone-dark-queue.png`, `phone-ready.png`). The run folders below are records of real runs and keep the UI as it was on the day.
+
 Driven through `parallax ui` by Playwright, the way a person uses it: type the work in, watch it
 move, decide from the card. Real agents (drafters, maker, checker, UI tester) in a scratch copy of
 this repo, 2026-09-28 and 29. Screenshots of each state are in each run's folder, in order;

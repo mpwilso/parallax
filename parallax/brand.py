@@ -128,12 +128,13 @@ def party_svg() -> str:
     gap, size = 3, 16
     width = len(AGENTS) * size + (len(AGENTS) - 1) * gap
     parts = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} 22" width="{width * 6}" height="{22 * 6}" '
-             'shape-rendering="crispEdges" role="img" aria-label="Focus, Maker, Second Eye and Field">']
+             'shape-rendering="crispEdges" role="img" aria-label="Focus, Maker, Second Eye and Field">',
+             '<style>text{fill:#5f6480}@media (prefers-color-scheme: dark){text{fill:#a8adc4}}</style>']
     for n, key in enumerate(AGENTS):
         x = n * (size + gap)
         parts.append(f'<g transform="translate({x} 0)">{portrait_body(key)}</g>')
         parts.append(f'<text x="{x + 8}" y="20.5" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace" '
-                     f'font-size="2.6" fill="#7c81a1">{AGENTS[key]["name"]}</text>')
+                     f'font-size="2.6">{AGENTS[key]["name"]}</text>')
     parts.append("</svg>")
     return "".join(parts)
 
