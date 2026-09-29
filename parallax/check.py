@@ -91,10 +91,14 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
                               task=task_id, files=removed)
     s = _staged(project, task_id, p, plan, settings)
     if not s.problems and uitest.applies(project, plan) and not uitest.recorded(project, task_id):
+        if costs.budget(project, task_id, plan)[1] <= 0:
+            return costs.stop_at_cap(project, task_id, p.cap, "the UI tester was about to use the app"), []
         try:  # the UI tester, once per attempt, before anything else is paid for
             outcome, why = uitest.test(project, task_id, p, uitest.TESTER)
         except uitest.UITestError as err:
             return _to_you(project, task_id, "check", f"the UI tester couldn't run: {err}", tree=s.tree), []
+        if costs.budget(project, task_id, plan)[1] <= 0:  # its spend reached the cap: nothing more runs
+            return costs.stop_at_cap(project, task_id, p.cap, "the UI tester was using the app"), []
         if outcome == "app":
             project.ledger.append("check.found", "parallax", why, task=task_id, tree=s.tree, findings=[f"blocker: {why}"])
             return "rework", [f"blocker: {why}"]

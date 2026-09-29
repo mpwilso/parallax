@@ -73,7 +73,7 @@ def draft_until_fit(project: Project, task_id: str, drafter_for) -> str:
 
 def _reserve(project: Project, plan: dict) -> float:
     from . import uitest
-    return min(uitest.RESERVE_USD, float(uitest.settings(project)["max_usd"])) if uitest.applies(project, plan) else 0.0
+    return float(uitest.settings(project)["max_usd"]) if uitest.applies(project, plan) else 0.0  # its limit, reserved
 
 
 def _room_for_rework(project: Project, task_id: str, plan: dict) -> dict:

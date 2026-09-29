@@ -36,7 +36,6 @@ from .core import ParallaxError, Project
 # newer MCP versions put their browser behind a Unix socket, which the sandbox refuses (Part 3 spike)
 MCP_VERSION = "0.0.70"
 TEST_VERSION = "1.60.0-alpha-1774999321000"  # the MCP's own Playwright core, so one browser serves both
-RESERVE_USD = 0.50  # what a plan's cap keeps for the tester: live runs cost $0.05 to $0.29 (docs/ui-runs)
 APP_FAILED = 97  # the wrapper's exit code when the app never answered
 APP_UP = ".app-up"  # the wrapper leaves this once the app answers: without it, the tester never had an app
 NO_ANSWER = "the app didn't answer at"
@@ -362,7 +361,7 @@ def test(project: Project, task_id: str, p, tester_for) -> tuple[str, str]:
               "env": _env(tools, p.venv, work, cfg["url"])}
     plan = p.plan
     left = costs.budget(project, task_id, plan)[1]
-    limit = round(min(left, cfg["max_usd"]), 2)
+    limit = round(min(left, cfg["max_usd"]), 2)  # its limit is its reserve in the plan's cap, never more
     project.ledger.append("uitest.started", "parallax", "", task=task_id, tree=s.tree)
     result = tester_for(limit, cfg["model"]).run(PROMPT.format(url=cfg["url"], outcomes=outcomes(project, task_id)),
                                                  work, server, lambda tool, inp: allowed(tool, inp, work))

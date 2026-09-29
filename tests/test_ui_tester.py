@@ -14,7 +14,7 @@ from test_m8 import docs, make_key
 
 UI_POLICY = """[actions]
 [launch]
-auto_launch_usd = 5.0  # room for the tester's share: $0.20 drafting, twice $0.90, $1.50
+auto_launch_usd = 5.0  # room for the tester's share: $0.20 drafting, twice $0.90, $0.50
 [ui_tester]
 enabled = true
 start = "python3 tests/ui_app.py 8765"
@@ -346,3 +346,42 @@ def test_the_tester_sees_only_the_outcomes_the_plan_names(proj, monkeypatch):
 def test_plans_without_the_field_still_read():
     data, _, why = lint.plan_block(docs()["plan"])
     assert why is None and data["user_flows"] == [] and lint.check_plan_data(data) == []
+
+
+
+def test_the_testers_limit_is_its_reserve_and_it_stops_there(proj, monkeypatch):
+    """The cap keeps max_usd for the tester, and the tester may spend max_usd: the same number."""
+    from parallax import pilot as p, lifecycle
+    from parallax.agents import claude
+
+    class Broke(FakeTester):  # what the SDK does at max_budget_usd: stops, with nothing written
+        def run(self, goal, cwd, server, allowed):
+            (Path(cwd) / uitest.APP_UP).touch()
+            return AgentResult("error", f"stopped at its budget (${self.limit})", self.limit)
+    tester = Broke()
+    monkeypatch.setattr(uitest, "TESTER", tester)
+    tid, status = pilot(proj, None, None)
+    plan = lifecycle.plan_data(proj, tid)
+    assert tester.limit == proj.policy.ui_tester["max_usd"] == p._reserve(proj, plan) == 0.5
+    assert status == "disputed" and "the UI tester wrote no tests (error)" in kinds(proj, "disagreement.raised", tid)[-1]["reason"]
+    assert kinds(proj, "uitest.failed", tid)[-1]["data"]["cost_usd"] == 0.5  # what it spent counts
+
+    class SDK:  # the real adapter hands the limit to the SDK as its budget
+        ClaudeAgentOptions = dict
+    monkeypatch.setattr(claude, "_load_sdk", lambda: SDK)
+    assert uitest._default_tester(0.5, "claude-sonnet-5-5").max_budget_usd == 0.5
+
+
+def test_a_tester_that_reaches_the_cap_stops_the_task_and_nothing_else_runs(proj, monkeypatch):
+    from parallax import lifecycle
+    checker = FakeChecker()
+    tester = FakeTester(cost=5.0)  # far past what's left of the cap
+    monkeypatch.setattr(uitest, "TESTER", tester)
+    monkeypatch.setattr(uitest, "FLOW_RUNNER", flow_runner([[("opens", True)]]))
+    from parallax import pilot as p
+    tid = p.intake(proj, "fix the README")["task"]
+    status = build.run_mode(proj, tid, "pilot", FakeDrafter(flows_docs()), lambda left, s: ScriptedAgent(
+        steps=[("write", "README.md", "ok\n")]), checker, test_runner=junit_runner(), preflight_runner=good_probe)
+    assert status == "stuck" and checker.briefs == [] and not kinds(proj, "flows.recorded", tid)
+    [item] = proj.inbox()
+    assert item["data"]["budget"] and "while the UI tester was using the app" in item["reason"]

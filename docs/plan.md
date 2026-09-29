@@ -260,7 +260,7 @@ Drafting was the largest share of a small task (run 3: drafters $1.51 of $4.44).
 | (a) Sonnet 5.5, a call per file | $0.05, $0.06 | $0.12, $0.15 | 0 of 4 | 14s to 91s |
 | (b) Opus 5, intent and plan in one call | $0.23, $0.18 | $0.91, $0.30 | 0 of 4 | 44s to 121s |
 
-Kept (a): the drafters' default is Sonnet 5.5, `[draft] model` in the policy. (b) was cut. Its first run 3 went stuck on a bug it exposed: code raised a cap past the $5 small-task limit to reserve the UI tester's whole $1.50 ceiling. Now code never raises past the limit, the drafter is told the most it may estimate, and the reserve is $0.50.
+Kept (a): the drafters' default is Sonnet 5.5, `[draft] model` in the policy. (b) was cut. Its first run 3 went stuck on a bug it exposed: code raised a cap past the $5 small-task limit to reserve the UI tester's whole $1.50 ceiling. Now code never raises past the limit, the drafter is told the most it may estimate, and the tester's limit and its reserve in the cap are the same number, `[ui_tester] max_usd`, now $0.50 by default.
 
 #### M15: the light conductor
 

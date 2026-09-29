@@ -298,6 +298,18 @@ def test_a_task_stops_at_its_cap(repo):
     assert show.report(proj, tid).startswith("Type: Decision needed\nBottom line: Needs you: the budget cap ran out")
 
 
+def test_the_makers_budget_is_what_is_left_of_the_cap(repo, monkeypatch):
+    """The cap is enforced at runtime: the maker's SDK budget is the rest of the cap, not the estimate."""
+    proj, tid, wt = approved(repo)  # drafting cost 0.2 of the 2.00 cap
+    seen = []
+    maker = ScriptedAgent(steps=[("write", "README.md", "ok\n")])
+    build.run_build(proj, tid, lambda left, settings: seen.append(left) or maker)
+    assert seen == [pytest.approx(1.8)]
+    from parallax.agents import claude
+    monkeypatch.setattr(claude, "_load_sdk", lambda: object())
+    assert build._maker(1.8, "settings.json").max_budget_usd == 1.8  # handed to the SDK, which stops there
+
+
 def test_the_checkers_cost_can_stop_a_rework_before_it_starts(repo):
     proj, tid, wt = approved(repo)
     maker = built(proj, tid, [("write", "README.md", "ok\n")])

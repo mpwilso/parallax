@@ -23,7 +23,7 @@ DEFAULT_LAUNCH = {"auto_launch_usd": 3.0, "review_paths": [], "review_plans": Fa
 DEFAULT_DRAFT = {"model": "claude-sonnet-5-5"}  # a fifth of Opus's drafting cost, no more redrafts (docs/plan.md)
 DEFAULT_UI_TESTER = {
     "enabled": False, "start": "", "url": "",
-    "model": "claude-sonnet-5-5", "max_usd": 1.5,
+    "model": "claude-sonnet-5-5", "max_usd": 0.5,
 }
 DEFAULT_CHECK = {
     "model": "claude-sonnet-5-5",  # a different Claude model from the maker's; the eval measures it
@@ -92,7 +92,7 @@ rework_cap = 3               # rework cycles before a failing check comes to you
 enabled = false
 start = ""                 # starts the app, from the built tree's folder, e.g. "npm run dev"
 url = ""                   # where the app answers, on this machine only, e.g. "http://127.0.0.1:5173/"
-# max_usd = 1.50           # the most one run of the tester may use, inside the task's cap
+# max_usd = 0.50           # the most one run of the tester may spend, and what a plan's cap keeps for it
 """
 
 
