@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Parallax</title>
+<link rel="stylesheet" href="/app.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span id="project">parallax</span><span id="waiting" class="badge" hidden></span></div>
+  <form id="intake" autocomplete="off">
+    <input id="work" name="work" placeholder="Describe the work, then press Enter" aria-label="Describe the work">
+    <kbd title="press / to type here">/</kbd>
+  </form>
+  <p id="flash" role="status" hidden></p>
+</header>
+<main>
+  <section id="board" aria-label="Tasks by state"></section>
+  <aside id="card" aria-label="Decision card" hidden></aside>
+</main>
+<p id="locked" class="locked" hidden>Open the link that <code>parallax ui</code> printed. This page needs its token.</p>
+</body>
+</html>

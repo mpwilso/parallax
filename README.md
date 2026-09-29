@@ -157,15 +157,22 @@ At Ready, `parallax accept <task-id>` checks the approved files against their ha
 
 Worktrees live outside your repo, in `~/.local/share/parallax/worktrees/`.
 
-## Deciding in your browser
+## The UI: the main way to use Parallax
 
 ```bash
-parallax ui --no-open
+parallax ui
 ```
 
-This opens every decision waiting on you in a local page. Items are on the left; click one to see what you need to decide it: the change as a colored diff, the checker's findings, the refusals that got a task stuck. Write a reason and click one of two plain choices ("Allow" / "Refuse", "Side with the maker" / "Side with the checker", and so on). New items appear on their own while agents work, the tab shows how many are waiting, and you can turn on a desktop notification for new items. The Tasks tab shows every task with its status, cost, timeline and change, and for a ready task, the exact commands to merge it yourself.
+In WSL it prints a link; open it in your Windows browser (WSL forwards `localhost`). Keep the terminal open while you use it.
 
-The page runs on your machine only. Every decision still needs a reason and is recorded as yours, and no agent can reach the page to make one.
+The page has three things and nothing else:
+- **An intake box.** Describe the work, press Enter. That's `parallax do`.
+- **A board** of every task by state: drafting, building, checking, ready, needs you, done. What waits on you is highlighted, and the tab shows how many.
+- **A decision card** for each task: the bottom line, what the work was, what changed, the tests, the checker's verdict and findings, and what wasn't looked at, readable in 30 seconds. The change, the intent and the plan are one click away. At Ready you accept in one click, or reject with a reason; a Decision needed shows its question and options, with the recommended one first. Accepted tasks show the merge command to run yourself.
+
+Keys: `/` the intake box, `j` and `k` move between tasks, `a` accept, `r` reject, `1` to `9` choose an option, `d` the change, `Esc` close. It updates on its own while agents work.
+
+The page runs on your machine only, behind a token that's in the link and nowhere else, and a strict content security policy. Every action is recorded as yours, the same way the terminal records it, and no agent can reach the page.
 
 ## Maker and blind checker (Milestone 2)
 

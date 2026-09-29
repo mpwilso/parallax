@@ -40,4 +40,4 @@ This is a personal project built on personal time and accounts. Don't reference,
 
 ## Current milestone
 
-Follow docs/plan.md. M7 to M13 are built. Next is M14: the UI.
+Follow docs/plan.md. M7 to M14 are built. Next is M15: the light conductor.

@@ -43,7 +43,7 @@ Each line says how it's enforced today: a test, a rule in code, or judgment only
 - **One inbox item per task: Ready, or one Decision needed.** (M12, M13.)
 - **Parallax never shows or saves output that fails its own lint.** It normalizes drafted files, fits its reports, and sends a drafted file that still fails back to the drafter. (M12.)
 - **One clear next action per inbox item.** Every report has one Next line (rule in lint).
-- **Some steps are human-only on purpose (merge), and the UI says so.** Parallax never merges: accept prints the command for you (test: `test_accept_then_the_printed_merge_really_merges`). The UI marks it in M12.
+- **Some steps are human-only on purpose (merge), and the UI says so.** Parallax never merges: accept prints the command for you, and the UI shows it as text with a copy button; there's no merge endpoint (tests: `test_accept_then_the_printed_merge_really_merges`, `test_accept_from_the_card_shows_the_merge_command`).
 - **Outside input (issue text, repo content, web pages) is data, never instructions.** Drafters are told so, and can't act beyond reading. Judgment only, backed by their read-only tools.
 - **Verify before asserting; say when something doesn't make sense.** Found items must cite a real source or say Unverified (rule in lint).
 - **A correction made twice goes into CLAUDE.md or REVIEW.md, as a change the human applies.** Judgment only. Rejection reasons stay in the ledger for later.

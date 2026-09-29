@@ -76,7 +76,7 @@ def main(argv: list[str] | None = None) -> int:
     rn.add_argument("task")
     rn.add_argument("--model", default=None)
     sub.add_parser("inbox", help="what waits on you: one item per task")
-    ui = sub.add_parser("ui", help="open the inbox in your browser: every decision with what you need to make it")
+    ui = sub.add_parser("ui", help="the main way to use parallax: intake, the board, and each task's decision card")
     ui.add_argument("--port", type=int, default=0)
     ui.add_argument("--no-open", action="store_true", help="don't open the browser, just print the link")
     for name in ("approve", "reject"):
@@ -226,12 +226,18 @@ def _run(args) -> int:
         return _agents(proj, args)
 
     if args.cmd == "ui":
+        from . import doctor
         from .ui import UI
         app = UI(proj.root, args.port)
-        print(f"parallax ui is {'running' if args.no_open else 'open in your browser'}: {app.url}")
+        wsl = doctor.is_wsl(doctor.Machine())  # with interop off, WSL can't open your Windows browser
+        opening = not (args.no_open or wsl)
+        if wsl:
+            print(f"parallax ui is running. open this in your Windows browser: {app.windows_url}")
+        else:
+            print(f"parallax ui is {'open in your browser' if opening else 'running'}: {app.url}")
         print("keep this window open while you use it. Ctrl+C to stop.", flush=True)
         try:
-            app.serve(open_browser=not args.no_open)
+            app.serve(open_browser=opening)
         except KeyboardInterrupt:
             print("stopped.")
         return 0

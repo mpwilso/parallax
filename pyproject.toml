@@ -21,4 +21,4 @@ claude = ["claude-agent-sdk"]
 packages = ["parallax", "parallax.agents"]
 
 [tool.setuptools.package-data]
-parallax = ["ui.html"]
+parallax = ["web/*"]

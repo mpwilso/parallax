@@ -240,6 +240,7 @@ Human touches for a normal small task when this is done: **one**, the accept or 
 #### M14: the UI
 
 - The main way to use Parallax: an intake box, a board by state (drafting, building, checking, ready, needs you, done), a decision card per task readable in 30 seconds with the diff, intent and plan one click away, accept or reject with a reason plus keyboard shortcuts, live updates, and the merge command shown, never run. Plus the security tests: token, Host and Origin, escaping, a strict CSP with no inline script, and sandboxed Bash can't reach the port.
+- Built. The card is `parallax show` parsed, so the page and the terminal never disagree. Every action calls the same functions as the CLI. The page is three files under a strict CSP with no inline code, and the old inbox page, its views and the M6 tests of it are gone. The page was driven headless against a live server before handing over; that found two rendering bugs, both fixed.
 - **You confirm it:** run `parallax ui`, open the link, type a small change in the box and press Enter. The card moves across the board on its own and lands in Ready; you open it, read it, press the accept key, and copy the merge command.
 
 #### M15: the light conductor

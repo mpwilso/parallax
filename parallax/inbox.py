@@ -36,23 +36,3 @@ def to_merge(project: Project) -> list[dict]:
     accepted = {e["data"]["task"]: e for e in project.ledger.entries() if e["kind"] == "task.accepted"}
     return [{"task": tid, "command": merge_command(accepted[tid])}
             for tid, t in project.tasks().items() if t["status"] == "accepted" and tid in accepted]
-
-
-def batched(project: Project) -> list[tuple[str, list[dict]]]:
-    """The raw inbox entries grouped by task, for the old visual inbox until M14 replaces it."""
-    tasks = project.tasks()
-    groups: dict[str, list[dict]] = {}
-    for e in project.inbox():
-        tid = e["data"].get("task")
-        header = f"task {tid}  [{tasks[tid]['status']}]  {tasks[tid]['goal']}" if tid in tasks else "other"
-        groups.setdefault(header, []).append(e)
-    return list(groups.items())
-
-
-def label(e: dict) -> str:
-    d = e["data"]
-    if e["kind"] == "disagreement.raised":
-        return f"disagreement ({d['stage']})"
-    if e["kind"] == "stuck.raised":
-        return "stuck"
-    return d["action"]

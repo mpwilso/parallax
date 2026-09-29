@@ -1,11 +1,14 @@
-"""`parallax ui`: the visual inbox, served on this machine only.
+"""`parallax ui`: the main way to use Parallax. An intake box, a board, and a decision card.
 
 Only the person at the browser can decide (invariant 5):
-- listens on 127.0.0.1 only;
+- it listens on 127.0.0.1 only;
 - a random token is made at launch and kept in memory, never written to disk. The browser gets
   it in the URL fragment (which browsers never send to the server) and passes it back in a header;
 - requests with a wrong token, a foreign Host (DNS rebinding) or a foreign Origin are refused;
-- it won't start inside a task's process, so a maker can't reach it.
+- a strict content security policy: scripts and styles only from this server's own files, no
+  inline code, no frames. Agent-written text is only ever set as text, never as HTML;
+- it won't start inside a task's process, and the sandbox has no route to it.
+Every action goes through the same functions as the CLI, so it's recorded the same way.
 """
 from __future__ import annotations
 
@@ -20,8 +23,12 @@ from pathlib import Path
 from . import views
 from .core import ParallaxError, Project, refuse_inside_task
 
-PAGE = Path(__file__).with_name("ui.html")
+WEB = Path(__file__).with_name("web")
+STATIC = {"/": ("index.html", "text/html; charset=utf-8"), "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+          "/app.css": ("app.css", "text/css; charset=utf-8")}
 TOKEN_HEADER = "X-Parallax-Token"
+CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; "
+       "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 
 
 class UI:
@@ -37,6 +44,11 @@ class UI:
     def url(self) -> str:
         return f"http://127.0.0.1:{self.port}/#{self.token}"
 
+    @property
+    def windows_url(self) -> str:
+        """The same page from a Windows browser: WSL forwards localhost."""
+        return f"http://localhost:{self.port}/#{self.token}"
+
     def project(self) -> Project:
         return Project(self.root)  # fresh each request: picks up new ledger lines
 
@@ -48,6 +60,40 @@ class UI:
     def close(self) -> None:
         self.server.shutdown()
         self.server.server_close()
+
+
+def act(project: Project, path: str, body: dict) -> dict:
+    """The actions, shared with the CLI's functions. Returns {"message": ...} or raises ParallaxError."""
+    from . import decide, pilot
+    from .accept import accept, merge_command
+    task = str(body.get("task") or "")
+    reason = str(body.get("reason") or "")
+    if path == "/api/do":
+        work = str(body.get("work") or "").strip()
+        if not work:
+            raise ParallaxError("describe the work first")
+        t = pilot.intake(project, work)
+        return {"task": t["task"], "message": f"task {t['task']}: on it. it comes back when it needs you."}
+    if path == "/api/accept":
+        e = accept(project, task, reason)
+        return {"message": f"accepted {task} as {e['data']['commit'][:7]}. merge it yourself:",
+                "merge": merge_command(e)}
+    if path == "/api/reject":
+        if body.get("drop"):
+            if decide.decision(project, task) is not None:
+                return {"message": decide.apply(project, task, "drop", reason)}
+            if not reason.strip():
+                raise ParallaxError("dropping a task needs a reason")
+            project.ledger.append("task.rejected", "human", reason, task=task, was=project.task(task)["status"])
+            return {"message": f"dropped {task}. it's out of the inbox."}
+        dec = decide.decision(project, task)
+        if dec is not None and any(o.name == "reject" for o in dec.options):
+            return {"message": decide.apply(project, task, "reject", reason)}
+        pilot.redraft(project, task, reason)
+        return {"message": f"redrafting {task} from your reason. it comes back when it needs you."}
+    if path == "/api/decide":
+        return {"message": decide.apply(project, task, str(body.get("option") or ""), reason)}
+    raise ParallaxError("not found")
 
 
 def _handler(ui: UI):
@@ -62,9 +108,8 @@ def _handler(ui: UI):
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Frame-Options", "DENY")
             self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("Content-Security-Policy",
-                             "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
-                             "connect-src 'self'; frame-ancestors 'none'")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("Content-Security-Policy", CSP)
             self.end_headers()
             self.wfile.write(body)
 
@@ -88,50 +133,44 @@ def _handler(ui: UI):
 
         def do_GET(self):
             path = self.path.split("?", 1)[0]
-            if path == "/":
+            if path in STATIC:
                 if self._allowed(needs_token=False):
-                    self._send(200, PAGE.read_bytes(), "text/html; charset=utf-8")
+                    name, ctype = STATIC[path]
+                    self._send(200, (WEB / name).read_bytes(), ctype)
                 return
             if not self._allowed(needs_token=True):
                 return
             try:
+                parts = path.strip("/").split("/")
                 if path == "/api/version":
                     st = os.stat(ui.project().ledger.path)
                     self._json(200, {"version": f"{st.st_size}-{st.st_mtime_ns}"})
-                elif path == "/api/state":
+                elif path == "/api/board":
                     p = ui.project()
-                    self._json(200, {"project": p.root.name, "inbox": views.inbox_view(p), "tasks": views.tasks_view(p)})
-                elif path.startswith("/api/task/"):
-                    self._json(200, views.task_view(ui.project(), path.rsplit("/", 1)[1]))
+                    self._json(200, {"project": p.root.name, **views.board(p)})
+                elif len(parts) == 3 and parts[:2] == ["api", "task"]:
+                    self._json(200, views.card(ui.project(), parts[2]))
+                elif len(parts) == 5 and parts[:2] == ["api", "task"] and parts[3] == "doc":
+                    self._json(200, {"text": views.document(ui.project(), parts[2], parts[4])})
                 else:
                     self._json(404, {"error": "not found"})
-            except ParallaxError as err:
+            except (ParallaxError, ValueError) as err:
                 self._json(400, {"error": str(err)})
 
         def do_POST(self):
             if not self._allowed(needs_token=True):
                 return
-            if self.path != "/api/resolve":
-                return self._json(404, {"error": "not found"})
             if not (self.headers.get("Content-Type") or "").startswith("application/json"):
                 return self._json(415, {"error": "send json"})
             try:
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
             except json.JSONDecodeError:
                 return self._json(400, {"error": "bad json"})
-            ids, reason, approve = body.get("ids") or [], str(body.get("reason") or ""), body.get("approve")
-            if not isinstance(ids, list) or not ids or not isinstance(approve, bool):
-                return self._json(400, {"error": "say which items, and approve or reject"})
-            if not reason.strip():
-                return self._json(400, {"error": "every decision needs a reason"})
-            p = ui.project()
-            results = []
-            for item in ids:
-                try:
-                    p.resolve(str(item), approve, reason)
-                    results.append({"id": item, "ok": True})
-                except ParallaxError as err:
-                    results.append({"id": item, "ok": False, "error": str(err)})
-            self._json(200, {"results": results})
+            if not isinstance(body, dict):
+                return self._json(400, {"error": "send a json object"})
+            try:
+                self._json(200, act(ui.project(), self.path, body))
+            except ParallaxError as err:
+                self._json(404 if str(err) == "not found" else 400, {"error": str(err)})
 
     return Handler
