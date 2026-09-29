@@ -33,13 +33,30 @@ def touches(project: Project) -> dict[str, int]:
     return out
 
 
+def partial(project: Project) -> dict[str, list[dict]]:
+    """Per task, the sessions that ended early: their costs are partial, or unknown."""
+    out: dict[str, list[dict]] = {}
+    for e in project.ledger.entries():
+        if e["kind"] == "agent.ended_early":
+            out.setdefault(e["data"].get("task"), []).append(e)
+    return out
+
+
 def report(project: Project) -> list[str]:
     counts = touches(project)
     if not counts:
         return ["no tasks yet."]
     tasks = project.tasks()
-    lines = [f"{'task':<8}{'touches':>8}  status"]
-    lines += [f"{tid:<8}{n:>8}  {tasks[tid]['status']}" for tid, n in counts.items()]
+    early = partial(project)
+    lines = [f"{'task':<8}{'touches':>8}{'cost':>9}  status"]
+    for tid, n in counts.items():
+        mark = f"  ({len(early[tid])} partial)" if early.get(tid) else ""
+        lines.append(f"{tid:<8}{n:>8}{'$' + format(tasks[tid].get('cost_usd') or 0, '.2f'):>9}  {tasks[tid]['status']}{mark}")
+    ended = [e for es in early.values() for e in es]
+    if ended:
+        unknown = sum(1 for e in ended if e["data"].get("source") == "unknown")
+        lines.append(f"{len(ended)} agent sessions ended early. their costs are counted as partial"
+                     + (f"; {unknown} unknown, counted as $0." if unknown else "."))
     done = {tid: n for tid, n in counts.items() if status.board(tasks[tid]["status"]) == "done"}
     if not done:  # an unfinished task's count isn't final, so it stays out of the average
         lines.append(f"no finished tasks yet. target {TARGET} touch per task.")

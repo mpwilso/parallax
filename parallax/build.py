@@ -282,7 +282,11 @@ def run_mode(project: Project, task_id: str, mode: str, drafter_for, maker_for, 
     mode: "pilot" (draft, launch rule, build, check), "build" (build, then check), or "check"."""
     from .check import run_check
     from .pilot import run
+    from . import sessions
+    from .agents import base
 
+    sessions.reconcile(project, task_id)  # a process before this one that was killed mid-session
+    base.SESSIONS = sessions.Recorder(project, task_id)
     status = "error"
     try:
         if mode == "pilot":
@@ -298,6 +302,8 @@ def run_mode(project: Project, task_id: str, mode: str, drafter_for, maker_for, 
             f"Parallax hit an error and stopped the task: {type(err).__name__}: {err}"), task=task_id, error=True)
         status = "stuck"
     finally:
+        sessions.reconcile(project, task_id, finishing=True)  # a session this process started and never ended
+        base.SESSIONS = None
         project.ledger.append("builder.finished", "parallax", "", task=task_id, status=status)
     return status
 

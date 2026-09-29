@@ -148,13 +148,21 @@ def _load_sdk():
     return claude_agent_sdk
 
 
-async def _final_result(sdk, options, prompt: str):
-    result = None
+async def _final_result(sdk, options, prompt: str, agent: str):
+    """The session's result. Its start and normal end are reported, so an early end can be found."""
+    from . import base
+    result, session = None, None
     async with sdk.ClaudeSDKClient(options=options) as client:
         await client.query(prompt)
         async for msg in client.receive_response():
+            sid = getattr(msg, "session_id", None) or (getattr(msg, "data", None) or {}).get("session_id")
+            if sid and session is None:
+                session = sid
+                base.session_started(sid, str(getattr(options, "cwd", "") or ""), agent)
             if isinstance(msg, sdk.ResultMessage):
                 result = msg
+    if session is not None and result is not None:
+        base.session_ended(session, agent, getattr(result, "total_cost_usd", None))
     return result
 
 
@@ -199,7 +207,7 @@ class ClaudeAgent:
             max_budget_usd=self.max_budget_usd,
             env=env,  # marks the maker's shell as inside a task (spawn depth 1)
         )
-        result = await _final_result(sdk, options, goal)
+        result = await _final_result(sdk, options, goal, "drafter" if stage == "draft" else "maker")
         if result is None:
             return AgentResult("error", "agent ended without a result")
         text, cost = result.result or "", getattr(result, "total_cost_usd", None)
@@ -255,7 +263,7 @@ class ClaudeUITester:
             max_budget_usd=self.max_budget_usd,
             env={"MCP_TIMEOUT": "90000"},  # the app starts first; its server connects once it answers
         )
-        result = await _final_result(sdk, options, goal)
+        result = await _final_result(sdk, options, goal, "ui tester")
         if result is None:
             return AgentResult("error", "the UI tester ended without a result")
         text, cost = result.result or "", getattr(result, "total_cost_usd", None)
@@ -283,7 +291,7 @@ async def _structured(sdk, model: str, system: str, prompt: str, schema: dict, e
             output_format={"type": "json_schema", "schema": schema},
             max_budget_usd=max_budget_usd,
         )
-        result = await _final_result(sdk, options, prompt)
+        result = await _final_result(sdk, options, prompt, "checker")
     if result is None or result.is_error:
         raise error("ended without a reply")
     data = getattr(result, "structured_output", None) or _parse_json(result.result or "", error)

@@ -83,3 +83,18 @@ class Agent(Protocol):
 
 class Checker(Protocol):
     def review(self, goal: str, material: str, kind: str) -> Verdict: ...
+
+
+# Parallax sets this around background work (sessions.Recorder), so every session is in the
+# ledger from its start, and one that ends early can be found and costed afterwards.
+SESSIONS = None
+
+
+def session_started(session: str, cwd: str, agent: str) -> None:
+    if SESSIONS is not None:
+        SESSIONS.started(session, cwd, agent)
+
+
+def session_ended(session: str, agent: str, cost: float | None) -> None:
+    if SESSIONS is not None:
+        SESSIONS.ended(session, agent, cost)

@@ -138,6 +138,8 @@ def _run(args) -> int:
     proj = Project.find(cwd)
     if not inside_task(proj.root):
         from .runner import flag_stale_runs
+        from .sessions import reconcile
+        reconcile(proj)  # sessions whose process died mid-run: recorded, with what they cost
         for tid in flag_stale_runs(proj):  # housekeeping on every command, in place of a pulse
             print(f"task {tid} went quiet and is flagged stuck. it's in your inbox.")
         from .accept import confirm_merges
