@@ -60,6 +60,7 @@ A working prototype I use on this repo: a task it did on itself, with its record
 - **It needs Claude Code**, logged in, and the Claude Agent SDK. Costs are Claude Code's estimates at list prices; on a subscription your real limit is the plan's usage limits, which Parallax can't see.
 - **A cap can overshoot by one turn.** Every agent gets what's left of the cap as its own limit, but the SDK checks it between turns.
 - **The UI tester's browser server is pinned** to `@playwright/mcp` 0.0.70: later versions need Unix sockets the sandbox refuses.
+- **The three real-sandbox tests need a machine that allows unprivileged user namespaces.** CI installs the sandbox and runs them when the runner allows it; if not, they skip and say why, and they run locally.
 - **One person, one machine.** No splitting work into several tasks or scheduling them yet, and no evals on the current pipeline yet (both planned).
 
 ## Setup

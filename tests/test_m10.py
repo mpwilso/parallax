@@ -1,11 +1,10 @@
-import os
-import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
 from fakes import FakeChecker, FakeDrafter, ScriptedAgent, blocker, good_probe, junit_runner
+from sandboxcheck import why_not
 from parallax import approvals, build, check, lifecycle, lint, review, show, testrun, tree
 from parallax.agents.base import Finding, Review
 from parallax.cli import main
@@ -13,9 +12,7 @@ from parallax.core import Project
 from test_m8 import docs, make_key
 
 GIT = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
-HAS_SRT = all(shutil.which(b) for b in ("srt", "bwrap", "socat")) and not os.environ.get("SANDBOX_RUNTIME")
-NO_SRT_WHY = ("already inside a sandbox, and a sandbox can't start inside another (the M9 spike)"
-              if os.environ.get("SANDBOX_RUNTIME") else "needs srt, bubblewrap and socat")
+NO_SANDBOX = why_not()  # None when the real sandbox starts here
 
 
 def approved(repo, plan_edit=None, base_files=None):
@@ -171,7 +168,7 @@ def test_parse_junit_counts_per_file(tmp_path):
         "tests/test_a.py": [1, 2, 0], "tests/test_b.py": [0, 0, 1]}
 
 
-@pytest.mark.skipif(not HAS_SRT, reason=NO_SRT_WHY)
+@pytest.mark.skipif(NO_SANDBOX is not None, reason=NO_SANDBOX or "")
 def test_the_tests_really_run_in_the_sandbox(repo):
     proj, tid, wt = approved(repo)
     (wt / "README.md").write_text("ok\n")

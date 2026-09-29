@@ -1,29 +1,24 @@
 import json
-import os
 import shutil
-import signal
 import stat
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 import pytest
 
 from fakes import FakeDrafter, ScriptedAgent
+from sandboxcheck import why_not
 from parallax import approvals, build, guard, lifecycle, preflight, sandbox
-from parallax.agents.base import AgentResult
 from parallax.agents.claude import tool_to_action
 from parallax.cli import main
 from parallax.core import POLICY_FILE, Project
 from parallax.gate import Scope, host_allowed, make_permission_fn
 from parallax.build import flag_stale_runs
-from test_m8 import INTENT, WANT, docs, make_key
+from test_m8 import WANT, docs, make_key
 
 # not inside a sandbox already: a sandbox won't start nested in one (the M9 spike)
-HAS_SRT = all(shutil.which(b) for b in ("srt", "bwrap", "socat")) and not os.environ.get("SANDBOX_RUNTIME")
-NO_SRT_WHY = ("already inside a sandbox, and a sandbox can't start inside another (the M9 spike)"
-              if os.environ.get("SANDBOX_RUNTIME") else "needs srt, bubblewrap and socat")
+NO_SANDBOX = why_not()  # None when the real sandbox starts here
 
 
 @pytest.fixture
@@ -270,7 +265,7 @@ def test_a_sentinel_that_got_through_is_removed(proj):
     assert not list((proj.root / ".git").glob(".parallax-preflight-*"))
 
 
-@pytest.mark.skipif(not HAS_SRT, reason=NO_SRT_WHY)
+@pytest.mark.skipif(NO_SANDBOX is not None, reason=NO_SANDBOX or "")
 def test_preflight_against_the_real_sandbox(proj):
     tid = approved_task(proj)
     wt = Path(proj.task(tid)["worktree"])

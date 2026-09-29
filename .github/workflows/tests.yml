@@ -8,8 +8,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: The sandbox, for the three tests that need it
+        # Ubuntu 24.04 blocks the unprivileged user namespaces bubblewrap needs; the runner can allow them.
+        # If the sandbox still can't start, those tests skip and -rs prints why.
+        run: |
+          sudo apt-get update && sudo apt-get install -y bubblewrap socat ripgrep
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          npm install -g @anthropic-ai/sandbox-runtime
       - name: Chromium for the browser tests
         run: uv run --no-project --python 3.12 --with playwright python -m playwright install --with-deps chromium
       - name: The full suite, browser tests included. No test calls a model.
-        # The three tests that need the real sandbox (srt, bubblewrap, socat) skip, and -rs says so.
         run: uv run --no-project --python 3.12 --with pytest --with playwright --with-editable . python -m pytest -q -rs -p no:cacheprovider
