@@ -164,6 +164,9 @@ def rules(worktree: Path, targets: list[Path], *, git_dir: Path | None, venv: Pa
           reads: list[str], domains: list[str]) -> Rules:
     wt = str(Path(worktree))
     deny_write = [str(t) for t in targets] + ([str(git_dir)] if git_dir else [])
+    from .sessions import transcripts  # Parallax reads session costs from these: no agent writes them
+    if transcripts().exists():
+        deny_write.append(str(transcripts()))
     allow_read = [wt] + ([str(git_dir)] if git_dir else []) + ([str(venv)] if venv else []) + list(reads)
     # the approval key's folder is denied by name too, wherever XDG_CONFIG_HOME puts it
     deny_read = list(dict.fromkeys([str(Path.home()), "/mnt", str(key_path().parent)]))

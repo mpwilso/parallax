@@ -66,23 +66,35 @@ def _alive(pid: int) -> bool:
 
 def reconcile(project: Project, task_id: str | None = None, finishing: bool = False) -> list[dict]:
     """Record every session that ended early. finishing: this process is done with task_id, so its
-    own sessions that never ended ended early too. Returns the entries it added."""
-    entries = project.ledger.entries()
-    closed = {e["data"].get("session") for e in entries if e["kind"] in ("agent.ended", "agent.ended_early")}
+    own sessions that never ended ended early too. Returns the entries it added.
+
+    Each decision is made under the ledger's lock, together with its write: a session counts as
+    ended early only if, right then, it has no end and its process is gone (or is this one,
+    finishing). A process that's gone can't write a normal end later, so a normal end can never
+    be recorded as partial, whatever the timing."""
     added = []
-    for e in entries:
+    for e in project.ledger.entries():
         d = e["data"]
-        if e["kind"] != "agent.started" or d.get("session") in closed or (task_id and d.get("task") != task_id):
+        if e["kind"] != "agent.started" or (task_id and d.get("task") != task_id):
             continue
-        mine = d.get("pid") == os.getpid()
-        if not ((mine and finishing) or (not mine and not _alive(int(d.get("pid") or 0)))):
-            continue  # still running somewhere
-        cost = known_cost(d["session"])
+        session, pid = d.get("session"), int(d.get("pid") or 0)
+
+        def ended_early(entries, session=session, pid=pid) -> bool:
+            if any(x["kind"] in ("agent.ended", "agent.ended_early") and x["data"].get("session") == session
+                   for x in entries):
+                return False
+            if pid == os.getpid():
+                return finishing
+            return not _alive(pid)
+        if not ended_early(project.ledger.entries()):
+            continue  # a cheap look first; the real decision is made under the lock below
+        cost = known_cost(session)
         why = (f"the {d['agent']} session ended early; ${cost:.2f} from its transcript, partial" if cost is not None
                else f"the {d['agent']} session ended early; its cost is unknown")
         extra = {"cost_usd": cost} if cost is not None else {}
-        added.append(project.ledger.append("agent.ended_early", "parallax", why, task=d.get("task"), agent=d["agent"],
-                                           session=d["session"], partial=True,
-                                           source="transcript" if cost is not None else "unknown", **extra))
-        closed.add(d["session"])
+        entry = project.ledger.append_if(ended_early, "agent.ended_early", "parallax", why, task=d.get("task"),
+                                         agent=d["agent"], session=session, partial=True,
+                                         source="transcript" if cost is not None else "unknown", **extra)
+        if entry:
+            added.append(entry)
     return added

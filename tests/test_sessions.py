@@ -138,3 +138,70 @@ def test_stats_counts_partial_costs_and_says_how_many(proj, tmp_path, monkeypatc
     assert len(early(proj)) == 2 and stats.partial(proj)[tid]
     assert f"{tid}" in out and "$1.50" in out and "(2 partial)" in out
     assert "2 agent sessions ended early. their costs are counted as partial; 1 unknown, counted as $0." in out
+
+
+CHILD = """
+import random, sys, time
+from pathlib import Path
+from parallax import sessions
+from parallax.core import Project
+proj = Project(Path(sys.argv[1]))
+rec = sessions.Recorder(proj, sys.argv[2])
+rec.started(sys.argv[3], "/wt", "maker")
+time.sleep(random.uniform(0, 0.05))
+if sys.argv[4] == "end":
+    rec.ended(sys.argv[3], "maker", 0.1)  # a normal end, then the process exits at once
+"""
+
+
+def test_a_normal_end_is_never_recorded_as_partial_whatever_the_timing(proj):
+    """Race 20 sessions that end normally and exit against a reconcile running the whole time."""
+    tid = pilot.intake(proj, WANT)["task"]
+    kids = [subprocess.Popen([sys.executable, "-c", CHILD, str(proj.root), tid, f"ok{i}", "end"]) for i in range(20)]
+    control = subprocess.Popen([sys.executable, "-c", CHILD, str(proj.root), tid, "cut", "cut"])  # ends early
+    while any(k.poll() is None for k in [*kids, control]):
+        sessions.reconcile(proj)
+    sessions.reconcile(proj)
+    flagged = {e["data"]["session"] for e in early(proj)}
+    assert flagged == {"cut"}  # the loop was live: it caught the one that never ended
+    ended = {e["data"]["session"] for e in proj.ledger.entries() if e["kind"] == "agent.ended"}
+    assert ended == {f"ok{i}" for i in range(20)}
+    ok, _ = proj.ledger.verify()
+    assert ok  # the chain holds under the concurrent writes
+
+
+def test_a_reader_never_sees_half_an_entry(proj):
+    tid = pilot.intake(proj, WANT)["task"]
+    n = len(proj.ledger.entries())
+    with proj.ledger.path.open("a") as f:
+        f.write('{"id": "half", "kind": "agent.st')  # a writer caught mid-line
+        f.flush()
+        assert len(proj.ledger.entries()) == n
+
+
+def test_no_agent_can_write_a_transcript_parallax_reads_cost_from(proj, tmp_path):
+    from pathlib import Path
+    from parallax import gate, lifecycle, uitest
+    from parallax.sandbox import rules
+    root = sessions.transcripts()
+    (root / "-wt").mkdir(parents=True)
+    target = root / "-wt" / "s9.jsonl"
+    tid = pilot.intake(proj, WANT)["task"]
+    pilot.draft_until_fit(proj, tid, FakeDrafter(docs()))
+    lifecycle.approve(proj, tid, rule="test")
+    wt = Path(proj.task(tid)["worktree"])
+    # the maker's sandbox: writes only in the worktree, the transcripts named in denyWrite, home unreadable
+    p = build.prepare(proj, tid, setup=False, launching=False)
+    assert p.rules.allow_write == [str(wt)] and str(root) in p.rules.deny_write
+    assert not any(Path(str(root)).is_relative_to(w) for w in p.rules.allow_write)
+    assert any(f'Edit(/{root}' in d for d in p.rules.claude_settings()["permissions"]["deny"])
+    # the maker's tools: the gate refuses the write
+    fn = gate.make_permission_fn(proj, tid, wt, scope=p.scope)
+    assert not fn("fs.write", str(target), [str(target)]).allowed
+    # drafters are read-only; the checker has no tools; the UI tester writes only in its own folder
+    assert not gate.make_permission_fn(proj, tid, wt, read_only=True)("fs.write", str(target), [str(target)]).allowed
+    assert not uitest.allowed("Write", {"file_path": str(target)}, tmp_path / "work")
+    # the sandbox the UI tester's browser and the app share
+    r = rules(wt, [], git_dir=None, venv=None, reads=[], domains=[])
+    assert str(root) in r.deny_write and not any(Path(str(root)).is_relative_to(w) for w in r.allow_write)
+    assert not target.exists()

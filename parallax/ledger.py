@@ -72,8 +72,11 @@ class Ledger:
             self.path.touch()
 
     def entries(self) -> list[dict]:
-        with self.path.open() as f:
-            return [json.loads(line) for line in f if line.strip()]
+        """Every complete entry. Reads take no lock, so a line still being written (no newline yet)
+        is left for the next read, never half-parsed (found by the session race test)."""
+        text = self.path.read_text(encoding="utf-8")
+        whole = text if text.endswith("\n") else text[:text.rfind("\n") + 1]
+        return [json.loads(line) for line in whole.splitlines() if line.strip()]
 
     def _last_hash(self) -> str:
         entries = self.entries()
@@ -81,18 +84,30 @@ class Ledger:
 
     def append(self, kind: str, actor: str, reason: str = "", **data) -> dict:
         with _exclusive(self.path.with_name(self.path.name + ".lock")):
-            body = {
-                "id": uuid.uuid4().hex[:8],
-                "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                "kind": kind,
-                "actor": actor,
-                "reason": reason,
-                "data": data,
-                "prev": self._last_hash(),
-            }
-            entry = {**body, "hash": _hash(body)}
-            with self.path.open("a") as f:
-                f.write(json.dumps(entry, sort_keys=True) + "\n")
+            return self._write(kind, actor, reason, data)
+
+    def append_if(self, check, kind: str, actor: str, reason: str = "", **data) -> dict | None:
+        """Append only if check(entries) is true, deciding and writing under the one lock, so no
+        other writer can slip an entry in between."""
+        with _exclusive(self.path.with_name(self.path.name + ".lock")):
+            if not check(self.entries()):
+                return None
+            return self._write(kind, actor, reason, data)
+
+    def _write(self, kind: str, actor: str, reason: str, data: dict) -> dict:
+        """The caller holds the lock."""
+        body = {
+            "id": uuid.uuid4().hex[:8],
+            "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "kind": kind,
+            "actor": actor,
+            "reason": reason,
+            "data": data,
+            "prev": self._last_hash(),
+        }
+        entry = {**body, "hash": _hash(body)}
+        with self.path.open("a") as f:
+            f.write(json.dumps(entry, sort_keys=True) + "\n")
         return entry
 
     def verify(self) -> tuple[bool, str]:
