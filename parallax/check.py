@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import build, costs, lifecycle, lint, review, sandbox, status, testrun, tree, uitest
-from .agents.base import BlindChecker, CheckerError, Review
+from .agents.base import BlindChecker, Review
 from .core import ParallaxError, Project
 
 CheckerFor = Callable[[float, str], BlindChecker]  # (budget left, model) -> checker

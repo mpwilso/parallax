@@ -1,7 +1,6 @@
 """Task status, derived from the ledger. Never stored anywhere else."""
 from __future__ import annotations
 
-from .agents.base import AGREE
 
 
 def derive(entries: list[dict]) -> dict[str, dict]:
@@ -45,8 +44,6 @@ def derive(entries: list[dict]) -> dict[str, dict]:
             t["status"] = "stopped"
         elif kind == "maker.finished" and d["status"] != "done" and t["status"] == "running":
             t["status"] = "maker failed"
-        elif kind == "verdict.recorded" and d["stage"] == "diff" and d["verdict"] in AGREE:
-            t["status"] = "ready"
         elif kind == "disagreement.raised":
             t["status"] = "disputed"
         elif kind == "stuck.raised":

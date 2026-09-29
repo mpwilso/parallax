@@ -82,7 +82,7 @@ def test_a_reject_needs_a_reason(proj, monkeypatch, capsys):
 # one question, its options, a recommendation --------------------------------------------------------
 
 def test_a_plan_under_review_is_one_question(repo, monkeypatch, capsys):
-    (repo / POLICY_FILE).write_text('[actions]\n[launch]\nreview_paths = ["README.md"]\n')
+    (repo / POLICY_FILE).write_text('[launch]\nreview_paths = ["README.md"]\n')
     make_key()
     monkeypatch.setattr(build, "_spawn", lambda argv, env, cwd, log: SPAWNED.append(argv) or 9)
     monkeypatch.setattr(preflight, "run_srt", good_probe)
@@ -101,7 +101,7 @@ def test_a_plan_under_review_is_one_question(repo, monkeypatch, capsys):
 
 
 def test_a_launch_over_the_threshold_asks_only_about_cost(repo, monkeypatch):
-    (repo / POLICY_FILE).write_text('[actions]\n[launch]\nauto_launch_usd = 1.0\n')
+    (repo / POLICY_FILE).write_text('[launch]\nauto_launch_usd = 1.0\n')
     make_key()
     monkeypatch.setattr(build, "_spawn", lambda *a: 9)
     monkeypatch.setattr(preflight, "run_srt", good_probe)

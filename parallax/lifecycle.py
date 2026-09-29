@@ -136,7 +136,7 @@ def _read(project: Project, task_id: str, doc: str) -> str:
 def lifecycle_task(project: Project, task_id: str) -> dict:
     t = project.task(task_id)
     if not t.get("intent"):
-        raise ParallaxError(f"task {task_id} was made with `task new`, so it has no intent or plan")
+        raise ParallaxError(f"task {task_id} has no intent or plan")
     return t
 
 
@@ -241,11 +241,6 @@ def new_intent(project: Project, text: str, drafter_for: DrafterFor) -> dict:
         if st.gate and "plan" in st.gate:
             draft(project, tid, ["plan"], drafter_for)
     return project.task(tid)
-
-
-def redraft_docs(st: State) -> list[str]:
-    """What `parallax draft` writes: the pending gate's spec and plan, and the intent only if it's missing."""
-    return [d for d in st.gate or () if d != "intent" or d in st.missing]
 
 
 def lint_problems(project: Project, task_id: str, docs) -> list[str]:

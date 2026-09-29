@@ -19,14 +19,14 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
 from . import costs, guard, lifecycle, lint, preflight, sandbox
-from .agents.base import Agent
+from .agents.base import Agent, AgentResult
 from .core import ROOT_ENV, TASK_ENV, ParallaxError, Project, inside_task, refuse_inside_task
 from .gate import Scope, make_permission_fn
-from .runner import _make
 
 KEEP_ENV = ("HOME", "USER", "LOGNAME", "LANG", "LANGUAGE", "TERM", "SHELL", "TZ",
             "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_RUNTIME_DIR")
@@ -203,6 +203,42 @@ def run_build(project: Project, task_id: str, maker_for: Callable[[float, str], 
     if status == "blocked":  # a refusal made the task impossible: it comes to you now, not after rework
         project.ledger.append("stuck.raised", "parallax", first, task=task_id)
     return status
+
+
+def _make(project: Project, task_id: str, maker: Agent, goal: str, stage: str, fn,
+          extra_env: dict[str, str] | None = None) -> AgentResult:
+    project.ledger.append("maker.started", "parallax", "", task=task_id, stage=stage)
+    env = {**(extra_env or {}), TASK_ENV: task_id, ROOT_ENV: str(project.root)}
+    try:
+        res = maker.run(goal, Path(project.task(task_id)["worktree"]), fn, stage=stage, env=env)
+    except Exception as err:  # an adapter crash is recorded, not hidden
+        res = AgentResult("error", f"{type(err).__name__}: {err}")
+    project.ledger.append("maker.finished", "maker", res.summary, task=task_id, stage=stage, status=res.status,
+                          cost_usd=res.cost_usd, model=getattr(maker, "model", None))
+    return res
+
+
+def flag_stale_runs(project: Project, now: datetime | None = None) -> list[str]:
+    """A running task gone quiet, with nothing waiting on you, may have died. Flag it stuck.
+
+    Runs on every command, in place of a pulse."""
+    now = now or datetime.now(timezone.utc)
+    minutes = project.policy.limits["stale_minutes"]
+    waiting_on_you = {e["data"].get("task") for e in project.inbox()}
+    builds = running_builds(project)
+    flagged = []
+    for tid, t in project.tasks().items():
+        if t["status"] != "running" or tid in waiting_on_you:
+            continue
+        if tid in builds and not _alive(builds[tid]):
+            why = "the build process ended without finishing"
+        elif datetime.fromisoformat(t["last"]) < now - timedelta(minutes=minutes):
+            why = f"no activity for {minutes} minutes, the run may have died"
+        else:
+            continue
+        project.ledger.append("stuck.raised", "parallax", why, task=tid)
+        flagged.append(tid)
+    return flagged
 
 
 def _doing(extra: str) -> str:

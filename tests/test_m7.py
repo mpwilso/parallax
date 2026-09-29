@@ -9,7 +9,7 @@ import pytest
 from parallax import doctor
 from parallax.cli import main
 from parallax.core import POLICY_FILE, STATE_DIR, ParallaxError, Project
-from parallax.runner import flag_stale_runs
+from parallax.build import flag_stale_runs
 
 WSL2 = "6.18.33.2-microsoft-standard-WSL2"
 HARDENED_MOUNTS = "none /mnt/wsl tmpfs rw 0 0\n"
@@ -160,12 +160,12 @@ def test_two_repos_with_one_name_get_separate_worktree_homes(tmp_path):
 def test_init_writes_no_mission_and_profiles_are_refused(repo):
     Project.init(repo)
     assert not (repo / "mission.md").exists()
-    (repo / POLICY_FILE).write_text('[actions]\n"fs.read" = "allow"\n[profiles.docs.actions]\n"fs.read" = "allow"\n')
+    (repo / POLICY_FILE).write_text('"fs.read" = "allow"\n[profiles.docs.actions]\n"fs.read" = "allow"\n')
     with pytest.raises(ParallaxError, match="profiles are gone"):
         Project(repo)
 
 
-@pytest.mark.parametrize("cmd", ["goal", "pulse", "evidence", "check", "review"])
+@pytest.mark.parametrize("cmd", ["goal", "pulse", "evidence", "check", "review", "run", "eval"])
 def test_cut_commands_are_gone(cmd, capsys):
     with pytest.raises(SystemExit):
         main([cmd, "x"])

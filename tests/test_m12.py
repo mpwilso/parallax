@@ -142,7 +142,7 @@ def test_a_misfit_is_redrafted_on_its_own_then_comes_to_you_after_two_tries(proj
     ("[launch]\nreview_plans = true\n", "review_plans is on in the policy, so every plan waits for you"),
 ])
 def test_outside_the_launch_rule_the_plan_waits_for_you(repo, monkeypatch, capsys, policy, why):
-    (repo / POLICY_FILE).write_text('[actions]\n"fs.read" = "allow"\n' + policy)
+    (repo / POLICY_FILE).write_text(policy)
     make_key()
     proj = Project.init(repo)
     monkeypatch.setattr(build, "_spawn", lambda *a: 7)
@@ -261,7 +261,7 @@ def test_diff_shows_the_reviewed_change(proj, monkeypatch, capsys):
 
 def test_drafters_leftovers_are_cleaned_so_setup_still_runs(repo, monkeypatch):
     """Live in M12: the drafters' sessions left the sandbox's placeholders, and setup refused a 'changed' worktree."""
-    (repo / POLICY_FILE).write_text('[actions]\n[build]\nsetup = "mkdir -p \\"$PARALLAX_VENV/bin\\""\n')
+    (repo / POLICY_FILE).write_text('[build]\nsetup = "mkdir -p \\"$PARALLAX_VENV/bin\\""\n')
     make_key()
     proj = Project.init(repo)
     monkeypatch.setattr(build, "_spawn", lambda *a: 1)
@@ -341,7 +341,7 @@ def test_the_drafter_model_is_a_setting(repo, monkeypatch):
     make_key()
     proj = Project.init(repo)
     assert proj.policy.draft == {"model": "claude-sonnet-5-5"}  # the experiment's winner
-    (repo / POLICY_FILE).write_text('[actions]\n[draft]\nmodel = "claude-opus-5"\n')
+    (repo / POLICY_FILE).write_text('[draft]\nmodel = "claude-opus-5"\n')
     assert Project(repo).policy.draft["model"] == "claude-opus-5"
     from parallax.policy import Policy
     with pytest.raises(ValueError, match="unknown"):

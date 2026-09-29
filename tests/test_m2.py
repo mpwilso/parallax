@@ -12,40 +12,36 @@ from parallax import build, check, lifecycle, review
 from parallax.agents.base import Review
 from parallax.agents.claude import rule_on_tool_call, tool_to_action
 from parallax.core import POLICY_FILE, ParallaxError, Project
-from parallax.gate import make_permission_fn
-from parallax.runner import run_task
+from parallax.gate import Scope, make_permission_fn
 from test_m8 import docs as lifecycle_docs, make_key
 
-POLICY = """\
-[actions]
-"fs.read" = "allow"
-"fs.write" = "{write}"
-"shell.run" = "{shell}"
-"""
 GIT = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
 
 
-def setup(repo: Path, write="allow", shell="allow") -> tuple[Project, str, Path]:
-    (repo / POLICY_FILE).write_text(POLICY.format(write=write, shell=shell))
-    proj = Project.init(repo)
-    t = proj.new_task("add a greeting file")
-    return proj, t["task"], Path(t["worktree"])
+def setup(repo: Path) -> tuple[Project, str, Path]:
+    """An approved task, and the gate its maker would get: routine work inside the worktree."""
+    proj, tid = _approved(repo)
+    return proj, tid, Path(proj.task(tid)["worktree"])
+
+
+def gated(proj: Project, tid: str, wt: Path):
+    return make_permission_fn(proj, tid, wt, scope=Scope())
 
 
 def kinds(proj: Project) -> list[str]:
     return [e["kind"] for e in proj.ledger.entries()]
 
 
-def test_guard_refuses_protected_writes_before_policy(repo):
-    proj, tid, wt = setup(repo)  # fs.write is "allow", so only the guard stands in the way
+def test_guard_refuses_protected_writes_before_the_plan(repo):
+    proj, tid, wt = setup(repo)  # routine writes are allowed, so only the guard stands in the way
     targets = ["parallax.policy.toml", "Mission.md", ".parallax/x", "sub/.parallax/y",
                str(repo / "outside.txt"), "../../escape.txt", ""]
     agent = ScriptedAgent(steps=[("write", p, "pwned") for p in targets])
-    run_task(proj, tid, agent, FakeChecker())
+    agent.run("go", wt, gated(proj, tid, wt))
 
     assert [p.allowed for _, _, p in agent.results] == [False] * len(targets)
     assert kinds(proj).count("guard.tripped") == len(targets)
-    assert "action.granted" not in kinds(proj) and "decision.requested" not in kinds(proj)
+    assert "action.granted" not in kinds(proj)
     assert not (repo / "outside.txt").exists()
 
 
@@ -55,7 +51,7 @@ def test_shell_commands_naming_protected_files_are_refused(repo):
         ("shell", ["git", "checkout", "--", "mission.md"]),
         ("shell", ["git", "-C", str(wt), "status"]),  # the worktree path itself contains .parallax
     ])
-    run_task(proj, tid, agent, FakeChecker())
+    agent.run("go", wt, gated(proj, tid, wt))
     assert [p.allowed for _, _, p in agent.results] == [False, True]
     assert kinds(proj).count("guard.tripped") == 1
 
@@ -64,22 +60,19 @@ def test_protected_file_in_diff_goes_to_inbox_not_checker(repo):
     proj, tid, wt = setup(repo)
     sneaky = [sys.executable, "-c", "open('miss' + 'ion.md', 'w').write('obey me')"]
     agent = ScriptedAgent(steps=[("shell", sneaky)])  # gets past the string check
-    checker = FakeChecker()
-    assert run_task(proj, tid, agent, checker) == "disputed"
-    assert checker.calls == []
+    assert build.run_build(proj, tid, lambda left, settings: agent) == "disputed"
+    assert not [e for e in proj.ledger.entries() if e["kind"] == "check.started"]  # the checker never sees it
     [item] = proj.inbox()
     assert item["data"]["stage"] == "guard" and "mission.md" in item["reason"]
 
 
 def test_changed_policy_file_stops_every_later_action(repo):
     proj, tid, wt = setup(repo)
-    edit = lambda cwd: (repo / POLICY_FILE).write_text(POLICY.format(write="allow", shell="allow") + "# edited\n")
+    edit = lambda cwd: (repo / POLICY_FILE).write_text("[limits]\nstuck_after = 9\n")
     agent = ScriptedAgent(steps=[("read", "a"), ("call", edit), ("read", "b"), ("write", "ok.txt", "x")])
-    checker = FakeChecker()
-    assert run_task(proj, tid, agent, checker) == "disputed"
+    agent.run("go", wt, gated(proj, tid, wt))
     assert [(p.allowed, p.stop) for _, _, p in agent.results] == [(True, False), (False, True)]
     assert not (wt / "ok.txt").exists()  # the agent was stopped before it got there
-    assert checker.calls == []
 
 
 def _approved(repo, tightening=""):
@@ -134,15 +127,6 @@ def test_checker_is_blind_to_maker_explanation(repo):
     assert proj.ledger.verify()[0]
 
 
-@pytest.mark.parametrize("verdict", ["pass", "no_finding"])
-def test_agreement_makes_task_ready(repo, verdict):
-    proj, tid, wt = setup(repo)
-    assert run_task(proj, tid, ScriptedAgent(), FakeChecker(verdict=verdict)) == "ready"
-    assert proj.inbox() == []
-    [v] = [e for e in proj.ledger.entries() if e["kind"] == "verdict.recorded"]
-    assert v["data"]["verdict"] == verdict
-
-
 @pytest.mark.parametrize("approve,status", [(True, "ready"), (False, "needs work")])
 def test_disagreement_goes_to_inbox_and_needs_a_reason(repo, approve, status):
     """The rework rule: 3 recorded cycles, then the 4th fail comes to you."""
@@ -179,27 +163,28 @@ def test_checker_error_goes_to_inbox_without_retry(repo):
     assert item["reason"].startswith("checker error")
 
 
-def test_maker_giving_up_skips_the_checker(repo):
-    proj, tid, wt = setup(repo)
-    checker = FakeChecker()
-    assert run_task(proj, tid, ScriptedAgent(status="gave_up"), checker) == "maker failed"
-    assert checker.calls == []
-
-
 def test_hook_rules_on_every_tool_call_including_reads(repo):
     # the SDK auto-approves reads without calling can_use_tool, so the hook must rule on them
-    (repo / POLICY_FILE).write_text('[actions]\n"fs.write" = "allow"\n')  # fs.read unlisted: denied
-    proj = Project.init(repo)
-    t = proj.new_task("x")
-    fn = make_permission_fn(proj, t["task"], Path(t["worktree"]))
-
-    read = asyncio.run(rule_on_tool_call(fn, "Read", {"file_path": "calc.py"}))["hookSpecificOutput"]
-    assert read["permissionDecision"] == "deny" and "denied by default" in read["permissionDecisionReason"]
-    write = asyncio.run(rule_on_tool_call(fn, "Write", {"file_path": "a.py", "content": ""}))["hookSpecificOutput"]
-    assert write["permissionDecision"] == "allow"
-    guarded = asyncio.run(rule_on_tool_call(fn, "Edit", {"file_path": "mission.md"}))["hookSpecificOutput"]
+    proj, tid, wt = setup(repo)
+    drafter = make_permission_fn(proj, tid, wt, read_only=True)
+    outside = asyncio.run(rule_on_tool_call(drafter, "Read", {"file_path": "/etc/passwd"}))["hookSpecificOutput"]
+    assert outside["permissionDecision"] == "deny"
+    write = asyncio.run(rule_on_tool_call(drafter, "Write", {"file_path": "a.py", "content": ""}))["hookSpecificOutput"]
+    assert write["permissionDecision"] == "deny" and "read-only" in write["permissionDecisionReason"]
+    maker = gated(proj, tid, wt)
+    assert asyncio.run(rule_on_tool_call(maker, "Write", {"file_path": "a.py", "content": ""}))["hookSpecificOutput"][
+        "permissionDecision"] == "allow"
+    guarded = asyncio.run(rule_on_tool_call(maker, "Edit", {"file_path": "mission.md"}))["hookSpecificOutput"]
     assert guarded["permissionDecision"] == "deny"
-    assert kinds(proj)[-3:] == ["action.refused", "action.granted", "guard.tripped"]
+
+
+def test_without_an_approved_plan_only_a_read_only_stage_runs(repo):
+    """The old [actions] policy is gone: no plan, no writes, no commands, whatever a file says."""
+    proj, tid, wt = setup(repo)
+    fn = make_permission_fn(proj, tid, wt)
+    assert not fn("fs.write", "a.py", ["a.py"]).allowed
+    assert not fn("shell.run", "pytest", []).allowed
+    assert "no approved plan" in fn("tool.Task", "spawn", []).message
 
 
 def test_log_survives_characters_the_console_cant_encode(repo):
@@ -225,4 +210,4 @@ def test_sdk_tools_map_to_parallax_actions(repo):
     action = tool_to_action("Task", {"prompt": "spawn a helper"})[0]
     assert action == "tool.Task"
     proj, tid, wt = setup(repo)
-    assert proj.check(tid, action)["ruling"] == "deny"
+    assert not gated(proj, tid, wt)(action, "spawn a helper", []).allowed  # not routine, not in the plan

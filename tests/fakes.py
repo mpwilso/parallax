@@ -1,11 +1,11 @@
-"""Stand-ins for a maker and a checker, so the suite never calls a model."""
+"""Stand-ins for the drafters, the maker and the blind checker, so the suite never calls a model."""
 from __future__ import annotations
 
 import shlex
 import subprocess
 from pathlib import Path
 
-from parallax.agents.base import AgentResult, CheckerError, Finding, Review, Verdict
+from parallax.agents.base import AgentResult, CheckerError, Finding, Review
 
 
 class ScriptedAgent:
@@ -52,10 +52,8 @@ class ScriptedAgent:
 class FakeChecker:
     """reviews: what check() answers, in order; the last one repeats."""
 
-    def __init__(self, verdict="pass", findings=(), plan_verdict="pass", error=False, reviews=None):
-        self.verdict, self.plan_verdict = verdict, plan_verdict
-        self.findings, self.error = list(findings), error
-        self.calls: list[tuple[str, str, str]] = []  # (goal, material, kind)
+    def __init__(self, error=False, reviews=None):
+        self.error = error
         self.reviews = list(reviews or [Review("pass")])
         self.briefs: list[str] = []
         self.models: list[str] = []
@@ -69,12 +67,6 @@ class FakeChecker:
         if self.error:
             raise CheckerError("garbled reply")
         return self.reviews[min(len(self.briefs), len(self.reviews)) - 1]
-
-    def review(self, goal, material, kind):
-        self.calls.append((goal, material, kind))
-        if self.error:
-            raise CheckerError("garbled reply")
-        return Verdict(self.plan_verdict if kind == "plan" else self.verdict, self.findings)
 
 
 class FakeDrafter:

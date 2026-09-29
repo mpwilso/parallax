@@ -237,7 +237,7 @@ def test_glob_and_grep_are_judged_by_their_paths(proj):
 
 
 def test_drafting_cap_comes_from_the_policy(repo):
-    (repo / POLICY_FILE).write_text('[actions]\n"fs.read" = "allow"\n[budget]\ndrafting_usd = 0.5\n')
+    (repo / POLICY_FILE).write_text('[budget]\ndrafting_usd = 0.5\n')
     make_key()
     proj = Project.init(repo)
     drafter = FakeDrafter(docs())

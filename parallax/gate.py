@@ -4,8 +4,8 @@ Order: guard (protected paths, reads outside the allowed roots) -> the scope -> 
 - With a Scope (a build from an approved plan), routine work inside the worktree is allowed, and
   anything that crosses the boundary must be in the plan: reads outside the worktree only in the
   plan's roots, network only to the plan's domains, any other tool refused.
-- Without one (drafters, `parallax run`, evals), the policy file rules. "ask" means deny and
-  record: nothing waits on a human mid-run.
+- Without one, only a read-only stage (the drafters) runs: reads inside the allowed roots are
+  granted; anything else is refused.
 Repeated refusals of the same call mean the agent is stuck: it's stopped and you're told.
 """
 from __future__ import annotations
@@ -18,7 +18,6 @@ from urllib.parse import urlparse
 from . import guard
 from .agents.base import Permission, PermissionFn
 from .core import Project
-from .policy import ALLOW
 
 ROUTINE = ("fs.read", "fs.write", "shell.run")
 
@@ -85,10 +84,12 @@ def make_permission_fn(
 
         if scope is not None:
             return _rule_by_scope(project, task_id, scope, action, detail)
-        res = project.check(task_id, action, detail, defer_asks=True)
-        if res["ruling"] == ALLOW:
+        if read_only and action == "fs.read":  # passed the read check above
+            project.ledger.append("action.granted", "agent", detail, task=task_id, action=action, key=detail)
             return Permission(True)
-        return Permission(False, f"refused: {res['entry']['data']['why']}")
+        why = "no approved plan: only a read-only stage runs without one"
+        project.ledger.append("action.refused", "agent", detail, task=task_id, action=action, key=detail, why=why)
+        return Permission(False, f"refused: {why}")
 
     def permission_fn(action: str, detail: str = "", paths: list[str] | None = None) -> Permission:
         nonlocal stopped

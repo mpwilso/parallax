@@ -12,7 +12,7 @@ Out of reach, stated plainly: Parallax runs as your OS user. Anything else runni
 ## The two layers
 
 1. **The OS sandbox** (Claude Code's Bash sandbox, bubblewrap on Linux and WSL2). Every shell command the maker runs: writes only in its worktree and never to the protected paths or the shared `.git`; no reads of `$HOME`, `/mnt` or the approval key except the worktree, the task's venv, the shared `.git` (read-only) and the plan's reads; no network except the plan's domains; no unsandboxed escape hatch; and it refuses to run without a sandbox. Parallax generates these rules from the approved plan and writes them outside the worktree.
-2. **The tool layer** (Parallax's hook on every tool call). Read, Edit, Write, NotebookEdit, WebFetch and anything else. Protected paths are refused whatever the policy says; anything the plan doesn't list is refused; "ask" is refused and recorded.
+2. **The tool layer** (Parallax's hook on every tool call). Read, Edit, Write, NotebookEdit, WebFetch and anything else. Protected paths are refused whatever any setting says; anything the plan doesn't list is refused; "ask" is refused and recorded.
 
 Preflight tests both before every launch, with the build's own rules, and refuses to launch if either would let a protected path be written. Preflight tests the rules in `srt` 1.0; the maker's commands run in Claude Code's own copy of the sandbox runtime. They were checked against each other live (M9), not on every launch.
 

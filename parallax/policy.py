@@ -1,23 +1,16 @@
-"""Policy: what agents may do on their own, what needs a human, what's off limits.
+"""Policy: the limits, budgets and rules you set for this repo, in parallax.policy.toml.
 
-Anything not listed is denied. There is no wildcard allow.
-Exact rules match one exact detail (a command, a path) and win over the action-level ruling.
-The eval policy uses them to allow only the test command.
+There are no per-action rulings. Agents do routine work inside their worktree; anything that
+crosses the boundary must be in the approved plan; protected paths are never writable; merging
+is always yours and isn't a setting. Unknown tables and settings are errors, never ignored.
 """
 from __future__ import annotations
 
-import os
 import re
 import tomllib
 from pathlib import Path
 
-ALLOW, ASK, DENY = "allow", "ask", "deny"
-RULINGS = {ALLOW, ASK, DENY}
-# promote_after, evidence_days and law_after are kept for earned autonomy (M14); nothing reads them yet
-DEFAULT_LIMITS = {
-    "max_parallel": 4, "stuck_after": 3, "stale_minutes": 60,
-    "promote_after": 10, "evidence_days": 30, "law_after": 3,
-}
+DEFAULT_LIMITS = {"max_parallel": 4, "stuck_after": 3, "stale_minutes": 60}
 DEFAULT_BUDGET = {"drafting_usd": 2.0, "small_cap_usd": 5.0, "large_cap_usd": 20.0}  # estimated dollars
 DEFAULT_LAUNCH = {"auto_launch_usd": 3.0, "review_paths": [], "review_plans": False}
 DEFAULT_DRAFT = {"model": "claude-sonnet-5-5"}  # a fifth of Opus's drafting cost, no more redrafts (docs/plan.md)
@@ -31,27 +24,10 @@ DEFAULT_CHECK = {
     "rework_cap": 3,               # rework cycles before the task comes to you
     "test_command": "python -m pytest -q -p no:cacheprovider -o junit_family=xunit1 --junitxml={junit} {tests}",
 }
-WORKTREE_TOKEN = "<worktree>"
 
 DEFAULT_POLICY = """\
-# Parallax policy. Anything not listed here is denied.
-# allow = agent may do it, logged
-# ask   = becomes a pending decision in your inbox
-# deny  = refused, logged
-#
-# Merging is not a policy setting. It is always a human decision.
-
-[actions]
-"fs.read"   = "allow"
-"fs.write"  = "ask"
-"shell.run" = "ask"
-"git.commit" = "ask"
-"net.fetch" = "deny"
-"git.push"  = "deny"
-
-# Exact rules match one exact command or path and win over [actions].
-# [exact."shell.run"]
-# "pytest -q" = "allow"
+# Parallax policy. Agents do routine work inside their worktree; anything that crosses the
+# boundary must be in the approved plan. Merging is not a setting: it is always yours.
 
 [limits]
 max_parallel  = 4    # tasks running at once
@@ -96,22 +72,6 @@ url = ""                   # where the app answers, on this machine only, e.g. "
 """
 
 
-def normalize_detail(action: str, detail: str, worktree: str | Path | None = None) -> str:
-    """The same request from different tasks gets the same key, so exact rules line up."""
-    detail = detail.strip()
-    if not worktree:
-        return detail
-    wt = os.path.normpath(str(worktree))
-    if action.startswith("fs.") and os.path.isabs(detail):
-        full = os.path.normpath(detail)
-        if os.path.normcase(full).startswith(os.path.normcase(wt) + os.sep):
-            return os.path.relpath(full, wt).replace(os.sep, "/")
-        return detail
-    for form in {wt, Path(wt).as_posix()}:
-        detail = re.sub(re.escape(form), WORKTREE_TOKEN, detail, flags=re.IGNORECASE)
-    return detail
-
-
 LOCAL_URL = re.compile(r"^http://(127\.0\.0\.1|localhost):\d+(/|$)")
 
 
@@ -135,26 +95,10 @@ def _ui_tester(cfg: dict) -> dict:
     return out
 
 
-def _check_table(where: str, table: dict[str, str]) -> None:
-    bad = {a: r for a, r in table.items() if not isinstance(r, str) or r not in RULINGS}
-    if bad:
-        raise ValueError(f"unknown rulings in {where}: {bad}")
-    if "git.merge" in table:
-        raise ValueError("git.merge can't be set in policy; merging is always a human call")
-
-
 class Policy:
-    def __init__(self, actions: dict[str, str], limits: dict[str, int] | None = None,
-                 exact: dict[str, dict[str, str]] | None = None, budget: dict[str, float] | None = None,
+    def __init__(self, limits: dict[str, int] | None = None, budget: dict[str, float] | None = None,
                  build: dict[str, str] | None = None, check: dict | None = None, launch: dict | None = None,
                  ui_tester: dict | None = None, draft: dict | None = None):
-        _check_table("[actions]", actions)
-        self.exact = {action: dict(table) for action, table in (exact or {}).items() if table}
-        if "git.merge" in self.exact:
-            raise ValueError("git.merge can't be set in policy; merging is always a human call")
-        for action, table in self.exact.items():
-            _check_table(f"exact rules for {action!r}", table)
-
         limits = dict(limits or {})
         unknown = set(limits) - set(DEFAULT_LIMITS)
         if unknown:
@@ -167,7 +111,6 @@ class Policy:
             raise ValueError(f"unknown budget settings: {sorted(unknown)}")
         if any(not isinstance(v, (int, float)) or isinstance(v, bool) or v <= 0 for v in budget.values()):
             raise ValueError("budget settings must be dollar amounts above 0")
-        self.actions = actions
         self.limits = {**DEFAULT_LIMITS, **limits}
         self.budget = {**DEFAULT_BUDGET, **budget}
         build = dict(build or {})
@@ -205,28 +148,23 @@ class Policy:
             raise ValueError("[draft] model must be a Claude model name")
         self.draft = {**DEFAULT_DRAFT, **draft}
 
+    TABLES = ("limits", "budget", "build", "check", "launch", "ui_tester", "draft")
+
     @classmethod
     def from_dict(cls, data: dict) -> "Policy":
-        if "profiles" in data:
-            raise ValueError("profiles are gone. every task uses [actions]; remove [profiles]")
-        return cls(data.get("actions", {}), data.get("limits", {}), data.get("exact", {}), data.get("budget", {}),
-                   data.get("build", {}), data.get("check", {}),
-                   data.get("launch", {}), data.get("ui_tester", {}), data.get("draft", {}))
+        gone = {"actions": "[actions] is gone: routine work in the worktree is allowed, and anything else follows "
+                           "the approved plan. remove the table",
+                "exact": "[exact] rules are gone with [actions]. remove them",
+                "profiles": "profiles are gone. remove [profiles]"}
+        for table, why in gone.items():
+            if table in data:
+                raise ValueError(why)
+        unknown = sorted(set(data) - set(cls.TABLES))
+        if unknown:
+            raise ValueError(f"unknown policy tables: {unknown}")
+        return cls(**{t: data.get(t, {}) for t in cls.TABLES})
 
     @classmethod
     def load(cls, path: Path) -> "Policy":
         with Path(path).open("rb") as f:
             return cls.from_dict(tomllib.load(f))
-
-    def exact_ruling(self, action: str, key: str) -> str | None:
-        return self.exact.get(action, {}).get(key)
-
-    def ruling(self, action: str, key: str | None = None) -> str:
-        if key is not None:
-            exact = self.exact_ruling(action, key)
-            if exact:
-                return exact
-        return self.actions.get(action, DENY)
-
-    def listed(self, action: str, key: str | None = None) -> bool:
-        return action in self.actions or (key is not None and self.exact_ruling(action, key) is not None)

@@ -14,11 +14,11 @@ from pathlib import Path
 
 from . import status
 from .ledger import Ledger
-from .policy import ALLOW, DEFAULT_POLICY, DENY, Policy, normalize_detail
+from .policy import DEFAULT_POLICY, Policy
 
 STATE_DIR = ".parallax"
 POLICY_FILE = "parallax.policy.toml"
-INBOX_KINDS = {"decision.requested", "disagreement.raised", "stuck.raised"}
+INBOX_KINDS = {"disagreement.raised", "stuck.raised"}
 TASK_ENV, ROOT_ENV = "PARALLAX_TASK", "PARALLAX_ROOT"  # set for every maker process
 
 
@@ -101,7 +101,8 @@ class Project:
         (root / STATE_DIR / ".gitignore").write_text("*.lock\n")
         project = cls(root)
         if not project.ledger.entries():
-            project.ledger.append("project.init", actor, "initialized", policy=project.policy.actions)
+            project.ledger.append("project.init", actor, "initialized",
+                                  policy_sha=hashlib.sha256(policy_path.read_bytes()).hexdigest())
         return project
 
     @classmethod
@@ -142,45 +143,12 @@ class Project:
         _git(wt, "add", "-N", ".")  # include new files in the diff without staging content
         return _git(wt, "diff", *args, t["base"])
 
-    # policy checks ---------------------------------------------------------
-    def check(self, task_id: str, action: str, detail: str = "", actor: str = "agent", *,
-              defer_asks: bool = False) -> dict:
-        """An agent asks to take an action. Returns the ruling and logs it.
-
-        defer_asks: during a run nothing waits on a human, so "ask" is refused and recorded
-        instead of raising an inbox item.
-        """
-        t = self.task(task_id)
-        key = normalize_detail(action, detail, t["worktree"])
-        ruling = self.policy.ruling(action, key)
-        refs = {"task": task_id, "action": action, "key": key}
-        if ruling == ALLOW:
-            e = self.ledger.append("action.granted", actor, detail, **refs)
-        elif ruling == DENY:
-            listed = self.policy.listed(action, key)
-            why = "denied by policy" if listed else "not in policy, denied by default"
-            e = self.ledger.append("action.refused", actor, detail, **refs, why=why)
-        elif defer_asks:
-            e = self.ledger.append("action.refused", actor, detail, **refs, asked=True,
-                                   why="needs your approval, so it's refused and recorded. nothing waits mid-run")
-            ruling = DENY
-        else:
-            e = self.ledger.append("decision.requested", actor, detail, **refs)
-        return {"ruling": ruling, "entry": e}
-
     # inbox -----------------------------------------------------------------
     def inbox(self) -> list[dict]:
-        """Permission requests and maker/checker disagreements nobody has ruled on yet."""
+        """Disagreements and stops nobody has ruled on yet."""
         entries = self.ledger.entries()
         resolved = {e["data"]["decision"] for e in entries if e["kind"] == "decision.resolved"}
         return [e for e in entries if e["kind"] in INBOX_KINDS and e["id"] not in resolved]
-
-    def decision_outcome(self, decision_id: str) -> dict | None:
-        """The human's ruling on an inbox item, or None while it's still pending."""
-        for e in self.ledger.entries():
-            if e["kind"] == "decision.resolved" and e["data"]["decision"] == decision_id:
-                return e
-        return None
 
     def resolve(self, decision_id: str, approve: bool, reason: str, actor: str = "human") -> dict:
         """For a disagreement, approve sides with the maker and reject sides with the checker."""

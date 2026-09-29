@@ -17,7 +17,7 @@ from parallax.agents.claude import tool_to_action
 from parallax.cli import main
 from parallax.core import POLICY_FILE, Project
 from parallax.gate import Scope, host_allowed, make_permission_fn
-from parallax.runner import flag_stale_runs
+from parallax.build import flag_stale_runs
 from test_m8 import INTENT, WANT, docs, make_key
 
 # not inside a sandbox already: a sandbox won't start nested in one (the M9 spike)
@@ -163,7 +163,7 @@ def test_the_cap_counts_everything_the_task_spent(proj):
 
 
 def test_the_setup_command_makes_the_venv_once_as_you(repo):
-    (repo / POLICY_FILE).write_text('[actions]\n[build]\nsetup = "mkdir -p \\"$PARALLAX_VENV/bin\\" && pwd > \\"$PARALLAX_VENV/where\\""\n')
+    (repo / POLICY_FILE).write_text('[build]\nsetup = "mkdir -p \\"$PARALLAX_VENV/bin\\" && pwd > \\"$PARALLAX_VENV/where\\""\n')
     make_key()
     proj = Project.init(repo)
     tid = approved_task(proj)
@@ -211,15 +211,6 @@ def test_a_build_allows_routine_work_and_refuses_the_boundary(proj, tmp_path):
     for (tool, args), ok in cases:
         assert fn(*tool_to_action(tool, args)).allowed is ok, (tool, args)
     assert kinds(proj, "decision.requested") == []  # nothing waits on you
-
-
-def test_ask_means_refuse_and_record_without_an_inbox_item(proj):
-    t = proj.new_task("x")
-    fn = make_permission_fn(proj, t["task"], Path(t["worktree"]))  # the policy: fs.write = ask
-    p = fn("fs.write", "a.txt", ["a.txt"])
-    assert not p.allowed and "refused and recorded" in p.message
-    [e] = [e for e in kinds(proj, "action.refused") if e["data"].get("asked")]
-    assert proj.inbox() == []
 
 
 def test_host_matching():

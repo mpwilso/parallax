@@ -9,8 +9,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Protocol
 
-VERDICTS = {"pass", "fail", "no_finding"}
-AGREE = {"pass", "no_finding"}  # no_finding is a real answer, not a failure
 
 
 class AgentUnavailable(Exception):
@@ -36,13 +34,6 @@ PermissionFn = Callable[[str, str, list[str]], Permission]
 class AgentResult:
     status: str  # "done" | "gave_up" | "error" | "conflict" (a finding goes against the approved plan)
     summary: str
-    cost_usd: float | None = None
-
-
-@dataclass
-class Verdict:
-    verdict: str  # one of VERDICTS
-    findings: list[str] = field(default_factory=list)
     cost_usd: float | None = None
 
 
@@ -79,10 +70,6 @@ class UITester(Protocol):
 class Agent(Protocol):
     def run(self, goal: str, cwd: Path, permission_fn: PermissionFn, stage: str = "build",
             env: dict[str, str] | None = None) -> AgentResult: ...
-
-
-class Checker(Protocol):
-    def review(self, goal: str, material: str, kind: str) -> Verdict: ...
 
 
 # Parallax sets this around background work (sessions.Recorder), so every session is in the
