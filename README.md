@@ -54,7 +54,7 @@ The maker never sees your key, your home folder or the network the plan doesn't 
 
 ## Status and known limits
 
-A working prototype I use on this repo: the tasks it did are in [docs/tasks/](docs/tasks/), and three real runs through the UI, with every state, cost and the bugs they found, are in [docs/ui-runs/](docs/ui-runs/README.md). How it got here: [docs/history.md](docs/history.md).
+A working prototype I use on this repo: a task it did on itself, with its record, is in [docs/tasks/](docs/tasks/), and three real runs through the UI, with every state, cost and the bugs they found, are in [docs/ui-runs/](docs/ui-runs/README.md). How it got here: [docs/history.md](docs/history.md).
 
 - **Linux or WSL2 only.** It needs Claude Code's sandbox (bubblewrap). Native Windows isn't supported; macOS is untested.
 - **It needs Claude Code**, logged in, and the Claude Agent SDK. Costs are Claude Code's estimates at list prices; on a subscription your real limit is the plan's usage limits, which Parallax can't see.
