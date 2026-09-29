@@ -48,22 +48,37 @@ Setup on Windows, once, about 30 minutes:
    wsl --unregister Ubuntu-24.04
    ```
 3. `wsl -d parallax`, then as root create your user: `adduser <you>` and `usermod -aG sudo <you>`.
-4. Install the tools, as root:
+4. Install the tools, as root. Apt's Node is too old for the sandbox runtime, so take Node from NodeSource:
    ```bash
-   apt update && apt install -y git bubblewrap socat ripgrep nodejs npm python3 curl
+   apt update && apt install -y git bubblewrap socat ripgrep python3 curl ca-certificates
+   apt remove -y nodejs npm
+   curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+   apt install -y nodejs
    npm install -g @anthropic-ai/sandbox-runtime
    ```
-   Then as your user: uv (`curl -LsSf https://astral.sh/uv/install.sh | sh`) and Claude Code (`curl -fsSL https://claude.ai/install.sh | bash`, then run `claude` to log in).
-5. As your user, while Windows drives are still mounted, clone Parallax into the WSL filesystem and install it:
+5. Become your user and install uv and Claude Code. Each installer writes `~/.local/bin/env` and leaves the running shell's PATH alone, so source it before using either:
    ```bash
+   su - <you>
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   curl -fsSL https://claude.ai/install.sh | bash
+   source ~/.local/bin/env
+   claude                                        # log in
+   ```
+6. As your user, while Windows drives are still mounted, clone Parallax into the WSL filesystem and install it:
+   ```bash
+   git config --global --add safe.directory /mnt/c/<path to parallax>
+   git config --global --add safe.directory /mnt/c/<path to parallax>/.git
    git clone /mnt/c/<path to parallax> ~/code/parallax
+   git config --global --unset safe.directory /mnt/c/<path to parallax>/.git
+   git config --global --unset safe.directory /mnt/c/<path to parallax>
+   git -C ~/code/parallax remote remove origin   # it points into /mnt/c, which step 7 unmounts
    uv tool install --editable "$HOME/code/parallax[claude]"
    ```
-   Optional: set up an SSH signing key, so accept commits are signed.
-6. Harden the distro. See [Harden WSL](#harden-wsl).
-7. Start Claude Code, and run Parallax, from inside the distro.
+   Git won't touch a `/mnt/c` repo it doesn't trust, and it checks the repo path and its `.git` path separately, which is why both lines are there and why they come before the clone; the new copy in `~/code/parallax` is yours, so the exception goes away again right after. If you have a GitHub remote, set that as `origin` instead of removing it. Optional: set up an SSH signing key, so accept commits are signed.
+7. Harden the distro. See [Harden WSL](#harden-wsl).
+8. Start Claude Code, and run Parallax, from inside the distro.
 
-On macOS or Linux, skip the WSL steps: install git, socat and bubblewrap (Linux only), `@anthropic-ai/sandbox-runtime`, uv and Claude Code, then run step 5 with your own clone.
+On macOS or Linux, skip the WSL steps: install git, socat and bubblewrap (Linux only), `@anthropic-ai/sandbox-runtime`, uv and Claude Code, then run step 6 with your own clone. The `/mnt/c` parts of that step — the two `safe.directory` lines and the `origin` removal — are Windows only.
 
 Then check the machine:
 

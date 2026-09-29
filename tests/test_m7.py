@@ -118,6 +118,27 @@ def test_doctor_report_lines_up_and_the_cli_exit_code_follows_failures(tmp_path,
     assert capsys.readouterr().out.endswith("ready.\n")
 
 
+def test_the_readme_doctor_sample_matches_what_doctor_prints(tmp_path, monkeypatch):
+    """The README's sample output is the real thing, padding and all."""
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
+    blocks = [b.strip("\n").splitlines() for b in readme.split("```")[1::2]]
+    sample, = [b for b in blocks if b and b[0].startswith("platform ")]
+
+    home = tmp_path / "home"  # an existing key, so the detail is the path, not "created ..."
+    key = home / ".config" / "parallax" / "key"
+    key.parent.mkdir(parents=True)
+    key.parent.chmod(0o700)
+    key.write_text("0" * 64 + "\n")
+    key.chmod(0o600)
+    monkeypatch.setenv("HOME", str(home))
+
+    m = machine(tmp_path)
+    m.key = key
+    checks = doctor.run(m)
+    assert not [c for c in checks if c.status == doctor.FAIL]  # so "ready." is the honest last line
+    assert sample == doctor.report(checks) + ["ready."]
+
+
 # worktrees ----------------------------------------------------------------------------
 
 def test_worktrees_live_outside_the_repo(repo, private_home):
