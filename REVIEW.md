@@ -13,7 +13,7 @@ How the blind checker reviews a change to Parallax. You own this file; agents ca
 
 ## Severities
 
-- blocker: wrong, unsafe, or breaks something that worked.
+- blocker: wrong, unsafe, or breaks something that worked. Any em dash added in a changed file is a blocker; Parallax also checks for it by code.
 - major: likely wrong in a case that matters, or a missing test for new behavior.
 - minor: works, but should be better.
 - nit: style or wording.

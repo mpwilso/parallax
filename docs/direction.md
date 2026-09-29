@@ -1,4 +1,10 @@
-# Parallax: direction for the next pass
+"Parallax is hands-free. Execution happens without me. I only make judgment calls, and when I make them, I have everything I need to make them well. Any feature that adds work for me instead of removing it is wrong."
+
+This is the point of Parallax, and the test for every feature.
+
+# Parallax: direction
+
+**Changed on 2026-09-29, after the first real tasks.** The flow is hands-free from M12 on: one entry point (`parallax do`), drafting and launch without me, and exactly one inbox item per task. Where the sections below and that change disagree, the change wins; the sections have been rewritten to match. The plan for it is in docs/plan.md.
 
 This is the brief for restructuring Parallax. Read all of it before planning. Where something is unclear or two parts conflict, ask me instead of assuming. Where this brief names a Claude Code setting or SDK option, check it against the current docs before relying on it, and say so if it doesn't exist.
 
@@ -36,15 +42,16 @@ Everything built in M1 to M6 stays unless your plan argues for cutting it. Tests
 
 ## Gates
 
-- **Small task, 2 touches:** approve intent and plan together, then merge.
-- **Large task, 3 touches:** approve intent; approve spec and plan together; merge.
+- **Small task, 1 touch:** accept or reject at Ready. Merging stays a command I run.
+- **Plan review, +1 touch, only when:** the intent says `size: large`, the plan touches a path in the policy's `review_paths`, or `review_plans = true`.
+- **Launch confirm, +1 touch, only when:** the budget cap is over the policy's `auto_launch_usd` (default $3). It shows the cost and the bottom line, nothing else.
 
-Plan approval includes the task's cost estimate and budget cap. That's the only cost confirmation. Agents that run before the plan exists (drafting intent, spec, plan) use a fixed per-call ceiling from the policy file. Hitting any cap stops the task and sends it to me as Decision needed.
+Under those, code approves the plan and launches, under the rule in the policy file; the approval is signed and names its rule. Drafting calls have a fixed per-call ceiling from the policy file, and the plan's cap covers the whole task. Hitting any cap stops the task and sends it to me as Decision needed.
 
 ## Lifecycle
 
-1. **Intent.** `parallax intent new` creates the task, its branch and worktree, and takes a few rough sentences from me. An agent drafts `docs/tasks/<id>/intent.md`: problem, outcome, constraints, `kind: bug | feature | docs | chore`, `size: small | large`. I edit if needed.
-2. **Spec** (large only) and **plan**, drafted by agents. The plan lists: files to change, order, the tests that prove it's done, network domains needed (default none), any reads outside the worktree, any binaries or symlinks it will add, any per-task REVIEW.md tightening, the cost estimate, and the budget cap. Nothing is built without an approved plan. At each approval, the approved file's hash goes in the ledger.
+1. **Intent.** `parallax do "<the work>"` (or the UI's intake box) creates the task, its branch and worktree, from a few plain sentences. An agent drafts `docs/tasks/<id>/intent.md`: problem, outcome, constraints, the paths the work may touch, `kind: bug | feature | docs | chore`, `size: small | large`. I never edit a drafted file; if it's wrong, I reject with a reason.
+2. **Spec** (large only) and **plan**, drafted by agents. The plan lists: files to change, order, the tests that prove it's done, which outcome each test covers, network domains needed (default none), any reads outside the worktree, any binaries or symlinks it will add, any per-task REVIEW.md tightening, the cost estimate, and the budget cap. Code checks the plan against the intent (scope, coverage, budget) and lint; a mismatch goes back to the drafter automatically, up to 2 times, then to me as Decision needed. Nothing is built without an approved plan, by me or by the policy's rule. At each approval, the approved file's hash goes in the ledger.
 3. **Build.** The maker runs inside Claude Code's sandbox:
    - Explicit tool allowlist. Settings are loaded from outside the worktree so the maker can't change its own configuration.
    - Scrubbed environment: no API keys, tokens, or credentials. Reads outside the worktree are denied by default, including `$HOME` and `/mnt`, except a short allowlist the plan justifies.
@@ -80,7 +87,7 @@ Plan approval includes the task's cost estimate and budget cap. That's the only 
 
 Build it into the eval first. It joins the live loop only if the eval shows it catches what the checker misses.
 
-**Approvals.** Only I can approve. Approval requires a secret the sandbox can't read or write, not an environment variable or a check the maker can run. The UI:
+**Approvals.** Only I approve, or code under a rule I set in the policy file. Approval requires a secret the sandbox can't read or write, not an environment variable or a check the maker can run. The UI:
 - uses a per-launch token,
 - checks Host and Origin headers,
 - escapes all agent-written text,
@@ -90,11 +97,7 @@ Blocking the maker from the UI's port is a second layer, not the main one. Test 
 
 **Source of truth.** The ledger is the record of who decided what, and when. The files in `docs/tasks/` are the work itself. The implementation record and trailers are generated by code from the ledger.
 
-**Earned autonomy** reuses the existing promotions mechanism, moved up to the gates. Example: after enough clean runs, docs-only small tasks could have their plan auto-approved with a default budget cap from the policy file.
-- A clean run means I merged it without edits. Parallax confirms this itself on the next command or pulse: the accepted commit is in the base branch's history, unchanged, and the result goes in the ledger.
-- The class is defined by path patterns, and the patterns always exclude protected paths, symlinks, and file mode changes.
-- The class is checked against the actual diff at Ready; if the diff leaves the class, it becomes Decision needed.
-- Proposed from evidence, approved by me, recorded.
+**Earned autonomy**, later: `auto_launch_usd` grows for kinds of tasks with a clean record (merged unchanged), proposed from that evidence and approved by me.
 
 ## Output shape
 
@@ -176,7 +179,7 @@ Keep governance docs few so they don't drift:
 
 ## Out of scope for this pass
 
-- UI redesign and Playwright tests (next pass). Only change the UI where this pass requires it.
+- Playwright tests. The UI is now the main way I use Parallax (see docs/plan.md), and the terminal is for power use.
 - Cold-read check and Vale (later, if lint isn't enough).
 - Graft (later, as an eval experiment).
 - impeccable (later, a one-time UI audit).

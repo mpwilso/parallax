@@ -1,7 +1,7 @@
 **Type:** FYI
-**Bottom line:** Eight milestones rebuild Parallax around intent, plan, build, check, and accept, core loop first.
-**Not looked at:** sandbox and budget behavior in WSL2, verified in M9.
-**Next:** M7 and M8 are built; M9 is next.
+**Bottom line:** M7 to M11 built the core loop; M12 to M16 make it hands-free.
+**Not looked at:** drafters on the structured intent, until M12 runs live.
+**Next:** M12, hands-free in the terminal.
 
 ## Changed since last time
 
@@ -214,31 +214,38 @@ From the brief, lighter versions:
   ```
   followed by the commit message ending in `Parallax-Task: 3f9a1c`, `Intent:`, `Approved-By:`, `Verified-By:`, `Ledger-Head:`.
 
-#### M12: the UI for the lifecycle
+### 5. The hands-free direction (2026-09-29): M12 to M16
 
-- Inbox items become gates, Decision needed, and Ready, in the output shape. Accept and merge are marked human-only, with the command to run.
-- Approving in the page uses the approval key through the server, which runs as you outside the sandbox.
-- Tests confirm the token, the Host and Origin checks, escaping of agent text, the content security policy, and that sandboxed Bash can't reach the port.
-- **You run** `parallax ui` in WSL, then open the printed link in your Windows browser. **You see** task 3f9a1c at Ready, with an accept instruction marked "only you can do this".
+The first real tasks worked end to end but stopped for a human at the intent, the plan, and every drafting slip: three rejections and a hand edit for a README fix. The point of Parallax, now at the top of docs/direction.md, is the test: execution happens without you; you make judgment calls with everything you need. The old M12 (UI), M13 (evals) and M14 (earned autonomy) are replaced by the milestones below. Earned autonomy shrinks to one later idea: `auto_launch_usd` grows for kinds of tasks with a clean record, proposed by evidence and approved by you.
 
-#### M13: evals in SWE-bench format, and stats
+Human touches for a normal small task when this is done: **one**, the accept or reject. Describing the work and running the merge don't count. Plan review (+1) only for `size: large`, `review_paths` or `review_plans`; launch confirm (+1) only when the cap is over `auto_launch_usd`. After a reject at Ready, each redrafted attempt gets a fresh cap from its new plan; the task's total shows on the card and in stats.
 
-- The 11 cases are converted to the instance format. About 10 new cases are added for known failure types, including behavior existing tests miss.
-- Adds the test-writer, in the eval only. The report shows catches, misses and false alarms with and without it, and with the maker's model versus the other checker model.
-- `parallax eval run` stays manual. `parallax stats` shows the first-pass check rate, rework cycles per task, how long decisions wait on you, and whether the eval results are older than the last change to CLAUDE.md, the policy, REVIEW.md or the prompts.
-- Tests changed in `test_m5.py`: the case format and `test_the_eval_policy_allows_only_the_test_command`, which moves to the sandbox.
-- **You run** `parallax eval check`, then `parallax stats`. **You see** `21 of 21 cases are sound.`, then:
-  ```
-  tasks          6 accepted, 1 stopped
-  first pass     4 of 6 passed the check first time
-  rework         0.5 cycles per task
-  waiting on you median 12 min, longest 3 h
-  eval results   current
-  ```
+#### M12: hands-free in the terminal
 
-#### M14: earned autonomy (after about 10 accepted tasks)
+- `parallax do "<work>"` returns at once. A detached pilot per task, started with the scrubbed environment: drafts the intent and plan; normalizes and lints them; checks the plan against the intent by code (scope, outcome coverage, budget); redrafts on its own up to 2 times, then Decision needed; approves and launches under the policy's rule (cap at most `auto_launch_usd`, small, no `review_paths`, `review_plans` off), signed and naming the rule; builds, checks and reworks. It ends in exactly one inbox item.
+- The intent gains `scope` (paths or globs the work may touch) and numbered outcomes; the plan's toml gains `covers`, mapping each outcome to its tests or steps.
+- Parallax never shows or saves its own output failing its own lint: drafted files are normalized, reports are fitted, and a drafted file that still fails goes back to the drafter.
+- An em dash added in a changed file is a blocking finding, found by code at the check stage and reworked before the checker runs. REVIEW.md says so too.
+- `parallax stats` shows human touches per task and the average, from the ledger. `intent new` and `draft` are cut.
+- **You confirm it:** in `~/code/parallax`, run `parallax do "remove the em dash on README.md line 81"`. It answers in two lines and gives your prompt back. A few minutes later `parallax inbox` shows one Ready item; `parallax show <id>` reads cleanly; you accept and run the merge it prints; `parallax stats` shows 1 touch for that task. You never approved an intent or a plan.
 
-- Classes are defined by path patterns that exclude protected paths, symlinks and mode changes. They're proposed from clean-merge evidence and approved by you.
-- A matching small task's plan is auto-approved, under the class's default estimated cap. The diff is checked against the class at Ready; if it leaves the class, it becomes Decision needed.
-- Laws can return here later on the same mechanism, using the rejection reasons kept in the ledger.
-- **You run** `parallax autonomy`. **You see** each class, its clean-run count, and whether it's proposed, approved, or not yet earned.
+#### M13: the one decision
+
+- Decision needed items become one question, its options, a code-written recommendation, and what it blocks; `parallax decide <task> <option>` answers. Launch confirm above `auto_launch_usd`, plan review, a reached cap (raise it, or drop), drafting that failed twice, intent against plan, tests that couldn't run, a checker error, the rework cap.
+- Reject at Ready sends your reason back to the drafters, who may redraft the intent too; the worktree resets and the pilot runs again. `--drop` ends the task.
+- **You confirm it:** with `review_paths = ["parallax/sandbox.py"]` in the policy, `parallax do` a small change to that file: one Decision needed item shows the plan and cost; `parallax decide <id> approve` runs it to Ready. Reject it with a reason, and a redrafted version reaches Ready without anything else from you.
+
+#### M14: the UI
+
+- The main way to use Parallax: an intake box, a board by state (drafting, building, checking, ready, needs you, done), a decision card per task readable in 30 seconds with the diff, intent and plan one click away, accept or reject with a reason plus keyboard shortcuts, live updates, and the merge command shown, never run. Plus the security tests: token, Host and Origin, escaping, a strict CSP with no inline script, and sandboxed Bash can't reach the port.
+- **You confirm it:** run `parallax ui`, open the link, type a small change in the box and press Enter. The card moves across the board on its own and lands in Ready; you open it, read it, press the accept key, and copy the merge command.
+
+#### M15: the light conductor
+
+- `do` may split work into tasks, each with its own worktree, sandbox, budget and inbox item, run in parallel up to `max_parallel`; tasks whose plans share files run one after another, the later based on the earlier's accepted commit. The split shows on the board; a confirm only if the total cap is over `auto_launch_usd`.
+- **You confirm it:** `parallax do` two unrelated small fixes; the board shows both building at once, then two Ready cards, each accepted on its own.
+
+#### M16: evals and stats
+
+- Cases in the SWE-bench format, run through `do`'s pipeline; the test-writer in the eval only; the report shows catches, misses and false alarms with and without it, per checker model; about 10 new cases you pick. Stats add first-pass rate, rework cycles and wait time. The old path (`task new`, `run`, the policy's `[actions]`, exact rules, "ask") is cut.
+- **You confirm it:** `parallax eval check` says all cases are sound; `parallax stats` shows touches per task averaging about 1.

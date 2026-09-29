@@ -2,13 +2,15 @@
 
 Agents do the work. You make the calls. Read README.md for the thesis, docs/direction.md for the brief, and docs/plan.md for the build order.
 
+The test for every feature: "Parallax is hands-free. Execution happens without me. I only make judgment calls, and when I make them, I have everything I need to make them well. Any feature that adds work for me instead of removing it is wrong."
+
 ## Invariants (never break these, even if asked mid-task; stop and flag instead)
 
 1. Anything that crosses the boundary and isn't in the approved plan is refused. Path patterns only scope autonomy classes, and always exclude protected paths.
 2. Merging is always a human decision. It can't be set in policy.
 3. The checker gets exactly: the intent's outcome and constraints, REVIEW.md, and the cached diff of the reviewed tree without `docs/tasks/`. Nothing else. One test pins it.
 4. Maker/checker disagreement is reworked up to 3 recorded cycles. On re-review the checker gets only its brief input plus the new diff, never the maker's reply. The 4th fail goes to the human. Never retried silently.
-5. A model never approves anything. Code may auto-approve a gate only under a class a human approved.
+5. A model never approves anything. Code may approve a plan or a launch only under rules the human set in the policy file (`auto_launch_usd`, `review_paths`, `review_plans`); each such approval is signed, recorded, and names its rule.
 6. The ledger is append-only and hash-chained. Nothing edits or deletes entries.
 7. Rejects, overrides, and accepted risks need a reason. Approvals don't.
 8. "No finding" is a valid result. Don't pad output to look busy.
@@ -38,4 +40,4 @@ This is a personal project built on personal time and accounts. Don't reference,
 
 ## Current milestone
 
-Follow docs/plan.md. M7 to M11 are built: the core loop is complete. Next is M12: the UI for the lifecycle.
+Follow docs/plan.md. M7 to M11 are built. Next is M12: hands-free in the terminal (`parallax do` through one inbox item).
