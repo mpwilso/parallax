@@ -1,0 +1,72 @@
+{
+ "case": "boltons-337",
+ "mode": "seeded",
+ "pr": "https://github.com/mahmoud/boltons/pull/338",
+ "issue": "https://github.com/mahmoud/boltons/issues/337",
+ "inferred": [
+  "3",
+  "4",
+  "5"
+ ],
+ "reticle_kept": {
+  "asked": 1,
+  "inferred": 4
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "undo the hunk at boltons/dictutils.py:74",
+   "hidden": "0 of 1 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker: The diff sets PY3 = False in the except branch but never sets PY3 = True in the try branch. Unless PY3 is defined elsewhere in the file, `if PY3:` raises NameError when the module is imported on Python 3, so the whole module breaks.",
+    "major: __setstate__ now receives a list of pairs. Pickles written by earlier versions stored a dict state (with _map and _headers). Loading them would pass that dict to update_extend and give wrong data or an error. This breaks the constraint on l"
+   ],
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "test_only": [
+    "major: No regression test is in the diff. The outcome requires tests for the empty, single-value and multi-value cases, and the test file is not touched."
+   ]
+  },
+  {
+   "broken": "undo the hunk at boltons/dictutils.py:178",
+   "hidden": "7 of 26 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker: The diff removes `self._clear_ll()` from `__init__`. A plain `OMD()` or `OMD({})` no longer builds its linked list (`_map` and the root sentinel), so `add`, `__setitem__` and the like fail. The diff doesn't show whether `update_extend` or `",
+    "blocker: `__getstate__` and `__setstate__` probably don't fix the bug. For a dict subclass, pickle protocol 2 and later rebuilds the object with `__newobj__`, which does not call `__init__`. It then replays the dict items through `__setitem__` (SETI",
+    "major: The fix is gated on PY3, so on Python 2 pickling stays broken. The outcome does not limit the fix to Python 3, and the constraints require compatibility with the supported Python versions. The new `PY3` flag only exists to work around this.",
+    "major: Old pickles are not handled. Data pickled by earlier versions carries a dict state, and `__setstate__` would pass it to `update_extend` as if it were a list of pairs. That breaks the constraint on loading earlier pickles."
+   ],
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "test_only": [
+    "major: No regression test was added, although the outcome requires one covering the empty, single-value and multi-value cases."
+   ]
+  },
+  {
+   "broken": "undo the hunk at boltons/dictutils.py:194",
+   "hidden": "25 of 26 pass",
+   "second_eye": "catch",
+   "findings": [
+    "major: The diff has no regression test. The outcome requires tests for the empty, single-value and multi-value cases (for example OMD([('a',1),('b',2),('a',3)])). They must fail before the fix and pass after it. Nothing was added, so nothing shows"
+   ],
+   "reticle": "miss",
+   "reticle_with_inferred": "catch",
+   "test_only": []
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "findings": [],
+  "reticle": "right",
+  "inferred_notes": 1,
+  "test_only": [
+   "major: The diff has no regression test. The outcome requires tests for the empty, single-value and multi-value pickle cases, including order, equality and use of add, pop and popall after loading. The test file is not touched."
+  ]
+ },
+ "cost_usd": 0.105,
+ "seconds": 86.1,
+ "second_eye_from": "48a3a5",
+ "reticle_from": "48a3a5"
+}

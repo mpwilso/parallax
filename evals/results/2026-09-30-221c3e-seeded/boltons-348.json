@@ -1,0 +1,46 @@
+{
+ "case": "boltons-348",
+ "mode": "seeded",
+ "pr": "https://github.com/mahmoud/boltons/pull/349",
+ "issue": "https://github.com/mahmoud/boltons/issues/348",
+ "inferred": [
+  "3",
+  "4",
+  "5",
+  "6"
+ ],
+ "reticle_kept": {
+  "asked": 4,
+  "inferred": 5
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "undo the hunk at boltons/cacheutils.py:240",
+   "hidden": "11 of 18 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker: The diff deletes `super().__setitem__(key, value)` from the new-key branch and adds nothing to the overwrite branch. The overwrite branch (`link[VALUE] = value`) still never updates the underlying dict, so `dict(cache)` and `values()` still",
+    "major: No regression test was added for the overwrite case on `LRU` and `LRI`. The outcome requires one."
+   ],
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "test_only": []
+  }
+ ],
+ "real_fix": {
+  "second_eye": "false alarm",
+  "findings": [
+   "major: The change removes Python 2.7 from the CI matrix and adds a separate tests-py27 job in a container. The outcome and constraints do not ask for any CI change. It alters how tests run and should go in a separate change."
+  ],
+  "reticle": "right",
+  "inferred_notes": 0,
+  "test_only": [
+   "major: Outcome 5 requires a regression test for the overwrite case on LRU and LRI. The diff has no test changes, so nothing shows the bug is covered or that a test fails before the fix."
+  ]
+ },
+ "cost_usd": 0.0444,
+ "seconds": 42.1,
+ "second_eye_from": "48a3a5",
+ "reticle_from": "48a3a5"
+}

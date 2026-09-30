@@ -1,0 +1,75 @@
+{
+ "case": "tabulate-231",
+ "mode": "seeded",
+ "pr": "https://github.com/astanin/python-tabulate/pull/232",
+ "issue": "https://github.com/astanin/python-tabulate/issues/231",
+ "inferred": [
+  "2",
+  "3",
+  "4"
+ ],
+ "reticle_kept": {
+  "asked": 2,
+  "inferred": 4
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "flip == to != at tabulate/__init__.py:105",
+   "hidden": "55 of 159 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker: The comparison is inverted. `_is_separating_line_value` returns True when the stripped value is NOT equal to SEPARATING_LINE. So any row whose first or second cell is an ordinary string is treated as a separating line, and real SEPARATING_L",
+    "blocker: The change only alters how a row is detected. It does nothing to make the separator line fill the padded width for psql, grid, pretty or github. The reported `|---------+-------|` line is still not produced, so outcomes 1 and 2 are not met."
+   ],
+   "test_only": [
+    "major: No regression test was added for the reported table with psql and its exact expected output, as outcome 4 requires."
+   ]
+  },
+  {
+   "broken": "change 1 to 2 at tabulate/__init__.py:111",
+   "hidden": "155 of 159 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker: The diff only changes the detection helper. It does not change how separator lines are rendered, so the psql output for the reported table (`|---------+-------|`) is not shown to be fixed. The padded SEPARATING_LINE cell problem is in the r",
+    "blocker: The `len(row) >= 1` check became `len(row) >= 2` for the first column. A one-column row `[SEPARATING_LINE]` is no longer detected as a separator. That breaks existing behavior for single-column tables. It also means a row of type str, such ",
+    "major: `value.strip() == SEPARATING_LINE` treats a cell with surrounding whitespace as a separator. A user cell like ' \\u001e ' now becomes a separator, which widens detection beyond the marker. Also, `type(value) == str` rejects str subclasses, u"
+   ],
+   "test_only": [
+    "major: No regression test was added for the reported table with psql, which the outcome requires. Nothing covers grid, pretty, or github either."
+   ]
+  },
+  {
+   "broken": "undo the hunk at tabulate/__init__.py:104",
+   "hidden": "5 of 159 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker: The diff calls `_is_separating_line_value`, but the diff does not define or import it. If it is not defined elsewhere, every call to `_is_separating_line` raises NameError, which breaks all tables with list rows.",
+    "blocker: The diff only touches `_is_separating_line` (and adds a blank line). It has no change to the padding or separator line code, so `psql` still would not print `|---------+-------|`. Outcomes 1 and 2 are not achieved.",
+    "major: There is no regression test for the reported table with `psql`. Outcome 4 is missing."
+   ],
+   "test_only": []
+  }
+ ],
+ "real_fix": {
+  "second_eye": "false alarm",
+  "reticle": "false alarm",
+  "inferred_notes": 1,
+  "findings": [
+   "major: The change only makes _is_separating_line accept padded values (value.strip() == SEPARATING_LINE). Nothing shows how padded cells get turned into a proper separator line. In the psql case the separator is probably still printed as padded te"
+  ],
+  "test_only": [
+   "major: No regression test is in the diff. The outcome requires one in test/test_output.py that checks the exact psql output for the reported table."
+  ]
+ },
+ "cost_usd": 0.0648,
+ "seconds": 80.6,
+ "second_eye_from": "9ba608",
+ "reticle_from": "9ba608"
+}

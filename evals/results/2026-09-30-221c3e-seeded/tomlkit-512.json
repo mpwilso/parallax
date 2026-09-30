@@ -1,0 +1,58 @@
+{
+ "case": "tomlkit-512",
+ "mode": "seeded",
+ "pr": "https://github.com/python-poetry/tomlkit/pull/514",
+ "issue": "https://github.com/python-poetry/tomlkit/issues/512",
+ "inferred": [
+  "3",
+  "4"
+ ],
+ "reticle_kept": {
+  "asked": 1,
+  "inferred": 1
+ },
+ "reticle_weak": [
+  "it fails on UnexpectedCharError, not an assertion or a crash the request shows",
+  "it passes on the base, so it doesn't show the problem"
+ ],
+ "versions": [
+  {
+   "broken": "undo the hunk at tomlkit/items.py:2120",
+   "hidden": "79 of 80 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "major: The diff has no regression test. Outcome 4 requires a test in tests/test_items.py for the reported example. It must check the dumped text and the round trip through tomlkit.loads.",
+    "blocker: `last_value_end` is assigned in two places but never read in the changed code. The deferred separator comma is still appended wherever it was before, so the comma still lands after `# comment`. The fix for outcomes 1 to 3 is not visible and"
+   ],
+   "test_only": []
+  },
+  {
+   "broken": "undo the hunk at tomlkit/items.py:2138",
+   "hidden": "78 of 80 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker: `last_value_end` is set once to `len(buf)` before the loop and never updated after a value is rendered. The deferred comma is then inserted at that initial position, which is right after the opening `{`. It is not placed after the previous "
+   ],
+   "test_only": [
+    "major: Outcome 4 asks for a regression test in tests/test_items.py. It should cover the reported example and check both the dumped text and the round trip through `tomlkit.loads`. The diff contains no test. The explicit-comma case and the last-ent"
+   ]
+  }
+ ],
+ "real_fix": {
+  "second_eye": "false alarm",
+  "reticle": "right",
+  "inferred_notes": 0,
+  "findings": [
+   "major: Outcome 4 requires a regression test in tests/test_items.py for the reported example. It should check the dumped text (comma before `# comment`) and the `tomlkit.loads` round trip. The diff only touches CHANGELOG.md and tomlkit/items.py, so"
+  ],
+  "test_only": []
+ },
+ "cost_usd": 0.0646,
+ "seconds": 48.5,
+ "second_eye_from": "9ba608",
+ "reticle_from": "9ba608"
+}

@@ -1,0 +1,70 @@
+{
+ "case": "boltons-319",
+ "mode": "seeded",
+ "pr": "https://github.com/mahmoud/boltons/commit/8ba3a7fa0d99b73f7f43c1aed82c571b941eecea",
+ "issue": "https://github.com/mahmoud/boltons/issues/319",
+ "inferred": [
+  "2",
+  "3",
+  "4",
+  "5"
+ ],
+ "reticle_kept": {
+  "asked": 1,
+  "inferred": 1
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "change 12 to 13 at boltons/timeutils.py:381",
+   "hidden": "2 of 4 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker: `m_step += y_step * 13` should be 12. With step=(1, 0, 0) the step becomes 13 months, so 2012-12-25 goes to 2014-01-25, not 2013-12-25. Outcome 1 fails. Year steps in January through November also change, which breaks the constraint that th"
+   ],
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "test_only": [
+    "major: The diff has no new test for the December case, and outcome 5 requires one. A test of the year-step case would also have caught the 13 error."
+   ]
+  },
+  {
+   "broken": "change 1 to 2 at boltons/timeutils.py:394",
+   "hidden": "2 of 4 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker: The month arithmetic is off by one. It uses (now.month - 2) + m_step, then month = cur_month + 1. That equals (month - 1 + m_step - 1) % 12 + 1, which is one month too early. From 2012-12-25 with step (0,1,0), divmod(11, 12) gives (0, 11), "
+   ],
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "test_only": [
+    "major: The diff adds no test, but the outcome requires a new test for the December case. Existing tests are not shown as updated."
+   ]
+  },
+  {
+   "broken": "undo the hunk at boltons/timeutils.py:393",
+   "hidden": "2 of 4 pass",
+   "second_eye": "catch",
+   "findings": [
+    "major: No test was added. The outcome requires a new test for the December case (step=(1,0,0) and/or (0,1,0) from 2012-12-25). The diff touches only boltons/timeutils.py.",
+    "major: The diff only folds years into m_step (m_step += y_step * 12). It does not change the loop that applies the step, so the December rollover bug is not visibly fixed. If the loop still adds y_step separately, years are double counted. If it s"
+   ],
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "test_only": []
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "findings": [],
+  "reticle": "right",
+  "inferred_notes": 0,
+  "test_only": [
+   "major: The outcome requires a new test for the December case, but the diff has no change to tests/test_timeutils.py. Nothing shows that the fix is covered, or that a test would fail without it."
+  ]
+ },
+ "cost_usd": 0.0792,
+ "seconds": 66.8,
+ "second_eye_from": "48a3a5",
+ "reticle_from": "48a3a5"
+}

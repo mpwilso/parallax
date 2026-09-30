@@ -1,0 +1,48 @@
+{
+ "case": "pathspec-77",
+ "mode": "seeded",
+ "pr": "https://github.com/cpburnz/python-pathspec/commit/9302492483b06ca1613aa8b11cf08cef93930b12",
+ "issue": "https://github.com/cpburnz/python-pathspec/issues/77",
+ "inferred": [
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8"
+ ],
+ "reticle_kept": {
+  "asked": 2,
+  "inferred": 1
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "undo the hunk at pathspec/patterns/gitwildmatch.py:316",
+   "hidden": "43 of 45 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker: The only change in the code is a comment typo fix (Braket to Bracket). Nothing changes the closing-bracket scan to treat `^` like `!`, and nothing changes the negation logic. The diff doesn't show that `a[^b]c` behaves as Git does, or that ",
+    "major: The outdated POSIX and fnmatch.translate() comment is not replaced with one saying the behavior follows Git (outcome 6). Only an unrelated typo in another comment is touched."
+   ],
+   "test_only": [
+    "major: No tests are added. The outcome requires tests for `[^...]` matching and non-matching, `[^]...]` and `[a^b]`."
+   ]
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "reticle": "right",
+  "inferred_notes": 1,
+  "findings": [],
+  "test_only": [
+   "major: The diff has no test changes. The outcome requires tests for `[^...]` matching and non-matching (`a[^b]c` vs `abc` and `azc`), for `[^]a]`, and for `[a^b]`. Nothing in the change would catch a regression."
+  ]
+ },
+ "cost_usd": 0.0438,
+ "seconds": 55.7,
+ "second_eye_from": "9ba608",
+ "reticle_from": "9ba608"
+}

@@ -1,0 +1,74 @@
+{
+ "case": "tabulate-180",
+ "mode": "seeded",
+ "pr": "https://github.com/astanin/python-tabulate/commit/20c6370d5da2dae89b305bfb6c7f12a0f8b7236c",
+ "issue": "https://github.com/astanin/python-tabulate/issues/180",
+ "inferred": [
+  "3",
+  "4",
+  "5"
+ ],
+ "reticle_kept": {
+  "asked": 3,
+  "inferred": 2
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "change 0 to 1 at tabulate/__init__.py:1507",
+   "hidden": "29 of 30 pass",
+   "second_eye": "catch",
+   "reticle": "miss",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker: In _wrap_text_to_colwidths the new code uses list_of_lists[1] when the list is non-empty. It should be [0]. Any non-empty table with exactly one row raises IndexError when maxcolwidths is set. Tables with two or more rows now get num_cols f",
+    "blocker: The change also edits _wrap_text_to_colwidths. The constraints say the fix stays in tabulate's width handling and must not change this function's semantics. The edit is also where the bug is.",
+    "major: The diff does not change the maxheadercolwidths block, which the outcome (item 3) says has the same pattern. It probably still calls len(list_of_lists[0]) on empty data and would raise. The diff does not show that block, so this is unconfir"
+   ],
+   "test_only": [
+    "major: The diff has no regression test, but outcome item 5 requires one."
+   ]
+  },
+  {
+   "broken": "undo the hunk at tabulate/__init__.py:1506",
+   "hidden": "29 of 30 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "major: Only the maxcolwidths block is fixed. Outcome 3 requires the same fix for maxheadercolwidths (the identical pattern near line 2077). The diff does not touch it, so `tabulate([], maxheadercolwidths=10)` most likely still raises IndexError."
+   ],
+   "test_only": [
+    "major: No regression test is in the diff. Outcome 5 requires tests for scalar and list maxcolwidths, equality with the unset output, maxheadercolwidths, and the empty-data-with-headers case."
+   ]
+  },
+  {
+   "broken": "undo the hunk at tabulate/__init__.py:2069",
+   "hidden": "29 of 30 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "major: The diff only changes _wrap_text_to_colwidths. The outcome and constraints say the fix must stay in tabulate's width handling and must not change _wrap_text_to_colwidths semantics. The change is arguably a semantic change there, because it "
+   ],
+   "test_only": [
+    "major: The outcome requires a regression test in test/test_regression.py covering items 1 to 4. The diff has no test changes."
+   ]
+  }
+ ],
+ "real_fix": {
+  "second_eye": "false alarm",
+  "reticle": "right",
+  "inferred_notes": 1,
+  "findings": [
+   "major: The maxheadercolwidths block, which the outcome names as having the identical pattern (line 2077), is not changed. As far as I can tell from upstream tabulate, it still does num_cols = len(list_of_lists[0]), which raises IndexError on empty"
+  ],
+  "test_only": [
+   "major: No regression test is in the diff. Outcome item 5 requires one in test/test_regression.py covering items 1 to 4 (scalar and list maxcolwidths, same output as without it, maxheadercolwidths, headers still rendered)."
+  ]
+ },
+ "cost_usd": 0.0691,
+ "seconds": 56.3,
+ "second_eye_from": "9ba608",
+ "reticle_from": "9ba608"
+}

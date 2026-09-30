@@ -124,6 +124,9 @@ def test_the_seeded_run_stops_before_a_case_the_budget_cant_cover(proj, upstream
      "fix were reverted.", True),
     ("No tests are in the diff. The outcome requires a regression test for 10799 in tests/test_time.py, and updates "
      "to any floor-based tests. None are present.", True),
+    ("Outcome 4 requires a regression test in tests/test_items.py for the reported example. It should check the "
+     "dumped text and the round trip.", True),  # these two from the second rerun, 221c3e
+    ("The diff has no test for the one-item list case. Tuples and generators are also untested.", True),
     ("No tests in the diff. The closing bracket scan is not changed, so `[^]a]` is read wrong.", False),  # behavior too
     ("Only the maxcolwidths block is guarded. The maxheadercolwidths block has the same pattern.", False),
     ("The diff has no CHANGELOG entry, which outcome 6 requires.", False),

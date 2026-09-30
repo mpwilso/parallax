@@ -40,9 +40,10 @@ FLIPS = {"<=": "<", ">=": ">", "<": "<=", ">": ">=", "==": "!=", "!=": "=="}
 COMPARISON = re.compile(r"(?<![<>=!\-])(<=|>=|==|!=|<(?![<=])|>(?![>=]))(?!=)")
 INTEGER = re.compile(r"(?<![\w.])(\d+)(?![\w.])")
 # a finding that only says a test is missing: it says one is absent, and every sentence is about tests
-ABSENT = re.compile(r"\b(no|missing|without|lacks?|adds? no|has no|doesn't add|does not add|nothing)\b[^.]*\btests?\b"
-                    r"|\btests?\b[^.]*\b(missing|absent|not (added|included|in the diff|changed))\b", re.I)
-ABOUT_TESTS = re.compile(r"\btest|regression|\bcover|unnoticed|\bverif|would fail|\breverted\b"
+# ("requires a test" counts as saying one is absent: no diff here has one)
+ABSENT = re.compile(r"\b(no|missing|without|lacks?|adds? no|has no|doesn't add|does not add|nothing|requires?)\b[^.]*\btests?\b"
+                    r"|\btests?\b[^.]*\b(missing|absent|not (added|included|in the diff|changed))\b|\buntested\b", re.I)
+ABOUT_TESTS = re.compile(r"\btest|untested|regression|\bcover|unnoticed|\bverif|would fail|\breverted\b|\bshould check\b"
                          r"|nothing (shows|proves)|\bnone (is|are) (present|there)\b", re.I)
 
 

@@ -1,0 +1,73 @@
+{
+ "case": "tomlkit-430",
+ "mode": "seeded",
+ "pr": "https://github.com/python-poetry/tomlkit/pull/520",
+ "issue": "https://github.com/python-poetry/tomlkit/issues/430",
+ "inferred": [
+  "4",
+  "5",
+  "6"
+ ],
+ "reticle_kept": {
+  "asked": 2,
+  "inferred": 2
+ },
+ "reticle_weak": [
+  "it passes on the base, so it doesn't show the problem"
+ ],
+ "versions": [
+  {
+   "broken": "flip == to != at tomlkit/api.py:266",
+   "hidden": "150 of 152 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker: The condition is inverted. `len(keys) != 1` returns `keys[0]`, so a list with two or more items returns only its first key as a SingleKey, dropping the rest. An empty iterable raises IndexError instead of keeping its current behavior. A one",
+    "major: No changelog entry was added (outcome 6)."
+   ],
+   "test_only": [
+    "major: No test was added for the one-item list case or the `in` check (outcome 6)."
+   ]
+  },
+  {
+   "broken": "change 1 to 2 at tomlkit/api.py:266",
+   "hidden": "150 of 152 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker: The check is `len(keys) == 2`, so it should be `== 1`. As written, a one-item list still returns DottedKey, so the bug is not fixed. A two-item list now returns only its first key and drops the second, so `key(['a','b'])` becomes `SingleKey",
+    "major: The docstring was not updated to say a one-item list gives a single key.",
+    "major: The diff has no test for the one-item list case or the `in doc` check, and no CHANGELOG entry. Both are required."
+   ],
+   "test_only": []
+  },
+  {
+   "broken": "change 0 to 1 at tomlkit/api.py:267",
+   "hidden": "151 of 152 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker: `return keys[1]` is an off-by-one. With one item the list only has index 0, so `key([\"my_key\"])` raises IndexError instead of returning a SingleKey. Should be `keys[0]`. The outcome items 1, 2 and 4 all fail.",
+    "major: The diff leaves out the docstring update (outcome 5), the new test in tests/test_api.py (outcome 6), and the CHANGELOG.md entry (outcome 6)."
+   ],
+   "test_only": []
+  }
+ ],
+ "real_fix": {
+  "second_eye": "false alarm",
+  "reticle": "right",
+  "inferred_notes": 0,
+  "findings": [
+   "major: The diff has no test for the one-item list case or the `in doc` check. The outcome requires one in tests/test_api.py. Tuples and generators are also untested.",
+   "major: The diff has no CHANGELOG.md entry, which the outcome requires."
+  ],
+  "test_only": []
+ },
+ "cost_usd": 0.0636,
+ "seconds": 47.5,
+ "second_eye_from": "9ba608",
+ "reticle_from": "9ba608"
+}
