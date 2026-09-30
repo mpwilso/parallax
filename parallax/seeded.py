@@ -8,6 +8,8 @@ Per case:
    only if it fails the hidden tests; up to three per case.
 3. Each broken version gets Second Eye's exact normal input (the intent's outcomes and constraints,
    REVIEW.md, and the version's diff) and a run of Reticle's kept tests. Each scores catch or miss.
+   Second Eye scores on findings about behavior: no version here has tests (they're the hidden
+   ones), so a finding that only says a test is missing would flag every version and every real fix.
 4. The real fix gets both too: anything they flag there is a false alarm by definition.
 The hidden test files are never in any diff Second Eye sees, and never in Reticle's input.
 """
@@ -37,6 +39,10 @@ ESTIMATE = 0.25
 FLIPS = {"<=": "<", ">=": ">", "<": "<=", ">": ">=", "==": "!=", "!=": "=="}
 COMPARISON = re.compile(r"(?<![<>=!\-])(<=|>=|==|!=|<(?![<=])|>(?![>=]))(?!=)")
 INTEGER = re.compile(r"(?<![\w.])(\d+)(?![\w.])")
+# a finding that only says a test is missing: it says one is absent, and every sentence is about tests
+ABSENT = re.compile(r"\b(no|missing|without|lacks?|adds? no|has no|doesn't add|does not add|nothing)\b[^.]*\btests?\b"
+                    r"|\btests?\b[^.]*\b(missing|absent|not (added|included|in the diff|changed))\b", re.I)
+ABOUT_TESTS = re.compile(r"\btest|regression|\bcover|unnoticed|nothing (would fail|shows|proves)|\bverif", re.I)
 
 
 def _git(repo: Path, *args: str, env: dict | None = None, data: bytes | None = None) -> str:
@@ -67,6 +73,19 @@ def _hunks(cache: Path, case, path: str) -> list[tuple[int, int, int, int]]:
         a, b, c, d = int(m.group(1)), int(m.group(2) or 1), int(m.group(3)), int(m.group(4) or 1)
         out.append((a, b, c, d))
     return out
+
+
+def test_only(finding: str) -> bool:
+    """Whether a finding only says a test is missing, with nothing about what the code does."""
+    sentences = [x for x in re.split(r"(?<=[.!?])\s+", finding.strip()) if x]
+    return bool(ABSENT.search(finding)) and all(ABOUT_TESTS.search(x) for x in sentences)
+
+
+def second_eye_scored(findings: list, blocking: set) -> dict:
+    """Second Eye's blocking findings, split: the ones about behavior count, the missing-test ones don't."""
+    said = [f"{f.severity}: {' '.join(f.text.split())[:240]}" for f in findings if f.severity in blocking]
+    counted = [x for x, f in zip(said, [f for f in findings if f.severity in blocking]) if not test_only(f.text)]
+    return {"flags": bool(counted), "findings": counted, "test_only": [x for x in said if x not in counted]}
 
 
 def _code_part(line: str) -> str:
@@ -191,8 +210,8 @@ def run_case(case, where: Path, policy, drafter_for, checker_for, runner=None) -
                                   stage="seeded", tree=tree, cost_usd=rv.cost_usd, verdict=rv.verdict)
             ran = reticle.check(project, tid, p, tree, runner)
             failing = ran[1] if ran else []
-            return {"tree": tree, "second_eye_flags": any(f.severity in blocking for f in rv.findings),
-                    "findings": [f"{f.severity}: {' '.join(f.text.split())[:240]}" for f in rv.findings if f.severity in blocking],
+            se = second_eye_scored(rv.findings, blocking)
+            return {"tree": tree, "second_eye_flags": se["flags"], "findings": se["findings"], "test_only": se["test_only"],
                     "reticle_asked": None if not r["reticle_kept"]["asked"] else bool(reticle.blocking(failing)),
                     "reticle_any": None if not kept else bool(failing),
                     "notes": sum(t.get("kind") == "inferred" for t in failing)}
@@ -210,11 +229,13 @@ def run_case(case, where: Path, policy, drafter_for, checker_for, runner=None) -
             j = judge(files, len(versions))
             versions.append({"broken": name, "hidden": f"{res.passed} of {res.total} pass",
                              "second_eye": "catch" if j["second_eye_flags"] else "miss", "findings": j["findings"],
+                             "test_only": j["test_only"],
                              "reticle": {None: "no test", True: "catch", False: "miss"}[j["reticle_asked"]],
                              "reticle_with_inferred": {None: "no test", True: "catch", False: "miss"}[j["reticle_any"]]})
         r["versions"] = versions
         real = judge(fix_files(cache, case), len(versions))
         r["real_fix"] = {"second_eye": "false alarm" if real["second_eye_flags"] else "right", "findings": real["findings"],
+                         "test_only": real["test_only"],
                          "reticle": {None: "no test", True: "false alarm", False: "right"}[real["reticle_asked"]],
                          "inferred_notes": real["notes"]}
         r["cost_usd"] = round(sum(e["data"].get("cost_usd") or 0 for e in project.ledger.entries()), 4)
@@ -302,12 +323,16 @@ def summary(root: Path, out: Path, header: dict, results: list[dict]) -> str:
              f"and {c['notes_on_real']} inferred-outcome notes ({rel}/run.json:1)"]
     details = [f"Run {header['run']} on parallax {header['parallax']}, budget ${header['budget_usd']:.2f}, "
                f"${header['spent_usd']:.2f} spent."]
+    if header.get("second_eye_only"):
+        details.append("Second Eye alone, scored on findings about behavior. Each case's versions, intent and "
+                       "Reticle results come from the seeded run named on its line.")
     for r in results:
         if "error" in r:
             details.append(f"{r['case']}: crashed: {r['error']}")
             continue
         vs = "; ".join(f"{x['broken']}: Second Eye {x['second_eye']}, Reticle {x['reticle']}" for x in r["versions"]) or "no broken version failed the hidden tests"
+        src = f" From run {r['second_eye_from']}." if r.get("second_eye_from") else ""
         details.append(f"{r['case']}: {vs}. Real fix: Second Eye {r['real_fix']['second_eye']}, Reticle "
-                       f"{r['real_fix']['reticle']}, {r['real_fix']['inferred_notes']} notes. ${r['cost_usd']:.2f}.")
+                       f"{r['real_fix']['reticle']}, {r['real_fix']['inferred_notes']} notes. ${r['cost_usd']:.2f}.{src}")
     text = lint.report("FYI", bottom, "; ".join(gaps) or "nothing", "you read Details, then decide on Reticle.", found, details)
     return lint.fit(text, root=root)[0] + "\n"

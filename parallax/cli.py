@@ -66,6 +66,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="Reticle on, testing inferred outcomes too: their failures are card notes, never rework")
     ev.add_argument("--seeded", action="store_true",
                     help="no Maker: break each real fix by code and score Second Eye and Reticle on the broken versions")
+    ev.add_argument("--second-eye-only", action="store_true",
+                    help="with --seeded: Second Eye alone again, on the versions and Reticle results earlier seeded runs made")
     ln = sub.add_parser("lint", help="check a file against the output shape")
     ln.add_argument("file")
 
@@ -294,7 +296,12 @@ def _eval(proj: Project, args) -> int:
         return 1 if unsound else 0
     if args.budget is None or args.budget <= 0:
         raise ParallaxError("an eval run needs --budget: the most it may spend, in estimated dollars")
-    if args.seeded:
+    if args.second_eye_only and not args.seeded:
+        raise ParallaxError("--second-eye-only goes with --seeded")
+    if args.seeded and args.second_eye_only:
+        from . import seeded_second_eye
+        out = seeded_second_eye.run(proj, evals.load_cases(proj.root, args.cases), args.budget)
+    elif args.seeded:
         from . import seeded
         out = seeded.run(proj, evals.load_cases(proj.root, args.cases), args.budget)
     else:
