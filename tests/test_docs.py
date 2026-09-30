@@ -92,9 +92,13 @@ def test_every_relative_link_and_anchor_resolves():
 
 def test_parallax_reviews_itself_with_the_general_template_plus_one_pass_for_its_own_rules():
     """The template ships with Parallax and is what `parallax init` and evals use. Parallax's own
-    REVIEW.md is that template plus pass 6, and nothing else."""
+    REVIEW.md is that template plus pass 6, without the housekeeping note, and nothing else."""
     from parallax import review
     own = (ROOT / "REVIEW.md").read_text().splitlines(keepends=True)
     extra = [line for line in own if line.startswith("6. Parallax's own rules:")]
-    assert len(extra) == 1 and "".join(line for line in own if line not in extra) == review.TEMPLATE
+    # the template's housekeeping note (2026-09-30) isn't in Parallax's own file, which keeps its rules
+    note = "Housekeeping, such as a changelog entry, docs or a version number left out or not updated, is a note:\n" \
+           "minor at most, never blocking, unless a pass above asks for it. It isn't behavior.\n\n"
+    assert note in review.TEMPLATE and "Housekeeping" not in "".join(own)
+    assert len(extra) == 1 and "".join(line for line in own if line not in extra) == review.TEMPLATE.replace(note, "")
     assert "Parallax" not in review.TEMPLATE.split("## Passes", 1)[1]  # no Parallax rule in the general passes

@@ -17,7 +17,8 @@ from pathlib import Path
 REVIEW_FILE = "REVIEW.md"
 # TEMPLATE below is the general REVIEW.md: passes that apply to any code. It ships with Parallax,
 # `parallax init` installs it where a repo has none, and evals use it. Parallax's own REVIEW.md is
-# this template plus one pass for Parallax's own rules (tests/test_docs.py pins that).
+# this template plus one pass for Parallax's own rules, without the housekeeping note, which came
+# after it (tests/test_docs.py pins that).
 SEVERITIES = ("blocker", "major", "minor", "nit")
 DEFAULT_BLOCKING = ("blocker", "major")
 
@@ -40,6 +41,9 @@ How Second Eye, the blind checker, reviews a change. You own this file; agents c
 - major: likely wrong in a case that matters, or a missing test for new behavior.
 - minor: works, but should be better.
 - nit: style or wording.
+
+Housekeeping, such as a changelog entry, docs or a version number left out or not updated, is a note:
+minor at most, never blocking, unless a pass above asks for it. It isn't behavior.
 
 Blocking: blocker, major
 """
