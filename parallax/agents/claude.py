@@ -123,6 +123,8 @@ async def rule_on_tool_call(permission_fn: PermissionFn, tool_name: str, tool_in
         "permissionDecision": "allow" if p.allowed else "deny",
         "permissionDecisionReason": p.message or ("allowed by parallax policy" if p.allowed else "refused"),
     }}
+    if p.allowed and p.command and tool_name == "Bash":
+        out["hookSpecificOutput"]["updatedInput"] = {**tool_input, "command": p.command}
     if p.stop:
         out.update({"continue_": False, "stopReason": p.message})
     return out

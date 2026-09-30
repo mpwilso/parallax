@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
-from . import guard
+from . import guard, memcap, sandbox
 from .agents.base import Permission, PermissionFn
 from .core import Project
 
@@ -99,13 +99,20 @@ def make_permission_fn(
         if stopped:
             return Permission(False, p.message, stop=True)
         if p.allowed:
-            return p
+            return _capped(p, action, detail)
         refusals[(action, detail)] += 1
         if refusals[(action, detail)] >= stuck_after:
             stopped = f"the same call was refused {stuck_after} times: {action} {detail}".rstrip()
             project.ledger.append("stuck.raised", "parallax", stopped, task=task_id, action=action)
             return Permission(False, f"stopped: {stopped}", stop=True)
         return p
+
+    def _capped(p: Permission, action: str, detail: str) -> Permission:
+        """An allowed shell command runs under the memory cap, if the build placed the cap's copy."""
+        if action != "shell.run":
+            return p
+        folder = sandbox.task_home(project.root, task_id) / memcap.FOLDER
+        return Permission(True, p.message, command=memcap.shell(detail, folder))
 
     return permission_fn
 

@@ -24,6 +24,7 @@ class Permission:
     allowed: bool
     message: str = ""
     stop: bool = False  # the task is stuck or tripped a guard: end the agent now
+    command: str | None = None  # an allowed shell command to run in its place: the same one, under the memory cap
 
 
 # (action, detail, paths) -> Permission

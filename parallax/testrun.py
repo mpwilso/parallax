@@ -173,7 +173,7 @@ def _srt(config: Path, cwd: Path, cmd: str, env: dict) -> tuple[int, str]:
     if not shutil.which("srt", path=env.get("PATH")):
         return 127, "srt isn't installed, so the tests can't run in the sandbox"
     # capped: a test that never ends can fill memory long before the timeout (seen on boltons-319)
-    out = memcap.run(["srt", "--settings", str(config), "-c", cmd], memcap.TEST_RUN, what="the tests",
+    out = memcap.run(["srt", "--settings", str(config), "-c", cmd], memcap.COMMAND, what="the tests",
                      timeout=1800, capture=True, cwd=cwd, env=env)
     if out.timed_out:
         return 124, "the tests ran past 30 minutes"

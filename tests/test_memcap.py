@@ -1,6 +1,9 @@
 """The memory cap: a runaway fails its own run with a plain message instead of taking the machine down.
 Seen on 2026-09-30, when a test Reticle wrote looped forever on boltons-319 and WSL ran out of memory."""
+import asyncio
+import json
 import os
+import shlex
 import subprocess
 import sys
 import time
@@ -8,7 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from parallax import memcap, testrun
+from parallax import build, gate, memcap, testrun
+from parallax.agents.claude import rule_on_tool_call
+from sandboxcheck import why_not
 
 pytestmark = pytest.mark.skipif(not memcap.available(), reason="the cap reads /proc")
 
@@ -48,7 +53,7 @@ def test_the_command_line_form_fails_the_run_and_says_why():
     bad = subprocess.run([sys.executable, "-m", "parallax.memcap", "150M", "--", sys.executable, "-c", RUNAWAY],
                          capture_output=True, text=True, cwd=ROOT)
     assert bad.returncode == memcap.EXIT
-    assert bad.stderr.startswith("memory cap: python") and "over the 0.15 GB limit, so it was stopped" in bad.stderr
+    assert bad.stderr.startswith("memory cap: the command used ") and "over the 0.15 GB limit, so it was stopped" in bad.stderr
 
 
 def test_the_guard_caps_the_process_it_runs_in_and_what_it_starts():
@@ -64,7 +69,7 @@ def test_a_repos_runaway_test_is_recorded_as_tests_that_couldnt_run(tmp_path, mo
     fake.mkdir()
     (fake / "srt").write_text(f"#!{sys.executable}\n{RUNAWAY}")
     (fake / "srt").chmod(0o755)
-    monkeypatch.setattr(memcap, "TEST_RUN", 150 * MB)
+    monkeypatch.setattr(memcap, "COMMAND", 150 * MB)
     code, out = testrun._srt(tmp_path / "cfg.json", tmp_path, "pytest", {"PATH": f"{fake}:/usr/bin:/bin"})
     assert code == memcap.EXIT and not testrun.Results(code).ran  # yours to look at, never the maker's to fix
     assert out.strip().splitlines()[-1].startswith("memory cap: the tests used")
@@ -80,3 +85,53 @@ def test_this_suite_runs_under_the_4_gb_cap():
     while pid not in (watcher, 0, 1):
         pid = int(Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[1])
     assert pid == watcher, "the process watching the cap isn't above this one"
+
+
+# the agents' own commands --------------------------------------------------------------------------
+
+def test_every_command_the_maker_runs_is_under_the_cap_and_the_sandbox_can_read_it(repo):
+    from test_guard_and_checker import setup
+    proj, tid, wt = setup(repo)
+    p = build.prepare(proj, tid, setup=False, launching=False)
+    folder = p.home / memcap.FOLDER
+    assert (folder / "memcap.py").read_bytes() == Path(memcap.__file__).read_bytes()
+    assert str(folder) in json.loads(p.settings.read_text())["sandbox"]["filesystem"]["allowRead"]
+    assert str(folder) not in p.rules.allow_write
+
+    fn = gate.make_permission_fn(proj, tid, wt, scope=p.scope)
+    ruled = fn("shell.run", "pytest -q")
+    assert ruled.allowed and ruled.command == memcap.shell("pytest -q", folder) != "pytest -q"
+    hook = asyncio.run(rule_on_tool_call(fn, "Bash", {"command": "pytest -q", "timeout": 5000}))["hookSpecificOutput"]
+    assert hook["permissionDecision"] == "allow" and hook["updatedInput"] == {"command": ruled.command, "timeout": 5000}
+    assert "updatedInput" not in asyncio.run(rule_on_tool_call(fn, "Read", {"file_path": "a.py"}))["hookSpecificOutput"]
+    assert [e["data"]["key"] for e in proj.ledger.entries() if e["kind"] == "action.granted"][-2] == "pytest -q"  # recorded as asked
+
+    # the command does what it says: the same shell command, and a runaway stops with the cap's line
+    same = subprocess.run(["bash", "-c", memcap.shell("cd /; echo \"it's $((1 + 2)) in $PWD\"; exit 4", folder)],
+                          capture_output=True, text=True, timeout=60)
+    assert (same.returncode, same.stdout, same.stderr) == (4, "it's 3 in /\n", "")
+    runaway = memcap.shell(f"python3 -c {shlex.quote(RUNAWAY)}", folder, 150 * MB)
+    r = subprocess.run(["bash", "-c", runaway], capture_output=True, text=True, timeout=60)
+    assert r.returncode == memcap.EXIT
+    assert r.stderr.strip().splitlines()[-1].startswith("memory cap: the command used ")
+
+
+@pytest.mark.skipif(bool(why_not()), reason=str(why_not()))
+def test_in_the_real_sandbox_the_makers_capped_command_runs_and_stops_a_runaway(repo):
+    from test_guard_and_checker import setup
+    proj, tid, wt = setup(repo)
+    p = build.prepare(proj, tid, setup=False, launching=False)
+    folder, srt = p.home / memcap.FOLDER, p.home / "srt.json"  # the same rules as the maker's settings
+    env = build.scrubbed_env(None)
+    ok = subprocess.run(["srt", "--settings", str(srt), "-c", memcap.shell("echo ran", folder)], cwd=wt, env=env,
+                        capture_output=True, text=True, timeout=120)
+    assert ok.returncode == 0 and ok.stdout.strip().endswith("ran"), ok.stderr
+    runaway = memcap.shell(f"python3 -c {shlex.quote(RUNAWAY)}", folder, 150 * MB)
+    r = subprocess.run(["srt", "--settings", str(srt), "-c", runaway], cwd=wt, env=env, capture_output=True, text=True,
+                       timeout=120)
+    assert r.returncode == memcap.EXIT and "memory cap: the command used " in r.stderr, r.stderr[-400:]
+
+
+def test_focus_and_reticle_run_no_commands_so_there_is_nothing_to_cap():
+    from parallax.agents import claude
+    assert "Bash" not in claude.PLAN_TOOLS  # plan, draft and reticle stages get only these

@@ -100,7 +100,7 @@ def test_the_rules_come_from_the_plan_and_live_outside_the_worktree(proj):
     assert fs["allowWrite"] == [str(wt)]
     assert {str(wt / t) for t in sandbox.ROOT_TARGETS} | {str(git_dir)} <= set(fs["denyWrite"])
     assert fs["denyRead"][:2] == [str(Path.home()), "/mnt"] and str(approvals.key_path().parent) in fs["denyRead"]
-    assert fs["allowRead"] == [str(wt), str(git_dir), "/opt/data"]
+    assert fs["allowRead"] == [str(wt), str(git_dir), "/opt/data", str(p.home / "memcap")]  # the cap for its commands
     assert json.loads((p.home / "srt.json").read_text())["filesystem"] == fs
 
     assert not p.settings.is_relative_to(wt) and not p.settings.is_relative_to(proj.root)

@@ -11,10 +11,16 @@ use an address-space limit (ulimit -v): node and Chromium reserve far more than 
 fail at start. Where there's no /proc the command runs uncapped.
 
 A process that detaches and leaves the tree (a new session whose parent exits) isn't counted.
+
+Inside the sandbox this file runs on its own (python3 -I memcap.py LIMIT -- command), with the
+system python: the sandbox can't read Parallax's folder, and a task venv's python may be too old.
+So it imports nothing from Parallax.
 """
 from __future__ import annotations
 
 import os
+import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -26,12 +32,15 @@ from pathlib import Path
 GB = 1024 ** 3
 SUITE = 4 * GB     # scripts/test.sh: this repo's own tests
 EVAL = 4 * GB      # parallax eval: the whole run
-TEST_RUN = 3 * GB  # one run of a repo's tests in the sandbox, under EVAL so it trips first and is recorded
+COMMAND = 3 * GB   # one command in the sandbox: a run of a repo's tests, a Maker command, Field's app.
+                   # under EVAL, so inside an eval it trips first and is recorded
 POLL = 0.2
 EXIT = 137  # what a shell shows for a killed process
 ENV = "PARALLAX_MEMORY_CAP"  # the limit in bytes, set for a capped command
 ENV_PID = "PARALLAX_MEMORY_CAP_PID"  # the process that watches it
 PROC = Path("/proc")
+FOLDER = "memcap"  # in a task's home: a copy of this file, the one thing there a sandboxed command may read
+SYSTEM_PATH = "/usr/local/bin:/usr/bin:/bin"
 
 
 def size(text: str) -> int:
@@ -164,6 +173,29 @@ def guard(limit: int, what: str = "this run") -> threading.Thread | None:
     return t
 
 
+def place(home: Path) -> Path:
+    """Copy this file into home/memcap, where the sandbox can be allowed to read it. Returns the folder."""
+    folder = home / FOLDER
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "memcap.py").write_bytes(Path(__file__).read_bytes())
+    return folder
+
+
+def shell(command: str, folder: Path, limit: int | None = None) -> str:
+    """A shell command for the sandbox, the same command under the cap. Unchanged when there's no
+    copy of this file in folder or no system python to run it."""
+    script = folder / "memcap.py"
+    python = shutil.which("python3", path=SYSTEM_PATH)
+    if not python or not script.is_file():
+        return command
+    return f"{python} -I {shlex.quote(str(script))} {limit or COMMAND} -- bash -c {shlex.quote(command)}"
+
+
+def program(argv: list[str], limit: int | None = None) -> list[str]:
+    """A program Parallax starts outside a shell, such as srt, under the cap."""
+    return [sys.executable, "-I", str(Path(__file__).resolve()), str(limit or COMMAND), "--", *argv]
+
+
 def main(argv: list[str] | None = None) -> int:
     """python -m parallax.memcap 4G -- command args..."""
     args = list(sys.argv[1:] if argv is None else argv)
@@ -172,7 +204,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     limit, cmd = size(args[0]), args[2:]
     try:
-        return run(cmd, limit, what=os.path.basename(cmd[0])).code
+        return run(cmd, limit, what="the command").code
     except KeyboardInterrupt:  # the command got the same Ctrl+C
         return 130
 

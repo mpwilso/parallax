@@ -1,12 +1,13 @@
 """The UI tester: blind, sandboxed, off by default; its tests are hashed and rerun at every check."""
 import json
 import re
+import sys
 from pathlib import Path
 
 import pytest
 
 from fakes import FakeChecker, FakeDrafter, ScriptedAgent, good_probe, junit_runner
-from parallax import build, costs, lint, show, uitest, views
+from parallax import build, costs, lint, memcap, show, uitest, views
 from parallax.agents.base import AgentResult
 from parallax import lifecycle
 from parallax.core import POLICY_FILE, Project
@@ -137,12 +138,16 @@ def test_the_tester_is_blind_sandboxed_and_its_tests_are_hashed_and_run(proj, mo
         assert never not in goal
     assert not any(call["cwd"].iterdir()) or {p.name for p in call["cwd"].iterdir()} <= {"flows", "opens.png", "tmp", "app.log", uitest.APP_UP}
     srv = call["server"]
-    assert srv["command"] == "srt" and "--allowed-origins http://127.0.0.1:8765" in srv["args"][-1]
+    # the app and the browser run in srt, all of it under the memory cap, with the cap's one-line message
+    assert srv["command"] == sys.executable and srv["args"][:4] == ["-I", str(Path(memcap.__file__).resolve()),
+                                                                     str(memcap.COMMAND), "--"]
+    inner = srv["args"][4:]
+    assert inner[0] == "srt" and "--allowed-origins http://127.0.0.1:8765" in inner[-1]
     assert uitest.MCP_VERSION == "0.0.70", ("the MCP pin moved. THREAT_MODEL's claim that the tester's browser blocks file: URLs "
                                              "relies on this version's default (--allow-unrestricted-file-access off). recheck it "
                                              "with the new version's --help, then update the claim and this pin together")
     assert "--allow-unrestricted-file-access" not in srv["args"][-1]  # the MCP blocks file: URLs unless told otherwise
-    cfg = json.loads(Path(srv["args"][1]).read_text())
+    cfg = json.loads(Path(inner[2]).read_text())
     assert cfg["network"]["allowedDomains"] == [] and str(Path.home()) in cfg["filesystem"]["denyRead"]
     assert tester.limit <= proj.policy.ui_tester["max_usd"]
 

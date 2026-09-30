@@ -22,7 +22,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
-from . import costs, guard, installs, lifecycle, lint, preflight, sandbox
+from . import costs, guard, installs, lifecycle, lint, memcap, preflight, sandbox
 from .agents.base import Agent, AgentResult
 from .core import ROOT_ENV, TASK_ENV, ParallaxError, Project, inside_task, refuse_inside_task
 from .gate import Scope, make_permission_fn
@@ -136,6 +136,7 @@ def prepare(project: Project, task_id: str, setup: bool = True, launching: bool 
     sandbox.prepare_mount_points(targets)
     r = sandbox.rules(wt, targets, git_dir=sandbox.shared_git_dir(wt), venv=venv,
                       reads=reads, domains=plan["domains"])
+    r.allow_read.append(str(memcap.place(home)))  # the maker's commands run under the memory cap (gate.py)
     settings, _ = sandbox.write_configs(home, r)
     return Prepared(t, plan, wt, home, venv, scope, r, settings, cap, left)
 

@@ -30,7 +30,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import build, costs, installs, lifecycle, lint, sandbox, status, tree
+from . import build, costs, installs, lifecycle, lint, memcap, sandbox, status, tree
 from .core import ParallaxError, Project
 
 # newer MCP versions put their browser behind a Unix socket, which the sandbox refuses (Part 3 spike)
@@ -358,7 +358,8 @@ def test(project: Project, task_id: str, p, tester_for) -> tuple[str, str]:
            f"--headless --isolated --executable-path {shlex.quote(str(tools.exe))} "
            f"--output-dir {shlex.quote(str(shots))} --allowed-origins {shlex.quote(origin)}")
     script = _script(cfg["start"], cfg["url"], copy, work / "app.log", mcp, work / "tmp")
-    server = {"command": "srt", "args": ["--settings", str(cfg_path), "-c", script],
+    capped = memcap.program(["srt", "--settings", str(cfg_path), "-c", script])  # the app and browser, under the cap
+    server = {"command": capped[0], "args": capped[1:],
               "env": {**_env(tools, p.venv, work, cfg["url"]), **installs.env(p.venv, copy)}}
     plan = p.plan
     left = costs.budget(project, task_id, plan)[1]
