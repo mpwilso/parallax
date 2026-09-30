@@ -8,7 +8,7 @@ It ran before the hands-free redesign, when every plan waited for a person. The 
 
 The whole input was one paragraph in the intake box (ledger `26bf1e3d`, 00:03):
 
-> Fix all five WSL install problems in the README: no su - <you> after adduser; uv and claude not found until source ~/.local/bin/env; apt's Node 18 too old for sandbox-runtime, use NodeSource setup_22.x after removing apt nodejs and npm; clone origin points at /mnt/c and breaks after drives are off; safe.directory needed for both the repo path and its .git path. Add a test that pins the README's doctor sample to parallax doctor. Budget cap 4.00.
+> Fix all five WSL install problems in the README: no `su - <you>` after adduser; uv and claude not found until `source ~/.local/bin/env`; apt's Node 18 too old for sandbox-runtime, use NodeSource setup_22.x after removing apt nodejs and npm; clone origin points at `/mnt/c` and breaks after drives are off; safe.directory needed for both the repo path and its .git path. Add a test that pins the README's doctor sample to `parallax doctor`. Budget cap 4.00.
 
 ## 2. Focus (which drafts the intent and plan) writes both
 
@@ -20,7 +20,7 @@ Code checked the plan against the intent before anyone saw it: every listed file
 
 This task ran before the launch rule existed, so its plan waited for a person. The first plan was rejected with a reason (ledger `8bf092b7`, 00:08):
 
-> Two plan errors. (1) safe.directory must come before the clone and name the SOURCE: /mnt/c/<path to parallax> and /mnt/c/<path to parallax>/.git. Git refuses the /mnt/c source during the clone; the new copy in ~/code/parallax never needs it. Unset both right after the clone. (2) budget_cap_usd must be 4.00, as the intent says. Everything else stays.
+> Two plan errors. (1) safe.directory must come before the clone and name the SOURCE: `/mnt/c/<path to parallax>` and `/mnt/c/<path to parallax>/.git`. Git refuses the `/mnt/c` source during the clone; the new copy in `~/code/parallax` never needs it. Unset both right after the clone. (2) `budget_cap_usd` must be 4.00, as the intent says. Everything else stays.
 
 Focus got that reason and the intent, nothing else, and wrote the plan again (ledger `549ee785`, $0.42). Both drafted files were then edited by hand before the approval (ledger `4cbfefd2`, 00:20), which is why their recorded hashes differ from the drafts'; `parallax stats` counts each hand edit as a touch, and today the rule is to reject with a reason instead. The approval hashed both files and signed them with the key the sandbox can't read.
 
@@ -30,7 +30,7 @@ Setup made the task's venv as you, on a fresh copy of the base commit (ledger `e
 
 ## 5. The check
 
-Parallax staged the worktree into a throwaway index, recorded the tree hash, and confirmed by code that only the plan's two files changed. It ran the plan's tests itself, in the sandbox, with the test harness taken from the base commit: 22 of 22 passed (ledger `9251b1ac`). Second Eye, a different model with no tools, got exactly the intent's outcome and constraints, `REVIEW.md` and the diff, and said pass with three findings, none blocking, and listed what it couldn't see from the diff alone (ledger `7012aef9`, $0.05). The task went to Ready (ledger `eb1f1024`).
+Parallax staged the worktree into a throwaway index, recorded the tree hash, and confirmed by code that only the plan's two files changed. It ran the plan's tests itself, in the sandbox, with the test harness taken from the base commit: 22 of 22 passed (ledger `9251b1ac`). Second Eye, a separate Claude model in its own session with no tools (Sonnet, while Maker ran on Opus, as [record.md](tasks/e9a55a/record.md) shows), got exactly the intent's outcome and constraints, `REVIEW.md` and the diff, and said pass with three findings, none blocking, and listed what it couldn't see from the diff alone (ledger `7012aef9`, $0.05). The task went to Ready (ledger `eb1f1024`).
 
 ## 6. Accept, and the merge that stays yours
 
