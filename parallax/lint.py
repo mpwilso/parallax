@@ -415,6 +415,20 @@ def browser_untestable(intent: str) -> set[str]:
             if (m := OUTCOME_ITEM.match(line)) and UNTESTABLE.search(line)}
 
 
+OUTSIDE_PAGE = re.compile(  # OS-level phrases only: an in-page toast, alert or banner is testable
+    r"(?i)\b(?:(?:desktop|os|system|native|push)[\s_-]*notifications?"
+    r"|notifications?[\s_-]*(?:centre|center)"
+    r"|permission[\s_-]*(?:prompt|dialog|request)"
+    r"|(?:file|folder|save|open|print|upload|download)[\s_-]*(?:dialog|picker|chooser)"
+    r"|system[\s_-]*tray|menu[\s_-]*bar[\s_-]*icon)\b")
+
+
+def outside_page_terms(text: str) -> list[str]:
+    """The things this text names that happen outside the page, so no test browser can drive or see them:
+    a desktop notification, a permission prompt, a file dialog. Empty when all of it is in the page."""
+    return sorted({" ".join(re.split(r"[\s_-]+", m.group(0).lower())) for m in OUTSIDE_PAGE.finditer(text or "")})
+
+
 def outcome_kinds(intent: str) -> dict[str, str | None]:
     """outcome number -> "asked", "inferred", or None when the outcome isn't marked (intents before 2026-09-30)."""
     lines = intent.splitlines()

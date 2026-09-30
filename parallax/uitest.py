@@ -62,7 +62,9 @@ What it should do:
 Test only what the page itself shows. If part of an outcome happens outside the page (an OS
 notification, a permission prompt, a file dialog, anything this browser can't drive or see), write no
 flow for that part, and name it in not_looked_at as "can't test in a browser: <what>". Never write a
-test that could only pass outside the browser.
+test that could only pass outside the browser. One outcome can have both a page part and an outside
+part: then write a flow for only the page part, and name the outside part the same way. A flow's name
+and its saw describe only what the page shows, never the part outside it.
 
 For each outcome a person could check in the browser:
 1. Walk its flow in the browser, from {url}.
@@ -145,15 +147,43 @@ def flow_outcomes(project: Project, task_id: str, plan: dict | None = None) -> l
     return [str(n) for n in plan.get("user_flows", []) if str(n) not in untestable]
 
 
-def untestable_note(project: Project, task_id: str) -> str:
-    """The outcomes no browser can test, for Not looked at: "can't test in a browser: outcome 3 ...". """
+def untestable_note(project: Project, task_id: str, dropped: dict[str, tuple[str, str]] | None = None) -> str:
+    """The outcomes no browser can test, for Not looked at: "can't test in a browser: outcome 3 ...".
+
+    The outcomes Focus marked, and the parts of unmarked outcomes a dropped flow of Field's turned out
+    to be about (outside_flows), named by what that flow said it saw."""
     intent = lifecycle._read(project, task_id, "intent")
     wanted = {str(n) for n in (lifecycle.plan_data(project, task_id) or {}).get("user_flows", [])}
     marked = lint.browser_untestable(intent)
     lines = {m.group(1): lint.UNTESTABLE.sub("", m.group(2)).strip() for m in
              re.finditer(r"^\s*(\d+)[.)]\s+(.*)$", lint.unmark(review.section(intent, "Outcome")), re.M)}
     picked = [f"outcome {n} ({lines.get(n, '').rstrip('.')})" for n in sorted(marked, key=int) if n in wanted or not wanted]
+    seen = set(marked)
+    for n, part in sorted((dropped or {}).values(), key=lambda v: (int(v[0]) if v[0].isdigit() else 0, v[1])):
+        if part and n not in seen:
+            picked.append(f"outcome {n} ({part.rstrip('.')})")
+            seen.add(n)
     return f"can't test in a browser: {'; '.join(picked)}" if picked else ""
+
+
+def outside_flows(reply: dict, untestable: set[str]) -> dict[str, tuple[str, str]]:
+    """The flows Field wrote that no browser can stand behind: flow name -> (outcome, the outside part).
+
+    Two of them: a flow for an outcome Focus marked not browser-testable, and a flow whose own name or
+    saw is about something outside the page (an outcome nobody marked, or the outside half of a mixed
+    one). The term check is on the flow, never the outcome's line: the page part of a mixed outcome is
+    written as a flow about the page, so it stays. A marked outcome's part is "": untestable_note
+    already names it from the intent."""
+    out = {}
+    for f in reply.get("flows", []):
+        if not isinstance(f, dict):
+            continue
+        name, outcome = str(f.get("name")), str(f.get("outcome"))
+        if outcome in untestable:
+            out[name] = (outcome, "")
+        elif lint.outside_page_terms(f"{name} {f.get('saw') or ''}"):
+            out[name] = (outcome, lint.one_sentence(str(f.get("saw") or name)).rstrip("."))
+    return out
 
 
 def recorded(project: Project, task_id: str) -> dict | None:
@@ -404,7 +434,7 @@ def test(project: Project, task_id: str, p, tester_for) -> tuple[str, str]:
             return "app", "the app didn't start for Field: " + lint.one_sentence(" ".join(log.strip().splitlines()[-3:]))
         return "you", "Field (the UI tester) never reached the app: its browser server didn't start"
     untestable = lint.browser_untestable(lifecycle._read(project, task_id, "intent"))
-    outside = {str(f.get("name")) for f in reply.get("flows", []) if isinstance(f, dict) and str(f.get("outcome")) in untestable}
+    outside = outside_flows(reply, untestable)
     written = [f for f in written if f.name.removesuffix(".spec.js") not in outside]  # never a failing flow
     if written:  # Parallax runs them once, on the build the tester just used, before trusting any
         said = {str(f.get("name")): bool(f.get("works")) for f in reply.get("flows", []) if isinstance(f, dict)}
@@ -420,6 +450,9 @@ def test(project: Project, task_id: str, p, tester_for) -> tuple[str, str]:
         if common.get("dropped"):
             return "you", "none of Field's tests passed on the build it described: " + lint.one_sentence(
                 "; ".join(common["dropped"]))
+        if outside:  # it wrote tests, but every one of them was for behavior no browser can see
+            return "you", "every flow Field wrote was for behavior outside the browser: " + lint.one_sentence(
+                untestable_note(project, task_id, outside) or "; ".join(sorted(outside)))
         return "you", f"Field (the UI tester) wrote no tests ({result.status}): {lint.one_sentence(text or 'no reply')}"
     dest = lifecycle.task_dir(project, task_id) / "ui_flows"
     shutil.rmtree(dest, ignore_errors=True)
@@ -439,7 +472,8 @@ def test(project: Project, task_id: str, p, tester_for) -> tuple[str, str]:
     project.ledger.append("uitest.recorded", "ui tester", lint.one_sentence(
         f"{len(files)} flow tests written; {sum(1 for f in reply.get('flows', []) if f.get('works'))} flows worked"),
         files=files, shots=pngs, flows=[f for f in reply.get("flows", []) if str(f.get("name")) not in outside],
-        not_looked_at=_not_looked_at(str(reply.get("not_looked_at") or "nothing"), untestable_note(project, task_id)),
+        not_looked_at=_not_looked_at(str(reply.get("not_looked_at") or "nothing"),
+                                     untestable_note(project, task_id, outside)),
         **common)
     return "ok", ""
 

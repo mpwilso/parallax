@@ -44,7 +44,10 @@ budget: <only if the human's words name a budget: that amount in dollars, like 4
 <a numbered list, each one observable and testable, and marked: 1. asked: ..., 2. inferred: ...
 asked: the person's words state it or clearly imply it. inferred: your own addition.
 End an outcome with (not browser-testable) when what it describes happens outside the page: an OS
-notification, a permission prompt, a file dialog, anything a test browser can't drive or see>
+notification, a permission prompt, a file dialog, anything a test browser can't drive or see.
+An outcome that mixes page behavior with behavior outside it is better split in two, so the outside
+half carries the marker; keep it as one only with the outside behavior in its own clause, named there
+in those words, so the plan and the UI tester can leave that clause out>
 
 ## Constraints
 <what must not change: behavior, interfaces, compatibility, limits>

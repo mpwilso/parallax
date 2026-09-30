@@ -400,12 +400,14 @@ def test_a_tester_that_reaches_the_cap_stops_the_task_and_nothing_else_runs(proj
 # behavior outside the page: never a flow (c08f9e: OS notifications failed every flow, rework to the cap) ------
 
 NOTIFY = "2. inferred: A desktop notification appears when it's done, and a click on it opens the app. (not browser-testable)"
+UNMARKED = "2. inferred: A desktop notification appears when it's done."  # the same thing, unmarked by Focus
+MIXED = "2. inferred: The page shows Done when it finishes, and a desktop notification appears."
 
 
-def untestable_docs(flows):
+def untestable_docs(flows, outcome=NOTIFY):
     d = flows_docs()
     d["intent"] = d["intent"].replace("1. asked: A new user on WSL can follow them.",
-                                      "1. asked: A new user on WSL can follow them.\n" + NOTIFY)
+                                      "1. asked: A new user on WSL can follow them.\n" + outcome)
     d["plan"] = d["plan"].replace('user_flows = ["1"]', f"user_flows = {json.dumps(flows)}").replace(
         'covers = { "1" = ["tests/test_readme.py"] }', 'covers = { "1" = ["tests/test_readme.py"], "2" = ["tests/test_readme.py"] }')
     return d
@@ -413,17 +415,24 @@ def untestable_docs(flows):
 
 class TwoFlowTester(FakeTester):
     """Writes a flow for each outcome it's shown, and one for the notification whatever it's shown."""
+    page = {"outcome": 1, "name": "opens", "works": True, "saw": "the page opens"}
+    outside = {"outcome": 2, "name": "notify", "works": False, "saw": "no desktop notification appeared"}
 
     def run(self, goal, cwd, server, allowed):
         self.calls.append({"goal": goal})
         (Path(cwd) / uitest.APP_UP).touch()
         (Path(cwd) / "flows").mkdir()
-        for name in ("opens", "notify"):
+        for flow in (self.page, self.outside):
+            name = flow["name"]
             (Path(cwd) / "flows" / f"{name}.spec.js").write_text(SPEC.replace("'opens'", f"'{name}'"))
-        reply = {"flows": [{"outcome": 1, "name": "opens", "works": True, "saw": "the page opens"},
-                           {"outcome": 2, "name": "notify", "works": False, "saw": "no notification"}],
-                 "not_looked_at": "nothing"}
+        reply = {"flows": [self.page, self.outside], "not_looked_at": "nothing"}
         return AgentResult("done", json.dumps(reply), 0.2)
+
+
+class MixedTester(TwoFlowTester):
+    """One outcome with two parts: the page's own Done, and the OS notification no browser can see."""
+    page = {"outcome": 2, "name": "opens", "works": True, "saw": "the page shows Done when it finishes"}
+    outside = {"outcome": 2, "name": "desktop-notification", "works": False, "saw": "no desktop notification appeared"}
 
 
 def run_with(proj, docs_, tester, runner, monkeypatch):
@@ -461,3 +470,63 @@ def test_focus_marks_outcomes_a_browser_cant_test_and_the_plan_leaves_them_out()
     intent = "## Outcome\n1. asked: a\n" + NOTIFY + "\n3. inferred: c (Not Browser-Testable).\n\n## Constraints\nnone\n"
     assert lint.browser_untestable(intent) == {"2", "3"}
     assert "(not browser-testable)" in lifecycle.SHAPES["intent"] and "Never list an outcome marked" in lifecycle.SHAPES["plan"]
+
+
+def test_an_unmarked_notification_outcome_gets_no_flow(proj, monkeypatch):
+    """Focus missed the marker, so the flow itself is what says it: an OS notification, never a test."""
+    tid, status = run_with(proj, untestable_docs(["1", "2"], UNMARKED), TwoFlowTester(),
+                           flow_runner([[("opens", True)]]), monkeypatch)
+    assert status == "ready"  # the notification's flow can only fail, so it's no rework of the maker's
+    [rec] = kinds(proj, "uitest.recorded", tid)
+    assert list(rec["data"]["files"]) == [f"docs/tasks/{tid}/ui_flows/opens.spec.js"]
+    assert [f["name"] for f in rec["data"]["flows"]] == ["opens"]
+    assert rec["data"]["not_looked_at"] == "can't test in a browser: outcome 2 (no desktop notification appeared)"
+    assert "can't test in a browser: outcome 2" in show.report(proj, tid)
+
+
+def test_a_mixed_outcome_keeps_only_its_page_flow(proj, monkeypatch):
+    """One outcome, a page part and an outside part: the page part is tested, the rest is named."""
+    tid, status = run_with(proj, untestable_docs(["2"], MIXED), MixedTester(),
+                           flow_runner([[("opens", True)]]), monkeypatch)
+    assert status == "ready"
+    [rec] = kinds(proj, "uitest.recorded", tid)
+    assert list(rec["data"]["files"]) == [f"docs/tasks/{tid}/ui_flows/opens.spec.js"]  # the page part, tested
+    assert [f["saw"] for f in rec["data"]["flows"]] == ["the page shows Done when it finishes"]
+    assert rec["data"]["not_looked_at"] == "can't test in a browser: outcome 2 (no desktop notification appeared)"
+
+
+def test_when_every_flow_is_outside_the_page_the_human_hears_why(proj, monkeypatch):
+    """Nothing is kept, so the task can't go on: the reason says what it wrote, not "wrote no tests"."""
+    class OutsideOnly(FakeTester):
+        def run(self, goal, cwd, server, allowed):
+            self.calls.append({"goal": goal})
+            (Path(cwd) / uitest.APP_UP).touch()
+            (Path(cwd) / "flows").mkdir()
+            (Path(cwd) / "flows" / "notify.spec.js").write_text(SPEC.replace("'opens'", "'notify'"))
+            reply = {"flows": [{"outcome": 2, "name": "notify", "works": False, "saw": "no desktop notification appeared"}],
+                     "not_looked_at": "nothing"}
+            return AgentResult("done", json.dumps(reply), 0.2)
+    tid, status = run_with(proj, untestable_docs(["2"], UNMARKED), OutsideOnly(), None, monkeypatch)
+    assert status == "disputed" and not kinds(proj, "uitest.recorded", tid)
+    reason = kinds(proj, "disagreement.raised", tid)[-1]["reason"]
+    assert "every flow Field wrote was for behavior outside the browser" in reason and "outcome 2" in reason
+
+
+def test_outside_page_terms_match_os_behavior_only():
+    for text in ("a desktop notification appears", "an OS notification on completion", "a push notification",
+                 "the permission prompt for the camera", "a file dialog opens", "it uses the file picker",
+                 "an icon in the system tray", "no desktop-notification appeared"):
+        assert lint.outside_page_terms(text), text
+    for text in ("a toast says Saved", "an alert banner appears", "the notifications page lists them",
+                 "a dialog asks you to confirm", "the page opens"):  # in the page, so testable
+        assert lint.outside_page_terms(text) == [], text
+    assert lint.outside_page_terms("no desktop-notification, and no file dialog") == ["desktop notification", "file dialog"]
+
+
+def test_a_prompt_tells_the_tester_to_split_mixed_outcomes():
+    from parallax import lifecycle
+    said = " ".join(uitest.PROMPT.split())  # the rule reads across the prompt's wrapped lines
+    assert "One outcome can have both a page part and an outside part" in said
+    assert "write a flow for only the page part" in said and "A flow's name and its saw describe only what the page shows" in said
+    assert 'name it in not_looked_at as "can\'t test in a browser: <what>"' in said
+    assert "mixes page behavior with behavior outside it" in lifecycle.SHAPES["intent"]
