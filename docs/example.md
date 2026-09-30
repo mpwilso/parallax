@@ -12,7 +12,7 @@ The whole input was one paragraph in the intake box (ledger `26bf1e3d`, 00:03):
 
 ## 2. Focus (which drafts the intent and plan) writes both
 
-The intent drafter read the repo and wrote [intent.md](tasks/e9a55a/intent.md) (ledger `bbc8fa37`, $0.36): a problem statement citing `README.md` by line, five numbered outcomes, constraints (don't change `doctor.py` or `cli.py`, keep the `#harden-wsl` anchor, a $4.00 cap) and a `scope` of the two files the work may touch. The plan drafter then wrote [plan.md](tasks/e9a55a/plan.md) (ledger `ff8a37df`, $0.44): steps by file and line, the tests that prove it, risks, and the `toml` block code reads: `files`, `tests`, `covers`, no domains, no outside reads, an estimate of $2.60 under the $4.00 cap.
+Focus read the repo and wrote [intent.md](tasks/e9a55a/intent.md) (ledger `bbc8fa37`, $0.36): a problem statement citing `README.md` by line, five numbered outcomes, constraints (don't change `doctor.py` or `cli.py`, keep the `#harden-wsl` anchor, a $4.00 cap) and a `scope` of the two files the work may touch. Focus then wrote [plan.md](tasks/e9a55a/plan.md) (ledger `ff8a37df`, $0.44): steps by file and line, the tests that prove it, risks, and the `toml` block code reads: `files`, `tests`, `covers`, no domains, no outside reads, an estimate of $2.60 under the $4.00 cap.
 
 Code checked the plan against the intent before anyone saw it: every listed file inside the intent's scope, every outcome covered, the cap matching the budget the request named.
 
@@ -22,7 +22,7 @@ This task ran before the launch rule existed, so its plan waited for a person. T
 
 > Two plan errors. (1) safe.directory must come before the clone and name the SOURCE: /mnt/c/<path to parallax> and /mnt/c/<path to parallax>/.git. Git refuses the /mnt/c source during the clone; the new copy in ~/code/parallax never needs it. Unset both right after the clone. (2) budget_cap_usd must be 4.00, as the intent says. Everything else stays.
 
-The plan drafter got that reason and the intent, nothing else, and wrote the plan again (ledger `549ee785`, $0.42). Both drafted files were then edited by hand before the approval (ledger `4cbfefd2`, 00:20), which is why their recorded hashes differ from the drafts'; `parallax stats` counts each hand edit as a touch, and today the rule is to reject with a reason instead. The approval hashed both files and signed them with the key the sandbox can't read.
+Focus got that reason and the intent, nothing else, and wrote the plan again (ledger `549ee785`, $0.42). Both drafted files were then edited by hand before the approval (ledger `4cbfefd2`, 00:20), which is why their recorded hashes differ from the drafts'; `parallax stats` counts each hand edit as a touch, and today the rule is to reject with a reason instead. The approval hashed both files and signed them with the key the sandbox can't read.
 
 ## 4. Maker builds, in the sandbox
 

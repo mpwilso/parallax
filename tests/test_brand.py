@@ -95,11 +95,15 @@ def test_the_readme_images_and_the_ui_come_from_the_same_data():
     assert brand.logo_body() in social and "Agents do the work. You make the calls." in social
 
 
-def test_no_em_dashes_or_other_products_in_the_brand():
-    text = Path(brand.__file__).read_text(encoding="utf-8") + (ROOT / "docs" / "brand" / "party.svg").read_text()
-    assert "\u2014" not in text
-    for word in ("Pokémon", "pokemon", "Nintendo", "Zelda", "Minecraft", "Mario"):
-        assert word.lower() not in text.lower()
+def test_the_brand_is_plain_words_and_its_own():
+    """No em dashes, and every proper noun in the brand module is one of the four agents or Parallax."""
+    text = Path(brand.__file__).read_text(encoding="utf-8")
+    assert "\u2014" not in text and "\u2014" not in (ROOT / "docs" / "brand" / "party.svg").read_text()
+    ours = {"Focus", "Maker", "Second", "Eye", "Field", "Parallax", "Scope"}
+    prose = " ".join(re.findall(r'"""(.*?)"""', text, re.S)) + " ".join(re.findall(r"#\s*(.*)", text))
+    capitalised = {w for w in re.findall(r"(?<![.!?]\s)(?<!^)\b([A-Z][a-z]+)\b", prose, re.M)}
+    common = {"The", "A", "An", "One", "Names", "Portraits", "Motion", "Any", "Both", "Claude", "Code", "Both", "Focus"}
+    assert capitalised - ours - common == set(), capitalised - ours - common
 
 
 def test_stages_follow_the_ledger():

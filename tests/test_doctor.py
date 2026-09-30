@@ -12,7 +12,7 @@ from parallax.cli import main
 from parallax.core import POLICY_FILE, STATE_DIR, ParallaxError, Project
 from parallax.build import flag_stale_runs
 
-WSL2 = "6.18.33.2-microsoft-standard-WSL2"
+WSL2 = "6.1.0-microsoft-standard-WSL2"
 HARDENED_MOUNTS = "none /mnt/wsl tmpfs rw 0 0\n"
 
 

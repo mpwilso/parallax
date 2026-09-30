@@ -6,7 +6,7 @@ A cold sweep of the repo before it went public, against [THREAT_MODEL.md](THREAT
 
 | Severity | Finding | Fixed how |
 |---|---|---|
-| High | The launch rule approved a plan that opened the boundary. A drafter steered by repo or issue text could list `outside_reads` or `domains`, and a cap under `auto_launch_usd` launched it unseen. | A plan with any `domains` or `outside_reads` waits for you; the reason names the field. (`pilot.launch_rule`) |
+| High | The launch rule approved a plan that opened the boundary. Focus (which drafts the intent and plan) steered by repo or issue text could list `outside_reads` or `domains`, and a cap under `auto_launch_usd` launched it unseen. | A plan with any `domains` or `outside_reads` waits for you; the reason names the field. (`pilot.launch_rule`) |
 | Medium | A plan's `outside_reads` could name the approval key's folder or `~/.claude`; preflight probed two exact files, not the folders. | No plan can open either folder; the build refuses before rules are written. (`sandbox.refused_reads`) |
 | Medium | CI ran with default token permissions and actions pinned to tags. | `permissions: contents: read`; every action pinned to a commit; a test keeps it so. |
 | Medium | The whole sandbox rested on preflight running in each launcher; the background module by hand skipped it. | Preflight runs in `build.run_build` and nowhere else; one test drives every entry point. |
@@ -14,7 +14,7 @@ A cold sweep of the repo before it went public, against [THREAT_MODEL.md](THREAT
 | Low | A bad `Content-Length` crashed the request thread; 500s echoed exception text. | 400 or 413; 500s return one fixed line and log the detail to the terminal. |
 | Low | The secrets scan missed common key shapes. | Eight more patterns (OpenAI project keys, Stripe, GitLab, npm, PyPI, Hugging Face, Slack webhooks, JWTs). Still best effort. |
 | Low | `parallax init` copied a repo's example policy, `[build] setup` included, which runs as you. | `init` shows the command and asks once; non-interactive means left out. |
-| Low | Two threat-model claims had no code behind them: no memory across tasks, and `file:` blocked in Field's browser. | Auto-memory is off for every agent in its environment and the maker's settings, per the Claude Code docs; the `file:` claim names the pinned MCP version it relies on, and the pin test says to recheck it if the version moves. |
+| Low | Two threat-model claims had no code behind them: no memory across tasks, and `file:` blocked in Field's browser. | Auto-memory is off for every agent in its environment and Maker's settings, per the Claude Code docs; the `file:` claim names the pinned MCP version it relies on, and the pin test says to recheck it if the version moves. |
 
 ## Knowingly open
 
