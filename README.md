@@ -31,23 +31,7 @@ A local tool that runs Claude Code agents on your repo inside a sandbox, checks 
 
 ## How a task moves
 
-```mermaid
-flowchart TD
-    you([You describe the work]) --> intake[Intake: the UI's box, or parallax do]
-    intake --> focus
-    subgraph without[Without you]
-        focus[Focus drafts the intent and plan] --> fit{Plan checked against the intent, by code}
-        fit -- misfit: redraft, up to 2 --> focus
-        fit -- launch rule --> maker[Maker builds, in the sandbox]
-        maker --> check[Check: your tests, Second Eye, Field]
-        check -- findings: rework, up to 3 --> maker
-    end
-    check --> inbox[One card: Ready, or one decision]
-    inbox -- accept --> accept[Commit exactly the reviewed tree]
-    accept --> merge([You merge])
-    without -. every step .-> ledger[(Hash-chained ledger)]
-    inbox -. your decisions .-> ledger
-```
+<img src="docs/brand/flow.svg" alt="How a task moves: your words go through Focus, the plan check by code, the launch rule, Maker in the sandbox and the check by your tests, Second Eye and Field, then come back as one card for your accept and your merge, with every step on the hash-chained ledger" width="600">
 
 ## Many ways in, one way through
 

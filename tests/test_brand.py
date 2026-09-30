@@ -94,9 +94,10 @@ def test_the_readme_images_and_the_ui_come_from_the_same_data():
         assert bundle["agents"][key]["svg"] == brand.portrait_body(key)
         assert bundle["agents"][key]["svg"] in brand.party_svg()
     assert set(bundle["agents"]) == set(brand.AGENTS)
-    assert set(brand.ASSETS) == {"logo.svg", "mark.svg", "party.svg", "mark-animated.svg"}
+    assert set(brand.ASSETS) == {"logo.svg", "mark.svg", "party.svg", "mark-animated.svg", "flow.svg"}
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "docs/brand/mark-animated.svg" in readme and "docs/brand/party.svg" in readme
+    assert "docs/brand/mark-animated.svg" in readme and "docs/brand/party.svg" in readme and "docs/brand/flow.svg" in readme
+    assert "```mermaid" not in readme
     social = (ROOT / "docs" / "brand" / "social.html").read_text(encoding="utf-8")
     assert brand.logo_body() in social and "Agents do the work. You make the calls." in social
 

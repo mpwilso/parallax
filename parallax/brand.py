@@ -176,8 +176,107 @@ def bundle() -> dict:
                                             for key in AGENTS}}
 
 
+# the flow diagram: one column of equal boxes, arrows down the middle, notes to the right ----------------
+
+FLOW_FONT = '-apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
+FLOW_STEPS = [  # (text, portraits, side note)
+    ("You describe the work", (), ""),
+    ("Intake: the UI's box, or parallax do", (), ""),
+    ("Focus drafts the intent and plan", ("focus",), "misfit: redraft, up to 2"),
+    ("Plan checked against the intent, by code", (), ""),
+    ("Launch rule", (), "over the limit, or crosses the boundary: asks you"),
+    ("Maker builds in the sandbox", ("maker",), ""),
+    ("Check: your tests, Second Eye, Field", ("second_eye", "field"), "findings: rework, up to 3"),
+    ("One card: Ready, or one decision", (), ""),
+    ("Accept commits exactly the reviewed tree", (), ""),
+    ("You merge", (), ""),
+]
+WITHOUT_YOU = (2, 6)  # the steps that run without you, first and last, for the bracket
+FLOW_COLORS = {"box": "#3f4775", "edge": "#5a63a0", "ink": "#f2f3fa", "muted": "#bfc4dd", "line": "#9aa1c9"}
+_NARROW, _WIDE = set("iljtfr.,:;' !"), set("mwMW")
+
+
+def _text_width(text: str, size: float) -> float:
+    """A generous estimate for a system sans-serif: the diagram test measures the real thing in a browser."""
+    em = 0.0
+    for c in text:
+        em += 0.34 if c in _NARROW else 0.88 if c in _WIDE else 0.72 if c.isupper() else 0.6
+    return em * size
+
+
+def _wrap(text: str, size: float, width: float) -> list[str]:
+    lines, line = [], ""
+    for word in text.split():
+        trial = f"{line} {word}".strip()
+        if line and _text_width(trial, size) > width:
+            lines.append(line)
+            line = word
+        else:
+            line = trial
+    return lines + [line] if line else lines
+
+
+def flow_svg() -> str:
+    """How a task moves, drawn: sized from the text, on the brand tile, portraits from the same data."""
+    W, size, note_size = 600, 13.5, 11
+    pad_x, box_h, gap, pic = 16, 42, 26, 24
+    widest = max(_text_width(text, size) + 2 * pad_x + len(pics) * (pic + 8) for text, pics, _ in FLOW_STEPS)
+    box_w = int(widest + 0.5)
+    col_x = (W - box_w) // 2
+    note_x = col_x + box_w + 14
+    note_w = W - note_x - 12
+    top = 26
+    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {{H}}" width="{W}" height="{{H}}" '
+             f'role="img" aria-label="How a task moves: from your words through Focus, the plan check, the launch rule, '
+             f'Maker, the check and one card to your accept and your merge, every step on the ledger" '
+             f'font-family=\'{FLOW_FONT}\' font-size="{size}">',
+             f'<rect class="tile" width="{W}" height="{{H}}" rx="14" fill="{TILE}"/>']
+    y = top
+    centers = []
+    for i, (text, pics, note) in enumerate(FLOW_STEPS):
+        cy = y + box_h / 2
+        centers.append(cy)
+        parts.append(f'<g class="step" data-step="{i}">'
+                     f'<rect class="box" x="{col_x}" y="{y}" width="{box_w}" height="{box_h}" rx="8" '
+                     f'fill="{FLOW_COLORS["box"]}" stroke="{FLOW_COLORS["edge"]}" stroke-width="1"/>')
+        x = col_x + pad_x
+        for key in pics:
+            s = pic / 16
+            parts.append(f'<g class="portrait" data-agent="{key}" transform="translate({x} {cy - pic / 2}) scale({s:.4f})">'
+                         f'{portrait_body(key)}</g>')
+            x += pic + 8
+        parts.append(f'<text class="label" x="{x}" y="{cy:.1f}" dominant-baseline="central" fill="{FLOW_COLORS["ink"]}">{text}</text></g>')
+        if note:
+            lines = _wrap(note, note_size, note_w)
+            lh = note_size * 1.3
+            ny = cy - (len(lines) - 1) * lh / 2
+            parts.append(f'<text class="note" data-step="{i}" x="{note_x}" y="{ny:.1f}" dominant-baseline="central" '
+                         f'font-size="{note_size}" fill="{FLOW_COLORS["muted"]}">'
+                         + "".join(f'<tspan x="{note_x}" dy="{0 if n == 0 else lh:.1f}">{line}</tspan>' for n, line in enumerate(lines))
+                         + "</text>")
+        if i < len(FLOW_STEPS) - 1:  # the arrow to the next box: a line and a small head, down the middle
+            ax, y1, y2 = W / 2, y + box_h + 1, y + box_h + gap - 1
+            parts.append(f'<g class="arrow"><line x1="{ax}" y1="{y1}" x2="{ax}" y2="{y2 - 5}" stroke="{FLOW_COLORS["line"]}" stroke-width="1.5"/>'
+                         f'<path d="M{ax - 4} {y2 - 6} L{ax} {y2} L{ax + 4} {y2 - 6} Z" fill="{FLOW_COLORS["line"]}"/></g>')
+        y += box_h + gap
+    # the bracket on the left for the steps that run without you, with a short label along it
+    first, last = WITHOUT_YOU
+    by1, by2 = centers[first] - box_h / 2, centers[last] + box_h / 2
+    bx = col_x - 14
+    parts.append(f'<path class="bracket" d="M{bx + 6} {by1} H{bx} V{by2} H{bx + 6}" fill="none" stroke="{FLOW_COLORS["line"]}" stroke-width="1.5"/>')
+    lx, ly = bx - 8, (by1 + by2) / 2
+    parts.append(f'<text class="bracket-label" x="{lx}" y="{ly:.1f}" transform="rotate(-90 {lx} {ly:.1f})" text-anchor="middle" '
+                 f'dominant-baseline="central" font-size="{note_size}" fill="{FLOW_COLORS["muted"]}">runs without you</text>')
+    ly2 = y - gap + 24
+    parts.append(f'<text class="ledger" x="{W / 2}" y="{ly2}" text-anchor="middle" dominant-baseline="central" font-size="{note_size + 1}" '
+                 f'fill="{FLOW_COLORS["muted"]}">Every step is written to the hash-chained ledger.</text>')
+    H = int(ly2 + 22)
+    parts.append("</svg>")
+    return "".join(parts).replace("{H}", str(H))
+
+
 ASSETS = {"logo.svg": lambda: logo_svg(word=True), "mark.svg": lambda: logo_svg(), "party.svg": party_svg,
-          "mark-animated.svg": lambda: logo_svg(animated=True)}
+          "mark-animated.svg": lambda: logo_svg(animated=True), "flow.svg": flow_svg}
 
 
 def write_assets(folder: Path) -> list[Path]:
