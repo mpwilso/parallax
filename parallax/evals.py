@@ -71,7 +71,8 @@ def load_cases(root: Path, only: list[str] | None = None) -> list[Case]:
         missing = sorted(set(only) - {c.id for c in cases})
         if missing:
             raise ParallaxError(f"no case {', '.join(missing)} in {CASES_FILE}")
-        cases = [c for c in cases if c.id in only]
+        by_id = {c.id: c for c in cases}
+        cases = [by_id[i] for i in dict.fromkeys(only)]  # in the order you named them: the budget reaches the first
     return cases
 
 

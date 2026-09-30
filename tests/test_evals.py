@@ -250,6 +250,12 @@ def test_the_header_names_every_case_the_budget_didnt_reach(tmp_path):
     assert lint.lint_report(text, root=tmp_path) == []  # under the caps, names and all
 
 
+def test_named_cases_run_in_the_order_you_name_them():
+    """492eaf ran in cases.toml's order and the budget never reached humanize-174, the case that mattered."""
+    root = Path(__file__).resolve().parents[1]
+    assert [c.id for c in evals.load_cases(root, ["humanize-174", "pathspec-77", "humanize-174"])] == ["humanize-174", "pathspec-77"]
+
+
 def test_progress_lines_are_out_as_they_happen(proj, upstream, monkeypatch):
     """By default every progress line is printed with a flush, so a file or a pipe gets it at once."""
     printed = []
