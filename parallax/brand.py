@@ -198,7 +198,7 @@ FLOW_STEPS = [  # (text, portraits, side note, owner)
 ]
 WITHOUT_YOU = (1, 5)  # the steps that run without you, first and last, for the bracket
 OWNERS = {"you": ("You", "#5b4b8e", "#8c7ac4"), "agents": ("Agents", "#2f5d68", "#5b96a4"),
-          "parallax": ("Parallax (automatic)", "#3f4775", "#5a63a0")}  # label, box fill, box edge; ink reads AA on each
+          "parallax": ("Parallax (automatic)", "#5f6f8e", "#8a98b8")}  # label, box fill, box edge; ink reads AA on each, and each fill stands apart from the tile and the others
 FLOW_COLORS = {"ink": "#f2f3fa", "muted": "#bfc4dd", "line": "#9aa1c9"}
 _NARROW, _WIDE = set("iljtfr.,:;' !"), set("mwMW")
 
