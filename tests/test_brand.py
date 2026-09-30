@@ -202,14 +202,3 @@ def test_images_on_the_page_never_pick_their_color_from_the_os():
     assert "#1c1c1a" in brand.lockup_svg("light") and "#ecebe6" in brand.lockup_svg("dark")
     assert brand.NAME_INK["light"] in brand.party_animated_svg("light") and brand.NAME_INK["dark"] in brand.party_animated_svg("dark")
 
-
-def test_reticles_portrait_is_a_clear_gap_until_it_is_drawn():
-    """The portrait is still to come: the tile with a dashed outline, no halo and no pixels, everywhere
-    the others appear. Filling its rows and colors and deleting "placeholder" is all it takes."""
-    body = brand.portrait_body("reticle")
-    assert 'class="gap"' in body and 'stroke-dasharray="1 1"' in body and "<circle" not in body
-    assert brand.pixels("reticle") == [] and brand.PORTRAITS["reticle"]["placeholder"] is True
-    assert brand.bundle()["agents"]["reticle"]["svg"] == body  # the UI's
-    for name in ("party.svg", "party-animated-light.svg", "flow.svg"):
-        assert body in (ROOT / "docs" / "brand" / name).read_text(), name
-    assert "Reticle" in (ROOT / "docs" / "brand" / "party.svg").read_text()

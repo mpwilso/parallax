@@ -18,7 +18,6 @@ TILE = "#313859"
 VIOLET, CYAN = "#a47cf0", "#5ef2ff"
 BASE = {"k": "#12131f", "s": "#f0c39a", "w": "#ffffff"}  # outline, skin, eye glint
 LIGHT, DARK = 0.22, 0.25  # side light: lit from the left, shaded on the right
-GAP_INK = "#7c81a1"  # the dashed outline of a portrait still to come
 
 AGENTS = {  # role: shown beside the name the first time it appears; short: under the portrait on a card
     "focus": {"name": "Focus", "role": "drafts the intent and plan", "short": "intent and plan"},
@@ -36,9 +35,12 @@ PORTRAITS = {
                        "..kggggggggggk..", "..kgssssssssgk..", "..kgsoosskwsgk..", "..kgsoosssssgk..",
                        "..kgssskksssgk..", "...kgssssssgk...", "...kggssssggk...", "..kggggxxggggk..",
                        ".kggggxxxxggggk.", "kGGGGGgxxgGGGGGk", "kGGGGGGggGGGGGGk", "kGGGGGGGGGGGGGGk"]},
-    # a gap for the portrait still to come: the tile with a dashed outline and nothing in it. To fill it,
-    # draw its rows and colors like the others and delete "placeholder"
-    "reticle": {"halo": "#6fdc8c", "glow": "", "colors": {}, "rows": ["." * 16] * 16, "placeholder": True},
+    "reticle": {"halo": "#6ee7a8", "glow": "x",
+                "colors": {"h": "#4a3326", "b": "#c9a24a", "x": "#6ee7a8", "g": "#2f6b4f", "G": "#1f4a37"},
+                "rows": ["................", ".....kkkkkk.....", "....khhhhhhk....", "...khhhhhhhhk...",
+                         "...khssssbbbk...", "...kssssbxkxbk..", "...kskssbkkkbk..", "...kssssbxkxbk..",
+                         "...ksssssbbbk...", "...ksskksssk....", "....kssssssk....", "...kggggggggk...",
+                         ".kgggggbbgggggk.", "kggggggbbggggggk", "kGGGGGGbbGGGGGGk", "kGGGGGGGGGGGGGGk"]},
     "maker": {"halo": "#ff7a3d", "glow": "ox",
               "colors": {"h": "#d06a2a", "o": "#ffb347", "a": "#7a4b32", "c": "#3b2a22", "m": "#9aa4b0", "x": "#ff7a3d"},
               "rows": ["................", ".....kkkkkk.....", "....khhhhhhk....", "...khhhhhhhhk...",
@@ -115,12 +117,7 @@ def pixels(key: str) -> list[tuple[int, int, str, bool]]:
 
 
 def portrait_body(key: str) -> str:
-    """The inner SVG of one portrait, at 16 by 16 units: tile, halo, then one rect per pixel. A
-    placeholder is the tile with a dashed outline where the portrait will go."""
-    if PORTRAITS[key].get("placeholder"):
-        return (f'<rect width="16" height="16" rx="2" fill="{TILE}"/>'
-                f'<rect class="gap" x="2" y="2" width="12" height="12" rx="1.5" fill="none" stroke="{GAP_INK}" '
-                f'stroke-width="0.5" stroke-dasharray="1 1"/>')
+    """The inner SVG of one portrait, at 16 by 16 units: tile, halo, then one rect per pixel."""
     parts = [f'<rect width="16" height="16" rx="2" fill="{TILE}"/>',
              f'<circle cx="8" cy="8.5" r="7.5" fill="{PORTRAITS[key]["halo"]}" opacity="0.16"/>']
     for x, y, fill, glow in pixels(key):
