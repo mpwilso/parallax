@@ -92,6 +92,19 @@ def stalled(entries: list[dict]) -> bool:
     return False
 
 
+def scope_files(item: dict | None) -> list[dict]:
+    """A scope decision's files: {path, cause, size, secret} each. Anything else stored under "files"
+    (flow decisions before 2026-09-30 kept their test paths there, as strings) isn't one of them."""
+    files = ((item or {}).get("data") or {}).get("files") or []
+    return [f for f in files if isinstance(f, dict) and "path" in f]
+
+
+def flow_files(item: dict | None) -> list[str]:
+    """A flow decision's test files. Older entries kept them under "files", as plain paths."""
+    d = (item or {}).get("data") or {}
+    return list(d.get("flow_files") or [f for f in d.get("files") or [] if isinstance(f, str)])
+
+
 def _open_item(project: Project, task_id: str) -> dict | None:
     items = [e for e in project.inbox() if e["data"].get("task") == task_id]
     return items[-1] if items else None
@@ -146,7 +159,7 @@ def decision(project: Project, task_id: str) -> Decision | None:
                          Option("plan", "the plan wins: that finding stops blocking, and the check runs again"), DROP],
                         "intent", "the check", item)
     if stage == "scope":
-        secret = any(f.get("secret") and f.get("size") for f in d.get("files") or [])
+        secret = any(f.get("secret") and f.get("size") for f in scope_files(item))
         question = ("The change holds a secrets file with content: accept that, or redraft?" if secret else
                     "The change goes outside the approved plan: accept that, or redraft?")
         return Decision("scope", question,
@@ -224,7 +237,7 @@ def apply(project: Project, task_id: str, name: str, reason: str = "", spawn: Ca
         project.resolve(dec.item["id"], True, said)
     elif name == "remove":
         from . import uitest
-        uitest.remove(project, task_id, dec.item["data"].get("files") or [], said)
+        uitest.remove(project, task_id, flow_files(dec.item), said)
         project.resolve(dec.item["id"], True, said)
     elif name == "accept":
         project.resolve(dec.item["id"], True, said)

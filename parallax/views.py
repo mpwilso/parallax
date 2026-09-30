@@ -6,6 +6,8 @@ sections, so the terminal and the browser can never disagree about a task.
 from __future__ import annotations
 
 import re
+import sys
+import traceback
 
 from . import decide, inbox, lifecycle, live, progress, show, stats, status
 from .core import Project
@@ -18,8 +20,26 @@ RISK = {"guard": 0, "scope": 1, "conflict": 1, "stuck": 2, "checker": 2, "tests"
         "drafting": 3, "launch": 4, "review": 4}  # what needs you most comes first; Ready comes last
 
 
+BROKEN = "couldn't display this task"
+
+
+def log_broken(task_id: str, where: str) -> None:
+    """The traceback goes to the server's terminal; the page and the list show the task as broken."""
+    print(f"parallax: {BROKEN} {task_id} ({where})\n{traceback.format_exc()}", file=sys.stderr, flush=True)
+
+
+def broken_row(task_id: str, t: dict | None = None) -> dict:
+    """A row for a task whose own line couldn't be built: its id, and a plain sentence. Nothing else."""
+    t = t or {}
+    return {"task": task_id, "title": f"Task {task_id}", "status": t.get("status", ""), "state": "needs you",
+            "cost_usd": round(t.get("cost_usd") or 0, 2), "last": t.get("last"), "kind": "broken", "secret": False,
+            "broken": True, "line": f"Task {task_id}: {BROKEN}. The terminal running parallax ui says why.",
+            "chip": "Can't display", "strip": [], "spend": None, "started": ""}
+
+
 def board(project: Project) -> dict:
     """The queue: what waits on you (riskiest first, then oldest), what's working, and what's done.
+    One task that can't be shown is shown as broken, with its id; every other task shows as usual.
 
     columns: every task by state, kept for the terminal's view of the same thing."""
     from .build import flag_stale_runs
@@ -27,37 +47,64 @@ def board(project: Project) -> dict:
     reconcile(project)  # the same housekeeping every command runs: a dead task never shows as building
     flag_stale_runs(project)
     columns: dict[str, list[dict]] = {state: [] for state in status.BOARD}
+    broken: list[dict] = []
     for tid, t in project.tasks().items():
         if not t.get("intent"):
             continue
-        state = status.board(t["status"])
-        columns[state].append({"task": tid, "title": inbox.title(project, tid), "status": t["status"], "state": state,
-                               "cost_usd": round(t.get("cost_usd") or 0, 2), "last": t.get("last")})
+        try:
+            state = status.board(t["status"])
+            columns[state].append({"task": tid, "title": inbox.title(project, tid), "status": t["status"], "state": state,
+                                   "cost_usd": round(t.get("cost_usd") or 0, 2), "last": t.get("last")})
+        except Exception:
+            log_broken(tid, "its title")
+            broken.append(broken_row(tid, t))
     waiting = []
     for item in columns["needs you"] + columns["ready"]:
-        dec = decide.decision(project, item["task"])
-        item["kind"] = dec.kind if dec else "ready"
-        item["line"] = progress.sentence(_headline(project, item["task"]))
-        item["secret"] = bool(dec and dec.item and any(f.get("secret") and f.get("size") for f in dec.item["data"].get("files") or []))
-        item.update(_row(project, item, dec))
-        waiting.append(item)
+        try:
+            dec = decide.decision(project, item["task"])
+            item["kind"] = dec.kind if dec else "ready"
+            item["line"] = progress.sentence(_headline(project, item["task"]))
+            item["secret"] = bool(dec and any(f.get("secret") and f.get("size") for f in decide.scope_files(dec.item)))
+            item.update(_row(project, item, dec))
+            waiting.append(item)
+        except Exception:
+            log_broken(item["task"], "its row")
+            broken.append(broken_row(item["task"], item))
     waiting.sort(key=lambda i: (not i["secret"], RISK.get(i["kind"], 5), i["last"] or ""))
     working = []
     for s in ("drafting", "building", "checking"):
         for i in columns[s]:
-            entries = status.attempt(project.ledger.entries(), i["task"])
-            what, why, _ = live.doing(entries)
-            item = dict(i, line=progress.sentence(what + (f". {why[:1].upper()}{why[1:]}" if why else "")),
-                        agent=live.agent_of(what), kind=None)
-            item.update(_row(project, item, None))
-            working.append(item)
-    done = sorted(columns["done"], key=lambda i: i["last"] or "", reverse=True)
-    touches = stats.touches(project)
-    for item in done:
-        item["merge"] = item["status"] == "accepted"  # accepted, and the merge is still yours
-        item.update(progress.done_row(project, item["task"], touches))
+            try:
+                entries = status.attempt(project.ledger.entries(), i["task"])
+                what, why, _ = live.doing(entries)
+                item = dict(i, line=progress.sentence(what + (f". {why[:1].upper()}{why[1:]}" if why else "")),
+                            agent=live.agent_of(what), kind=None)
+                item.update(_row(project, item, None))
+                working.append(item)
+            except Exception:
+                log_broken(i["task"], "its row")
+                broken.append(broken_row(i["task"], i))
+    done = []
+    touches = _or_log(lambda: stats.touches(project), {}, "all", "touch counts")
+    for item in sorted(columns["done"], key=lambda i: i["last"] or "", reverse=True):
+        try:
+            item["merge"] = item["status"] == "accepted"  # accepted, and the merge is still yours
+            item.update(progress.done_row(project, item["task"], touches))
+            done.append(item)
+        except Exception:
+            log_broken(item["task"], "its done row")
+            broken.append(broken_row(item["task"], item))
+    waiting = broken + waiting  # a task that can't be shown is one to look at: first, and never silent
     return {"columns": columns, "waiting": waiting, "working": working, "done": done, "count": len(waiting),
-            "overview": progress.overview(project)}
+            "overview": _or_log(lambda: progress.overview(project), [], "all", "the overview")}
+
+
+def _or_log(build, fallback, task_id: str, where: str):
+    try:
+        return build()
+    except Exception:
+        log_broken(task_id, where)
+        return fallback
 
 
 def _row(project: Project, item: dict, dec) -> dict:
@@ -96,6 +143,21 @@ CITE = re.compile(r"\s*\((ledger [0-9a-f]+|[\w./-]+:\d+|Unverified)\)$")
 
 
 def card(project: Project, task_id: str) -> dict:
+    """The card, or, if this task's card can't be built, a plain one that says so with its id."""
+    project.task(task_id)  # an unknown id is still an error, not a broken card
+    try:
+        return _card(project, task_id)
+    except Exception:
+        log_broken(task_id, "its card")
+        line = f"Task {task_id}: {BROKEN}. The terminal running parallax ui says why."
+        return {"task": task_id, "title": f"Task {task_id}", "status": "", "state": "needs you", "cost_usd": 0,
+                "report": {"type": "", "bottom": line, "not_looked_at": "", "next": "", "sections": {}},
+                "unseen": [], "found": [], "changed": [], "redraft": False, "details": [], "actions": {"kind": "none"},
+                "merge": "", "files": [], "live": "", "stages": [], "strip": [], "spend": None, "ask": None,
+                "chip": "Can't display", "has_change": False, "shots": [], "docs": [], "broken": True}
+
+
+def _card(project: Project, task_id: str) -> dict:
     """Everything the decision card needs: the report, and what you can do from it.
 
     Same facts as `parallax show`, arranged for a decision: the gaps the header could only point to
@@ -108,7 +170,7 @@ def card(project: Project, task_id: str) -> dict:
         actions = {"kind": "decide", "question": dec.question, "recommend": dec.recommend,
                    "owner": dec.owner, "why_human": dec.why_human,
                    "options": [{"name": o.name, "does": o.does, "needs_reason": o.needs_reason} for o in dec.options]}
-        files = dec.item["data"].get("files") or [] if dec.item else []
+        files = decide.scope_files(dec.item)
     elif t["status"] == "ready":
         actions = {"kind": "ready"}
     else:

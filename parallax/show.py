@@ -209,7 +209,7 @@ def _decision(project: Project, task_id: str, dec, found: list[str], gaps: list[
 
 def _files(dec) -> list[str]:
     """Every file behind a grouped scope problem, for Details: the card's lead line only counts them."""
-    files = (dec.item or {}).get("data", {}).get("files") or []
+    files = decide.scope_files(dec.item)
     if len(files) < 2:
         return []
 

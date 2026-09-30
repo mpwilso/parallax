@@ -316,7 +316,7 @@ def test_a_tester_test_that_still_fails_after_a_rework_comes_to_you(proj, monkey
     dec = decide.decision(proj, tid)
     assert dec.kind == "flows" and [o.name for o in dec.options] == ["remove", "reject", "drop"]
     rel = f"docs/tasks/{tid}/ui_flows/opens.spec.js"
-    assert dec.item["data"]["files"] == [rel]
+    assert dec.item["data"]["flow_files"] == [rel] and decide.flow_files(dec.item) == [rel]  # apart from scope files
     with pytest.raises(Exception, match="needs a reason"):
         decide.apply(proj, tid, "remove", spawn=lambda *a: 9)
     decide.apply(proj, tid, "remove", "it counts <article> rows; the page has none", spawn=lambda *a: 9)

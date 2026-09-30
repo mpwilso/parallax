@@ -17,12 +17,18 @@ def title(project: Project, task_id: str) -> str:
 
 
 def items(project: Project) -> list[dict]:
-    """One per task waiting on you, oldest first: {task, state, title}."""
+    """One per task waiting on you, oldest first: {task, state, title}. A task whose line can't be
+    built is listed as that, with the error in the log, and the rest as usual."""
     out = []
     for tid, t in project.tasks().items():
-        where = status.board(t["status"])
-        if where in ("ready", "needs you"):
-            out.append({"task": tid, "state": where, "title": title(project, tid)})
+        try:
+            where = status.board(t["status"])
+            if where in ("ready", "needs you"):
+                out.append({"task": tid, "state": where, "title": title(project, tid)})
+        except Exception:
+            from .views import log_broken
+            log_broken(tid, "its inbox line")
+            out.append({"task": tid, "state": "broken", "title": "couldn't display this task"})
     return out
 
 

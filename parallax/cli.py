@@ -146,9 +146,14 @@ def _run(args) -> int:
             if not tasks:
                 print("no tasks")
             for tid, t in tasks.items():
-                cost = f"  ${t['cost_usd']:.2f} est" if t.get("cost_usd") else ""
-                st = lifecycle.status_line(proj, tid) if t.get("intent") else t["status"]
-                print(f"{tid}  [{st}]{cost}  {_line(t['goal'], 100)}")
+                try:
+                    cost = f"  ${t['cost_usd']:.2f} est" if t.get("cost_usd") else ""
+                    st = lifecycle.status_line(proj, tid) if t.get("intent") else t["status"]
+                    print(f"{tid}  [{st}]{cost}  {_line(t['goal'], 100)}")
+                except Exception:  # one task that can't be shown never hides the rest
+                    from .views import BROKEN, log_broken
+                    log_broken(tid, "its line")
+                    print(f"{tid}  {BROKEN}")
         elif args.tcmd == "diff":
             print(proj.diff(args.task) or "no changes")
         return 0

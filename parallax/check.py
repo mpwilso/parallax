@@ -175,7 +175,7 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
                 files = sorted({g for g in uitest.guarded(project, task_id) for x in still if Path(g).name == Path(x["file"]).name})
                 return _to_you(project, task_id, "flows",
                                f"Field's test \"{c['name']}\" ({Path(c['file']).name}) still fails after a rework: "
-                               f"{c['message']}. Either the test or the app is wrong", tree=s.tree, files=files), []
+                               f"{c['message']}. Either the test or the app is wrong", tree=s.tree, flow_files=files), []
 
     # Reticle's tests of the outcomes, on this tree. A failure goes back to Maker as a finding; Second
     # Eye still judges the tree, so the eval can tell the two apart
