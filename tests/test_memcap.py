@@ -140,12 +140,16 @@ def test_a_cd_in_one_maker_command_carries_over_to_the_next_as_it_did_uncapped(t
 
 
 @pytest.mark.skipif(bool(why_not()), reason=str(why_not()))
-def test_in_the_real_sandbox_the_makers_capped_command_runs_and_stops_a_runaway(repo):
+def test_in_the_real_sandbox_the_makers_capped_command_runs_and_stops_a_runaway(repo, monkeypatch):
+    import tempfile
     from test_guard_and_checker import setup
+    missing = Path(tempfile.mkdtemp(prefix="px", dir="/tmp")) / "t"  # short: srt's sockets live in it
+    monkeypatch.setenv("CLAUDE_CODE_TMPDIR", str(missing))
     proj, tid, wt = setup(repo)
     p = build.prepare(proj, tid, setup=False, launching=False)
+    assert missing.is_dir() and str(missing) in p.rules.allow_write  # made before the first command
     folder, srt = p.home / memcap.FOLDER, p.home / "srt.json"  # the same rules as the maker's settings
-    env = build.scrubbed_env(None)
+    env = {**build.scrubbed_env(None), "CLAUDE_CODE_TMPDIR": str(missing)}
     ok = subprocess.run(["srt", "--settings", str(srt), "-c", memcap.shell("echo ran", folder)], cwd=wt, env=env,
                         capture_output=True, text=True, timeout=120)
     assert ok.returncode == 0 and ok.stdout.strip().endswith("ran"), ok.stderr
@@ -155,8 +159,8 @@ def test_in_the_real_sandbox_the_makers_capped_command_runs_and_stops_a_runaway(
     assert r.returncode == memcap.EXIT and "memory cap: the command used " in r.stderr, r.stderr[-400:]
 
     # Maker's working directory carries over between commands, as it did before the cap. The capped
-    # command notes it in a file in srt's TMPDIR, /tmp/claude, which Claude Code makes before any command
-    Path("/tmp/claude").mkdir(exist_ok=True)
+    # command notes it in a file in the sandbox's TMPDIR, which the build makes if it's missing: here a
+    # new one, so the shared /tmp/claude is never touched
     (wt / "sub").mkdir()
     (wt / "sub" / "data.txt").write_text("in sub\n")
     code, _, cwd = claude_code_runs(memcap.shell("cd sub", folder), wt, srt)
@@ -168,3 +172,18 @@ def test_in_the_real_sandbox_the_makers_capped_command_runs_and_stops_a_runaway(
 def test_focus_and_reticle_run_no_commands_so_there_is_nothing_to_cap():
     from parallax.agents import claude
     assert "Bash" not in claude.PLAN_TOOLS  # plan, draft and reticle stages get only these
+
+
+def test_the_sandboxs_temp_folder_is_made_before_makers_first_command(repo, monkeypatch, tmp_path):
+    for var in ("CLAUDE_CODE_TMPDIR", "CLAUDE_TMPDIR"):
+        monkeypatch.delenv(var, raising=False)
+    assert memcap.sandbox_tmp() == Path("/tmp/claude")  # srt's own, when nothing overrides it
+    assert memcap.sandbox_tmp({"CLAUDE_TMPDIR": "/a", "CLAUDE_CODE_TMPDIR": "/b"}) == Path("/b")
+    missing = tmp_path / "gone" / "claude"
+    monkeypatch.setenv("CLAUDE_TMPDIR", str(missing))
+    from test_guard_and_checker import setup
+    proj, tid, _ = setup(repo)
+    p = build.prepare(proj, tid, setup=False, launching=False)
+    assert missing.is_dir() and str(missing) in p.rules.allow_write
+    monkeypatch.delenv("CLAUDE_TMPDIR")
+    assert memcap.ensure_tmp() == Path("/tmp/claude") and Path("/tmp/claude").is_dir()  # made if missing, left if not

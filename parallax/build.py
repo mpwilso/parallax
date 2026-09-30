@@ -137,6 +137,10 @@ def prepare(project: Project, task_id: str, setup: bool = True, launching: bool 
     r = sandbox.rules(wt, targets, git_dir=sandbox.shared_git_dir(wt), venv=venv,
                       reads=reads, domains=plan["domains"])
     r.allow_read.append(str(memcap.place(home)))  # the maker's commands run under the memory cap (gate.py)
+    tmp = memcap.ensure_tmp()  # where a capped command notes its working directory for the next one
+    if str(tmp) != memcap.SANDBOX_TMP:  # srt makes only its default writable by itself
+        r.allow_write.append(str(tmp))
+        r.allow_read.append(str(tmp))
     settings, _ = sandbox.write_configs(home, r)
     return Prepared(t, plan, wt, home, venv, scope, r, settings, cap, left)
 

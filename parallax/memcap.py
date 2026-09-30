@@ -200,6 +200,24 @@ def shell(command: str, folder: Path, limit: int | None = None) -> str:
             f"else {capped} {shlex.quote(command)}; fi")
 
 
+SANDBOX_TMP = "/tmp/claude"  # srt's own writable temp folder
+
+
+def sandbox_tmp(environ: dict | None = None) -> Path:
+    """The TMPDIR the sandbox hands a command, by srt's rule: CLAUDE_CODE_TMPDIR, CLAUDE_TMPDIR, else
+    /tmp/claude. shell() notes the working directory there, so it must exist before the first command."""
+    env = os.environ if environ is None else environ
+    return Path(env.get("CLAUDE_CODE_TMPDIR") or env.get("CLAUDE_TMPDIR") or SANDBOX_TMP)
+
+
+def ensure_tmp(environ: dict | None = None) -> Path:
+    """Make the sandbox's temp folder if it's missing, from outside the sandbox: inside it, /tmp is
+    read-only, and without the folder a `cd` in one Maker command wouldn't carry over to the next."""
+    path = sandbox_tmp(environ)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def program(argv: list[str], limit: int | None = None) -> list[str]:
     """A program Parallax starts outside a shell, such as srt, under the cap."""
     return [sys.executable, "-I", str(Path(__file__).resolve()), str(limit or COMMAND), "--", *argv]
