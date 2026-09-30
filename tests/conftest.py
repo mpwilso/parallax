@@ -84,3 +84,19 @@ def memory_guards(monkeypatch):
     calls: list[tuple] = []
     monkeypatch.setattr(memcap, "guard", lambda *a: calls.append(a))
     return calls
+
+
+from parallax import core as _core, policy as _policy  # noqa: E402
+
+SHIPPED = {"policy": _core.DEFAULT_POLICY, "reticle": dict(_policy.DEFAULT_RETICLE)}  # before any test changes them
+
+
+@pytest.fixture(autouse=True)
+def reticle_off_unless_turned_on(monkeypatch):
+    """Reticle is on by default, and it's a model. A test project starts with it off, so tests of
+    other things don't depend on it; Reticle's own tests turn it on in their policy. The shipped
+    defaults are in SHIPPED, and tests/test_policy_and_stuck.py checks Reticle is on there."""
+    text = SHIPPED["policy"].replace("[reticle]\nenabled = true ", "[reticle]\nenabled = false", 1)
+    assert text != SHIPPED["policy"], "the default policy's [reticle] table moved: update this fixture"
+    monkeypatch.setattr(_core, "DEFAULT_POLICY", text)
+    monkeypatch.setattr(_policy, "DEFAULT_RETICLE", {**SHIPPED["reticle"], "enabled": False})

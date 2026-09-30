@@ -40,7 +40,6 @@ model = "claude-sonnet-5-5"    # the UI tester's model
 max_usd = 0.50                 # the most one tester run may spend, and what a plan's cap keeps for it
 
 [reticle]
-enabled = false                # true: before the build, an agent writes tests of the intent's outcomes that Maker never sees
+enabled = true                 # before the build, Reticle writes tests of what you asked, which Maker can't see or change
 model = ""                     # empty: the drafters' model
 max_usd = 0.50                 # the most one Reticle run may spend, and what a plan's cap keeps for it
-inferred = false               # true: it also tests outcomes Focus inferred; their failures are notes on the card, never rework

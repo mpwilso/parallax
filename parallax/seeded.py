@@ -1,8 +1,8 @@
 """`parallax eval --seeded`: catch rates from broken versions of the maintainers' real fix. No Maker.
 
 Per case:
-1. Focus drafts the intent from the issue (as `parallax do` would), and Reticle writes its tests,
-   asked and inferred outcomes both, each kept test marked with its kind.
+1. Focus drafts the intent from the issue (as `parallax do` would), and Reticle writes its tests of
+   the outcomes you asked for.
 2. Code, never a model, breaks the maintainers' merged fix: flip one comparison, shift one integer
    constant, or undo one hunk, one change at a time, on the fix's own changed lines. A version counts
    only if it fails the hidden tests; up to three per case.
@@ -176,7 +176,7 @@ def run_case(case, where: Path, policy, drafter_for, checker_for, runner=None) -
         cache = evals.cache_repo(case)
         repo = where / "repo"
         evals.clone_at(cache, case.base, repo)  # no history past the base: nothing an agent reads holds the fix
-        (repo / POLICY_FILE).write_text(evals.eval_policy(policy, case, PER_CASE, reticle=True, inferred=True), encoding="utf-8")
+        (repo / POLICY_FILE).write_text(evals.eval_policy(policy, case, PER_CASE, reticle=True), encoding="utf-8")
         project = Project.init(repo, actor="parallax")
         t = project.new_task(case.goal.strip(), intent=True)
         tid = t["task"]
@@ -195,7 +195,7 @@ def run_case(case, where: Path, policy, drafter_for, checker_for, runner=None) -
         reticle.write(project, tid, p, runner=runner)
         kept = reticle.kept(project, tid)
         r["inferred"] = sorted(n for n, k in lint.outcome_kinds(intent).items() if k == "inferred")
-        r["reticle_kept"] = {k: sum(t.get("kind") == k for t in kept) for k in ("asked", "inferred")}
+        r["reticle_kept"] = {"asked": len(kept)}
         rec = reticle.recorded(project, tid)
         r["reticle_weak"] = [w["why"] for w in (rec["data"].get("weak") or [])] if rec else []
 
@@ -214,9 +214,7 @@ def run_case(case, where: Path, policy, drafter_for, checker_for, runner=None) -
             failing = ran[1] if ran else []
             se = second_eye_scored(rv.findings, blocking)
             return {"tree": tree, "second_eye_flags": se["flags"], "findings": se["findings"], "test_only": se["test_only"],
-                    "reticle_asked": None if not r["reticle_kept"]["asked"] else bool(reticle.blocking(failing)),
-                    "reticle_any": None if not kept else bool(failing),
-                    "notes": sum(t.get("kind") == "inferred" for t in failing)}
+                    "reticle_asked": None if not kept else bool(failing)}
 
         versions, tried = [], 0
         for name, files in candidates(cache, case):
@@ -232,14 +230,12 @@ def run_case(case, where: Path, policy, drafter_for, checker_for, runner=None) -
             versions.append({"broken": name, "hidden": f"{res.passed} of {res.total} pass",
                              "second_eye": "catch" if j["second_eye_flags"] else "miss", "findings": j["findings"],
                              "test_only": j["test_only"],
-                             "reticle": {None: "no test", True: "catch", False: "miss"}[j["reticle_asked"]],
-                             "reticle_with_inferred": {None: "no test", True: "catch", False: "miss"}[j["reticle_any"]]})
+                             "reticle": {None: "no test", True: "catch", False: "miss"}[j["reticle_asked"]]})
         r["versions"] = versions
         real = judge(fix_files(cache, case), len(versions))
         r["real_fix"] = {"second_eye": "false alarm" if real["second_eye_flags"] else "right", "findings": real["findings"],
                          "test_only": real["test_only"],
-                         "reticle": {None: "no test", True: "false alarm", False: "right"}[real["reticle_asked"]],
-                         "inferred_notes": real["notes"]}
+                         "reticle": {None: "no test", True: "false alarm", False: "right"}[real["reticle_asked"]]}
         r["cost_usd"] = round(sum(e["data"].get("cost_usd") or 0 for e in project.ledger.entries()), 4)
     except Exception as err:  # a crashed case is a result too
         r.update({"error": f"{type(err).__name__}: {err}"[:300]})
@@ -300,11 +296,12 @@ def rates(results: list[dict]) -> dict:
         "second_eye": sum(x["second_eye"] == "catch" for x in v),
         "reticle": sum(x["reticle"] == "catch" for x in v),
         "reticle_tested": sum(x["reticle"] != "no test" for x in v),
-        "reticle_with_inferred": sum(x["reticle_with_inferred"] == "catch" for x in v),
+        "reticle_with_inferred": sum(x.get("reticle_with_inferred") == "catch" for x in v),  # runs before the experiment's removal
         "real": len(real),
         "second_eye_false": sum(x["second_eye"] == "false alarm" for x in real),
         "reticle_false": sum(x["reticle"] == "false alarm" for x in real),
-        "notes_on_real": sum(x["inferred_notes"] for x in real),
+        "notes_on_real": sum(x.get("inferred_notes") or 0 for x in real),
+        "inferred": any("reticle_with_inferred" in x for x in v),
     }
 
 
@@ -317,12 +314,14 @@ def summary(root: Path, out: Path, header: dict, results: list[dict]) -> str:
     why = "the run stopped before " + ("it" if len(left) == 1 else "them")  # the budget, or an interruption: run.json says
     gaps = [f"{', '.join(left)}: {why}"] if left else []
     gaps += [f"{', '.join(crashed)}: crashed"] if crashed else []
+    notes = f", and {c['notes_on_real']} inferred-outcome notes" if c["inferred"] else ""  # runs before its removal
     found = [f"Second Eye caught {c['second_eye']} of {c['versions']} broken versions ({rel}/run.json:1)",
              f"Reticle's tests of asked outcomes caught {c['reticle']} of {c['versions']}; {c['reticle_tested']} had a test "
              f"({rel}/run.json:1)",
-             f"with its inferred-outcome tests too, Reticle caught {c['reticle_with_inferred']} of {c['versions']} ({rel}/run.json:1)",
-             f"on the {c['real']} real fixes: Second Eye {c['second_eye_false']} false alarms, Reticle {c['reticle_false']}, "
-             f"and {c['notes_on_real']} inferred-outcome notes ({rel}/run.json:1)"]
+             *([f"with its inferred-outcome tests too, Reticle caught {c['reticle_with_inferred']} of {c['versions']} "
+                f"({rel}/run.json:1)"] if c["inferred"] else []),
+             f"on the {c['real']} real fixes: Second Eye {c['second_eye_false']} false alarms, Reticle {c['reticle_false']}"
+             f"{notes} ({rel}/run.json:1)"]
     details = [f"Run {header['run']} on parallax {header['parallax']}, budget ${header['budget_usd']:.2f}, "
                f"${header['spent_usd']:.2f} spent."]
     if header.get("second_eye_only"):
@@ -335,6 +334,7 @@ def summary(root: Path, out: Path, header: dict, results: list[dict]) -> str:
         vs = "; ".join(f"{x['broken']}: Second Eye {x['second_eye']}, Reticle {x['reticle']}" for x in r["versions"]) or "no broken version failed the hidden tests"
         src = f" From run {r['second_eye_from']}." if r.get("second_eye_from") else ""
         details.append(f"{r['case']}: {vs}. Real fix: Second Eye {r['real_fix']['second_eye']}, Reticle "
-                       f"{r['real_fix']['reticle']}, {r['real_fix']['inferred_notes']} notes. ${r['cost_usd']:.2f}.{src}")
+                       f"{r['real_fix']['reticle']}" + (f", {r['real_fix']['inferred_notes']} notes" if "inferred_notes" in r["real_fix"]
+                                                         else "") + f". ${r['cost_usd']:.2f}.{src}")
     text = lint.report("FYI", bottom, "; ".join(gaps) or "nothing", "you read Details, then decide on Reticle.", found, details)
     return lint.fit(text, root=root)[0] + "\n"

@@ -19,7 +19,7 @@ DEFAULT_UI_TESTER = {
     "enabled": False, "start": "", "url": "",
     "model": "claude-sonnet-5-5", "max_usd": 0.5,
 }
-DEFAULT_RETICLE = {"enabled": False, "model": "", "max_usd": 0.5, "inferred": False}  # off until the eval says so (docs/evals.md)
+DEFAULT_RETICLE = {"enabled": True, "model": "", "max_usd": 0.5}  # on since the seeded eval (docs/evals.md)
 DEFAULT_CHECK = {
     "model": "claude-sonnet-5-5",  # a different Claude model from the maker's; the eval measures it
     "diff_cap": 400,               # changed lines a blind review can take reliably
@@ -71,10 +71,9 @@ model = "claude-sonnet-5-5"    # the UI tester's model
 max_usd = 0.50                 # the most one tester run may spend, and what a plan's cap keeps for it
 
 [reticle]
-enabled = false                # true: before the build, an agent writes tests of the intent's outcomes that Maker never sees
+enabled = true                 # before the build, Reticle writes tests of what you asked, which Maker can't see or change
 model = ""                     # empty: the drafters' model
 max_usd = 0.50                 # the most one Reticle run may spend, and what a plan's cap keeps for it
-inferred = false               # true: it also tests outcomes Focus inferred; their failures are notes on the card, never rework
 """
 
 
@@ -156,10 +155,12 @@ class Policy:
             raise ValueError("[draft] model must be a Claude model name")
         self.draft = {**DEFAULT_DRAFT, **draft}
         reticle = dict(reticle or {})
+        if "inferred" in reticle:
+            raise ValueError("[reticle] inferred was removed on 2026-09-30: Reticle tests only what you asked. delete that line")
         if set(reticle) - set(DEFAULT_RETICLE):
             raise ValueError(f"unknown [reticle] settings: {sorted(set(reticle) - set(DEFAULT_RETICLE))}")
         self.reticle = {**DEFAULT_RETICLE, **reticle}
-        for key in ("enabled", "inferred"):
+        for key in ("enabled",):
             if not isinstance(self.reticle[key], bool):
                 raise ValueError(f"[reticle] {key} must be true or false")
         if not isinstance(self.reticle["model"], str):

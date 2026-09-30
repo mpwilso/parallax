@@ -319,7 +319,9 @@ Changed after its first eval (run 492eaf: five false alarms on three good fixes,
 
 Measured two more ways (2026-09-30), since one bad fix in eleven can't give a catch rate:
 - `parallax eval --seeded` needs no Maker. Focus drafts the intent and Reticle writes its tests; then code breaks each maintainers' fix (flip a comparison, shift an integer, undo a hunk), keeps up to three versions that fail the hidden tests, and gives each to Second Eye with its normal input and to Reticle's tests. The real fix gets both too: anything flagged there is a false alarm.
-- `[reticle] inferred = true` (`parallax eval --reticle-inferred`): Reticle also tests the outcomes Focus inferred. Their failures are notes on the card, never rework; the eval runs each note's test on the real fix to tell a note that points at the real bug from noise.
+- `[reticle] inferred = true` (`parallax eval --reticle-inferred`): Reticle also tested the outcomes Focus inferred, their failures shown as notes on the card, never rework. Removed after the eval: 5 notes on 11 real fixes, and none on humanize-174, the bad fix that mattered (docs/evals.md).
+
+On by default since 2026-09-30 (`[reticle] enabled = true`), testing only what you asked: it caught 19 of 23 seeded broken versions, with 1 false alarm on 10 real fixes (docs/evals.md).
 
 #### Later: a knowledge layer
 

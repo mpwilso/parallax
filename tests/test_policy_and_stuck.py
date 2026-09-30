@@ -118,3 +118,15 @@ def test_hook_stops_the_agent_when_the_gate_says_so():
     def go(action, detail, paths):
         return Permission(True)
     assert "continue_" not in asyncio.run(rule_on_tool_call(go, "Read", {"file_path": "a"}))
+
+
+def test_reticle_is_on_by_default_testing_only_what_you_asked():
+    import tomllib
+    from conftest import SHIPPED
+    from parallax.core import EXAMPLE_POLICY_FILE
+    root = Path(__file__).resolve().parent.parent
+    for text in (SHIPPED["policy"], (root / EXAMPLE_POLICY_FILE).read_text()):
+        assert tomllib.loads(text)["reticle"] == {"enabled": True, "model": "", "max_usd": 0.5}
+    assert SHIPPED["reticle"]["enabled"] is True and "inferred" not in SHIPPED["reticle"]
+    with pytest.raises(ValueError, match=r"\[reticle\] inferred was removed on 2026-09-30"):
+        Policy(reticle={"inferred": False})

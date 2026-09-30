@@ -84,10 +84,10 @@ def test_second_eye_and_reticle_are_scored_on_each_broken_version_and_the_real_f
                                                     "change 10 to 11 at calc.py:7"]  # the flip passes the hidden tests: dropped
     assert [v["second_eye"] for v in r["versions"]] == ["catch", "miss", "miss"]
     assert [v["reticle"] for v in r["versions"]] == ["miss", "catch", "miss"]  # its asked test is of add
-    assert [v["reticle_with_inferred"] for v in r["versions"]] == ["catch", "catch", "catch"]  # clamp's test too
-    assert r["real_fix"] == {"second_eye": "right", "findings": [], "test_only": [], "reticle": "right", "inferred_notes": 0}
+    assert all("reticle_with_inferred" not in v for v in r["versions"])  # its inferred outcome, clamp, has no test
+    assert r["real_fix"] == {"second_eye": "right", "findings": [], "test_only": [], "reticle": "right"}
     assert r["versions"][0]["findings"] == ["blocker: wrong cap"]  # what Second Eye said, kept with the result
-    assert r["reticle_kept"] == {"asked": 1, "inferred": 1} and r["inferred"] == ["2"]
+    assert r["reticle_kept"] == {"asked": 1} and r["inferred"] == ["2"]
     assert r["cost_usd"] == pytest.approx(0.08)  # the intent and Reticle; the fake checker costs nothing
     # Second Eye's exact normal input, and never the hidden tests: in its brief or in Reticle's
     assert len(checker.briefs) == 4 and all(b.startswith("Outcome:\n1. add returns the sum") for b in checker.briefs)
@@ -158,8 +158,7 @@ def test_second_eye_alone_reruns_on_the_same_versions_reusing_the_intent_and_ret
     r = json.loads((out / "calc-2.json").read_text())
     assert [v["broken"] for v in r["versions"]] == [v["broken"] for v in before["versions"]]
     assert [v["second_eye"] for v in r["versions"]] == ["catch", "miss", "miss"]
-    for key in ("reticle", "reticle_with_inferred"):  # Reticle's results as they were
-        assert [v[key] for v in r["versions"]] == [v[key] for v in before["versions"]]
+    assert [v["reticle"] for v in r["versions"]] == [v["reticle"] for v in before["versions"]]  # Reticle's results as they were
     assert r["real_fix"]["reticle"] == before["real_fix"]["reticle"] and r["second_eye_from"] == first.name.split("-")[3]
     assert len(checker.briefs) == 4 and all(b.startswith("Outcome:\n1. add returns the sum") for b in checker.briefs)
     assert not any(HIDDEN in b or "test_calc.py" in b for b in checker.briefs)

@@ -61,9 +61,7 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument("cases", nargs="*", help="case ids, all by default. `parallax eval check` checks the cases instead, with no model")
     ev.add_argument("--budget", type=float, help="the most the whole run may spend, in estimated dollars. needed for a run")
     ev.add_argument("--per-case", type=float, help="each case's ceiling, in estimated dollars. default: your small_cap_usd")
-    ev.add_argument("--reticle", action="store_true", help="run with Reticle on: tests of the outcomes, written before the build")
-    ev.add_argument("--reticle-inferred", action="store_true",
-                    help="Reticle on, testing inferred outcomes too: their failures are card notes, never rework")
+    ev.add_argument("--reticle", action="store_true", help="run with Reticle on, whatever your policy says")
     ev.add_argument("--seeded", action="store_true",
                     help="no Maker: break each real fix by code and score Second Eye and Reticle on the broken versions")
     ev.add_argument("--second-eye-only", action="store_true",
@@ -305,9 +303,8 @@ def _eval(proj: Project, args) -> int:
         from . import seeded
         out = seeded.run(proj, evals.load_cases(proj.root, args.cases), args.budget)
     else:
-        inferred = args.reticle_inferred
         out = evals.run(proj, evals.load_cases(proj.root, args.cases), args.budget, args.per_case,
-                        reticle=args.reticle or inferred, inferred=inferred)
+                        reticle=True if args.reticle else None)
     print(f"results in {out.relative_to(proj.root)}. the summary is summary.md there.")
     return 0
 

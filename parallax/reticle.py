@@ -13,8 +13,8 @@ Once per attempt, after the plan is approved and before Maker starts:
 At every check Parallax runs them on the reviewed tree. A failure goes back to Maker as a rework
 finding naming the outcome and the assertion message, never the test's code.
 
-Off by default ([reticle] in the policy). It joins the live loop only when the eval says it earns
-its place: docs/evals.md.
+On by default ([reticle] in the policy), testing only what you asked: the seeded eval's results
+are in docs/evals.md.
 """
 from __future__ import annotations
 
@@ -140,18 +140,18 @@ def asked(intent: str) -> list[str]:
     return [n for n, kind in lint.outcome_kinds(intent).items() if kind == "asked"]
 
 
-def targets(intent: str, inferred: bool = False) -> list[str]:
-    """The outcomes Reticle tests: the asked ones, and with inferred on, Focus's own additions too."""
-    return [n for n, kind in lint.outcome_kinds(intent).items() if kind == "asked" or (inferred and kind == "inferred")]
+def targets(intent: str) -> list[str]:
+    """The outcomes Reticle tests: the ones you asked for, never Focus's own additions."""
+    return asked(intent)
 
 
-def request(intent: str, typed: str, inferred: bool = False) -> str:
+def request(intent: str, typed: str) -> str:
     """Reticle's input: the person's request, the outcomes to test (without the mark), the constraints."""
-    wanted = set(targets(intent, inferred))
+    wanted = set(targets(intent))
     lines = [line for line in lint.unmark(review.section(intent, "Outcome")).splitlines()
              if (m := lint.OUTCOME_ITEM.match(line)) and m.group(1) in wanted]
-    heading = "The outcomes to test:" if inferred else "The outcomes to test, each one the person asked for:"
-    return REQUEST.format(request=typed.strip(), heading=heading, outcome="\n".join(lines),
+    return REQUEST.format(request=typed.strip(), heading="The outcomes to test, each one the person asked for:",
+                          outcome="\n".join(lines),
                           constraints=review.section(intent, "Constraints"))
 
 
@@ -275,14 +275,13 @@ def write(project: Project, task_id: str, p, writer=None, runner=None) -> str:
     installs.place(p.venv, base)
     intent = lifecycle._read(project, task_id, "intent")
     typed = project.task(task_id)["goal"]  # the person's request as typed; in an eval, the issue
-    inferred = bool(cfg["inferred"])
     if not asked(intent):
         project.ledger.append("reticle.failed", "parallax", "the intent marks no outcome as asked, so Reticle had nothing to test",
                               task=task_id)
         return "failed"
     fn = make_permission_fn(project, task_id, base, read_only=True)
     try:
-        res = (writer or WRITER)(limit, cfg["model"]).run(request(intent, typed, inferred), base, fn, stage="reticle",
+        res = (writer or WRITER)(limit, cfg["model"]).run(request(intent, typed), base, fn, stage="reticle",
                                                           env={TASK_ENV: task_id, ROOT_ENV: str(project.root)})
     except Exception as err:  # recorded, never retried silently; the build goes on without it
         res = AgentResult("error", f"{type(err).__name__}: {err}")
@@ -292,9 +291,7 @@ def write(project: Project, task_id: str, p, writer=None, runner=None) -> str:
         return "failed"
     text = code_of(res.summary).encode()
     results = _run(project, p, p.task["base"], text, [FILE], "reticle-base", runner)
-    keep, weak = judge(results.cases, lint.outcomes_of(intent), targets(intent, inferred), crashes(typed), hangs(typed))
-    kinds = lint.outcome_kinds(intent)
-    keep = [{**t, "kind": kinds.get(t["outcome"]) or "asked"} for t in keep]  # an inferred one's failure is a note
+    keep, weak = judge(results.cases, lint.outcomes_of(intent), targets(intent), crashes(typed), hangs(typed))
     if not results.cases:
         weak.append({"name": FILE, "why": f"its tests couldn't run on the base (exit {results.exit}): "
                                           f"{(results.tail.splitlines() or ['no output'])[-1][:200]}"})
@@ -346,11 +343,6 @@ def check(project: Project, task_id: str, p, treeish: str, runner=None) -> tuple
             said = hung(c["message"])
             failing.append({**t, "message": f"it hangs on this change: {said}" if said else c["message"]})
     return results, failing
-
-
-def blocking(failing: list[dict]) -> list[dict]:
-    """The failures that go back to Maker: tests of asked outcomes. An inferred outcome's is a note."""
-    return [t for t in failing if t.get("kind", "asked") == "asked"]
 
 
 def finding(t: dict) -> str:
