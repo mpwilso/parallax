@@ -385,3 +385,56 @@ def test_the_eval_scores_reticle_against_the_hidden_tests(repo, upstream, monkey
     assert header["reticle"] is True
     text = (out / "summary.md").read_text()
     assert f"Reticle was right 0 times, caught {int(reticle_says == 'catch')} bad fixes" in text
+
+
+# hangs: each test has a time limit where Parallax runs it --------------------------------------------
+
+HANGER = "from calc import add\n\n\ndef test_outcome_1_sums_negatives():\n    while add(-1, 1) != 0:\n        pass\n"
+FILLER = ("from calc import add\n\n\ndef test_outcome_1_sums_negatives():\n    x = []\n"
+          "    while add(-1, 1) != 0:\n        x.append(b'x' * 1_000_000)\n")  # boltons-319's shape: a loop that fills memory
+
+
+@pytest.fixture
+def quick(monkeypatch):
+    monkeypatch.setattr(reticle, "SECONDS", 1)
+    monkeypatch.setattr(reticle, "GROWTH", 50 * 1024 ** 2)
+
+
+@pytest.mark.parametrize("text", [HANGER, FILLER])
+def test_a_test_that_hangs_on_the_base_is_weak_when_the_request_describes_no_hang(proj, quick, text):
+    tid, status = go_with(proj, FakeReticle(text), typed="add subtracts")
+    assert status == "ready"
+    [rec] = kinds(proj, "reticle.recorded")
+    [weak] = rec["data"]["weak"]
+    assert rec["data"]["kept"] == [] and weak["why"].startswith("it hangs on the base (still running after ")
+    assert weak["why"].endswith(", so it was stopped), and the request describes no hang")
+    assert ("GB more" in weak["why"]) is (text == FILLER)
+    assert reticle.stored(proj, tid).read_text() == text  # the limit is added where it runs, never to the file
+
+
+def test_a_hang_counts_when_the_request_describes_one_and_a_hang_at_the_check_goes_to_maker(proj, quick):
+    make = Twice(maker(WRONG), maker(FIXED))  # WRONG still loops forever: add(-1, 1) is 2
+    tid, status = go_with(proj, FakeReticle(HANGER), typed="summing a list with negatives never returns", make=make)
+    assert status == "ready" and len(make.goals) == 2
+    [rec] = kinds(proj, "reticle.recorded")
+    [kept] = rec["data"]["kept"]
+    assert kept["name"] == "test_outcome_1_sums_negatives" and kept["base_message"].endswith(", so it was stopped")
+    line = next(g for g in make.goals[1].splitlines() if "that you can't see fails" in g)
+    assert line.startswith("- blocker: a test of outcome 1 that you can't see fails: it hangs on this change: "
+                           "still running after ") and line.endswith(" s, so it was stopped")
+    assert "def test_" not in make.goals[1]
+
+
+@pytest.mark.parametrize("typed,hang", [
+    ("daterange never returns with a negative step", True),
+    ("the parser hangs on an empty file", True),
+    ("it loops forever when the list is empty", True),
+    ("an infinite loop in tokenize", True),
+    ("the UI freezes after saving", True),
+    ("the call doesn't return", True),
+    ("the result is wrong when the month is 12", False),
+    ("add subtracts", False),
+    ("Hangul text is cut short", False),
+])
+def test_what_counts_as_a_request_that_describes_a_hang(typed, hang):
+    assert reticle.hangs(typed) is hang

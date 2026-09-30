@@ -6,7 +6,8 @@ Once per attempt, after the plan is approved and before Maker starts:
 2. Parallax runs that file on the base commit, in the sandbox. A test counts only if it fails on an
    assertion there: it shows the problem the outcome names. A test that passes on the base, errors
    before its assertion, fails on another exception (an import, say), or names no outcome is
-   dropped and recorded as weak.
+   dropped and recorded as weak. Each test has a time limit (see LIMIT): one that hangs on the base
+   counts only when the request describes a hang, the way a crash counts only when it's named.
 3. The kept tests are stored under docs/tasks/<id>/reticle/, hashed in the ledger. Maker's
    worktree never holds them, and a changed hash stops the check.
 At every check Parallax runs them on the reviewed tree. A failure goes back to Maker as a rework
@@ -35,6 +36,58 @@ KEEPS = ("AssertionError", "assert ", "Failed: DID NOT RAISE", "Failed: DID NOT 
 # a crash bug's test fails on the crash itself: the exception the request names counts too, except these
 NEVER = {"ImportError", "ModuleNotFoundError", "SyntaxError", "IndentationError"}
 NAMED = re.compile(r"\b([A-Z]\w*(?:Error|Exception|Warning))\b")
+# a request that describes a hang: then a test that hangs on the base shows the problem
+HANGS = re.compile(r"\b(hang|hangs|hung|hanging|freezes?|frozen|stuck|deadlocks?|(?:infinite|endless|never[- ]ending) loop"
+                   r"|loops? (?:forever|endlessly)|runs? forever|never (?:returns|ends|finishes|terminates|completes)"
+                   r"|(?:doesn't|does not|won't|will not) (?:return|terminate|finish|end))\b", re.I)
+HANG = "ParallaxHang"
+SECONDS = 60             # each of Reticle's tests, wherever it runs: long enough for any unit test
+GROWTH = 1024 ** 3       # or 1 GB more held than at its start: a hang that fills memory would hit the
+                         # run's 3 GB cap (memcap.COMMAND) first, at about 27 s on boltons-319, and lose every result
+# appended to Reticle's file where Parallax runs it, never to the stored, hashed file
+LIMIT = '''
+
+
+# added by Parallax where it runs this file: each test stops after {seconds} s, or once it holds
+# {gb} GB more memory than at its start, so a test that hangs fails instead of running on
+import os as _px_os
+import signal as _px_signal
+import time as _px_time
+
+import pytest as _px_pytest
+
+
+class ParallaxHang(Exception):
+    pass
+
+
+def _px_held():
+    try:
+        with open("/proc/self/statm") as f:
+            return int(f.read().split()[1]) * _px_os.sysconf("SC_PAGE_SIZE")
+    except OSError:
+        return 0
+
+
+@_px_pytest.fixture(autouse=True)
+def _px_limit():
+    start, before = _px_time.monotonic(), _px_held()
+
+    def check(signum, frame):
+        ran, grew = _px_time.monotonic() - start, _px_held() - before
+        if ran > {seconds} or grew > {growth}:
+            _px_signal.setitimer(_px_signal.ITIMER_REAL, 0)
+            more = f" and holding {{grew / 2 ** 30:.1f}} GB more" if grew > {growth} else ""
+            raise ParallaxHang(f"still running after {{ran:.0f}} s{{more}}, so it was stopped")
+
+    old = _px_signal.signal(_px_signal.SIGALRM, check)
+    _px_signal.setitimer(_px_signal.ITIMER_REAL, 0.25, 0.25)
+    try:
+        yield
+    finally:
+        _px_signal.setitimer(_px_signal.ITIMER_REAL, 0)
+        _px_signal.signal(_px_signal.SIGALRM, old)
+'''
 
 REQUEST = """\
 Write pytest tests for the outcomes below, against this repository as it is now.
@@ -107,6 +160,21 @@ def crashes(typed: str) -> set[str]:
     return set(NAMED.findall(typed)) - NEVER
 
 
+def hangs(typed: str) -> bool:
+    """Whether the request describes a hang: it never returns, loops forever, freezes."""
+    return bool(HANGS.search(typed))
+
+
+def limited(text: bytes) -> bytes:
+    """Reticle's file as Parallax runs it: with each test's time limit appended."""
+    return text + LIMIT.format(seconds=SECONDS, growth=GROWTH, gb=GROWTH // 1024 ** 3).encode()
+
+
+def hung(message: str) -> str | None:
+    """What the limit said, if a test failed on it: "still running after 60 s, so it was stopped"."""
+    return message.split(":", 1)[1].strip() if _exception(message) == HANG else None
+
+
 CODE_START = re.compile(r"^(import |from |#|@|def |class |\"\"\"|\'\'\'|[A-Za-z_]\w*\s*=)")
 
 
@@ -140,9 +208,10 @@ def node(case: dict) -> str:
 
 
 def judge(cases: list[dict], outcomes: list[str], wanted: list[str] | None = None,
-          named: set[str] = frozenset()) -> tuple[list[dict], list[dict]]:
+          named: set[str] = frozenset(), hang: bool = False) -> tuple[list[dict], list[dict]]:
     """(kept, weak) from the tests' run on the base commit. wanted: the asked outcomes (all by
-    default); named: exceptions the request shows, whose failure counts like an assertion's."""
+    default); named: exceptions the request shows, whose failure counts like an assertion's;
+    hang: the request describes a hang, so a test that hangs on the base counts too."""
     wanted = outcomes if wanted is None else wanted
     keep, weak = [], []
     for c in cases:
@@ -161,6 +230,11 @@ def judge(cases: list[dict], outcomes: list[str], wanted: list[str] | None = Non
             weak.append({"name": c["name"], "why": f"it errors before its assertion: {c['message']}"})
         elif c["outcome"] == "skip":
             weak.append({"name": c["name"], "why": "it skips on the base"})
+        elif hung(c["message"]) and not hang:
+            weak.append({"name": c["name"], "why": f"it hangs on the base ({hung(c['message'])}), "
+                                                   "and the request describes no hang"})
+        elif hung(c["message"]):
+            keep.append({"node": node(c), "name": c["name"], "outcome": m.group(1), "base_message": c["message"]})
         elif not c["message"].startswith(KEEPS) and _exception(c["message"]) not in named:
             kind = _exception(c["message"]) or "an error"
             weak.append({"name": c["name"], "why": f"it fails on {kind}, not an assertion or a crash the request shows"})
@@ -178,7 +252,7 @@ def _exception(message: str) -> str:
 def _run(project: Project, p, treeish: str, text: bytes, nodes: list[str], where: str, runner=None) -> testrun.Results:
     plan = {"tests": nodes, "outside_reads": [], "domains": []}
     results, _ = testrun.run(p.worktree, p.task["base"], treeish, plan, p.home / where, p.venv, build.scrubbed_env(p.venv),
-                             project.policy.check["test_command"], runner, overlay={FILE: text})
+                             project.policy.check["test_command"], runner, overlay={FILE: limited(text)})
     return results
 
 
@@ -218,7 +292,7 @@ def write(project: Project, task_id: str, p, writer=None, runner=None) -> str:
         return "failed"
     text = code_of(res.summary).encode()
     results = _run(project, p, p.task["base"], text, [FILE], "reticle-base", runner)
-    keep, weak = judge(results.cases, lint.outcomes_of(intent), targets(intent, inferred), crashes(typed))
+    keep, weak = judge(results.cases, lint.outcomes_of(intent), targets(intent, inferred), crashes(typed), hangs(typed))
     kinds = lint.outcome_kinds(intent)
     keep = [{**t, "kind": kinds.get(t["outcome"]) or "asked"} for t in keep]  # an inferred one's failure is a note
     if not results.cases:
@@ -269,7 +343,8 @@ def check(project: Project, task_id: str, p, treeish: str, runner=None) -> tuple
         if c is None:
             failing.append({**t, "message": f"its tests don't load on this change: {broken['message']}"})
         elif c["outcome"] != "pass":
-            failing.append({**t, "message": c["message"]})
+            said = hung(c["message"])
+            failing.append({**t, "message": f"it hangs on this change: {said}" if said else c["message"]})
     return results, failing
 
 
