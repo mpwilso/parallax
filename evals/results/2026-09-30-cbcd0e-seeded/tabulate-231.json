@@ -1,0 +1,63 @@
+{
+ "case": "tabulate-231",
+ "mode": "seeded",
+ "pr": "https://github.com/astanin/python-tabulate/pull/232",
+ "issue": "https://github.com/astanin/python-tabulate/issues/231",
+ "inferred": [
+  "2",
+  "3",
+  "4"
+ ],
+ "reticle_kept": {
+  "asked": 2,
+  "inferred": 4
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "flip == to != at tabulate/__init__.py:105",
+   "hidden": "55 of 159 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker behavior: The comparison is inverted. `_is_separating_line_value` returns True when `value.strip() != SEPARATING_LINE`, so any row whose first or second cell is an ordinary string is treated as a separating line. Real data rows would be replaced by s",
+    "blocker behavior: The change only touches row detection. It does not change how the separator line is built or padded, so the psql line `|---------+-------|` is not produced. Outcome 1 is not achieved. The `strip()` idea (for a padded marker) is never tied t"
+   ],
+   "not_counted": []
+  },
+  {
+   "broken": "change 1 to 2 at tabulate/__init__.py:111",
+   "hidden": "155 of 159 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker behavior: The check for row[0] changed from `len(row) >= 1` to `len(row) >= 2`. A one-column row such as `[SEPARATING_LINE]` is no longer seen as a separating line, so single-column tables with a separator now print the marker as data or fail. This b"
+   ],
+   "not_counted": []
+  },
+  {
+   "broken": "undo the hunk at tabulate/__init__.py:104",
+   "hidden": "5 of 159 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker behavior: The diff calls `_is_separating_line_value`, but the diff does not define or import it. If it does not already exist, every call to `_is_separating_line` raises NameError and `tabulate()` breaks for all tables. Nothing in the diff changes ho"
+   ],
+   "not_counted": []
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "reticle": "false alarm",
+  "inferred_notes": 1,
+  "findings": [],
+  "not_counted": []
+ },
+ "cost_usd": 0.078,
+ "seconds": 80.6,
+ "second_eye_from": "9ba608",
+ "reticle_from": "9ba608"
+}

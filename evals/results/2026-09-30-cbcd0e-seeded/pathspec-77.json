@@ -1,0 +1,47 @@
+{
+ "case": "pathspec-77",
+ "mode": "seeded",
+ "pr": "https://github.com/cpburnz/python-pathspec/commit/9302492483b06ca1613aa8b11cf08cef93930b12",
+ "issue": "https://github.com/cpburnz/python-pathspec/issues/77",
+ "inferred": [
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8"
+ ],
+ "reticle_kept": {
+  "asked": 2,
+  "inferred": 1
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "undo the hunk at pathspec/patterns/gitwildmatch.py:316",
+   "hidden": "43 of 45 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker behavior: The only code change is a comment typo fix (Braket to Bracket). The unchanged context still shows the `elif pattern[i] == '^':` branch, which is the existing literal-caret handling. So `[^...]` is still not treated as negation, and `a[^b]c`"
+   ],
+   "not_counted": [
+    "major missing_test: No tests were added for `[^...]` matching and non-matching, `[^]a]`, or `[a^b]`."
+   ]
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "reticle": "right",
+  "inferred_notes": 1,
+  "findings": [],
+  "not_counted": [
+   "major missing_test: The diff has no test changes. Nothing checks that `a[^b]c` rejects `abc` and matches `azc`, so the new behavior is untested. The existing tests would not show a regression either way."
+  ]
+ },
+ "cost_usd": 0.0661,
+ "seconds": 55.7,
+ "second_eye_from": "9ba608",
+ "reticle_from": "9ba608"
+}

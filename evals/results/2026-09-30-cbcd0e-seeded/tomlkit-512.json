@@ -1,0 +1,55 @@
+{
+ "case": "tomlkit-512",
+ "mode": "seeded",
+ "pr": "https://github.com/python-poetry/tomlkit/pull/514",
+ "issue": "https://github.com/python-poetry/tomlkit/issues/512",
+ "inferred": [
+  "3",
+  "4"
+ ],
+ "reticle_kept": {
+  "asked": 1,
+  "inferred": 1
+ },
+ "reticle_weak": [
+  "it fails on UnexpectedCharError, not an assertion or a crash the request shows",
+  "it passes on the base, so it doesn't show the problem"
+ ],
+ "versions": [
+  {
+   "broken": "undo the hunk at tomlkit/items.py:2120",
+   "hidden": "79 of 80 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker behavior: The change records `last_value_end` but never reads it. The deferred separator comma is still inserted where it was before, so it still lands after the trailing comment. The reported example (`doc[\"tbl\"][\"added\"] = 3`) should therefore stil"
+   ],
+   "not_counted": []
+  },
+  {
+   "broken": "undo the hunk at tomlkit/items.py:2138",
+   "hidden": "78 of 80 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker behavior: `last_value_end` is set once to `len(buf)` before the loop. The diff never updates it after a value is rendered. The deferred comma is therefore inserted at that initial offset, which is near the start of the buffer and before the earlier e"
+   ],
+   "not_counted": []
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "reticle": "right",
+  "inferred_notes": 0,
+  "findings": [],
+  "not_counted": [
+   "major missing_test: The diff contains no regression test. The reported example is not covered: no check of the dumped text (comma before `# comment`) and no loads round trip with p, q and added."
+  ]
+ },
+ "cost_usd": 0.0636,
+ "seconds": 48.5,
+ "second_eye_from": "9ba608",
+ "reticle_from": "9ba608"
+}

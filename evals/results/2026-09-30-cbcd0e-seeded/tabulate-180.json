@@ -1,0 +1,62 @@
+{
+ "case": "tabulate-180",
+ "mode": "seeded",
+ "pr": "https://github.com/astanin/python-tabulate/commit/20c6370d5da2dae89b305bfb6c7f12a0f8b7236c",
+ "issue": "https://github.com/astanin/python-tabulate/issues/180",
+ "inferred": [
+  "3",
+  "4",
+  "5"
+ ],
+ "reticle_kept": {
+  "asked": 3,
+  "inferred": 2
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "change 0 to 1 at tabulate/__init__.py:1507",
+   "hidden": "29 of 30 pass",
+   "second_eye": "catch",
+   "reticle": "miss",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker behavior: In _wrap_text_to_colwidths the non-empty branch uses len(list_of_lists[1]) instead of [0]. A one-row table with maxcolwidths (e.g. tabulate([[\"abc\"]], maxcolwidths=10)) now raises IndexError, and with ragged rows the column count can be wro"
+   ],
+   "not_counted": [
+    "major missing_test: No regression test is added. Nothing covers empty data with scalar and list maxcolwidths, the identical output with and without maxcolwidths, or the header-only case. A test with a one-row table would also have caught the [1] index bug."
+   ]
+  },
+  {
+   "broken": "undo the hunk at tabulate/__init__.py:1506",
+   "hidden": "29 of 30 pass",
+   "second_eye": "miss",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [],
+   "not_counted": []
+  },
+  {
+   "broken": "undo the hunk at tabulate/__init__.py:2069",
+   "hidden": "29 of 30 pass",
+   "second_eye": "miss",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [],
+   "not_counted": [
+    "major missing_test: No regression test is in the diff. Outcome 5 asks for one in test/test_regression.py covering empty data with maxcolwidths (int and list), no headers, headers, and maxheadercolwidths. Without it nothing shows the fix works or would fail wit"
+   ]
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "reticle": "right",
+  "inferred_notes": 1,
+  "findings": [],
+  "not_counted": []
+ },
+ "cost_usd": 0.0833,
+ "seconds": 56.3,
+ "second_eye_from": "9ba608",
+ "reticle_from": "9ba608"
+}

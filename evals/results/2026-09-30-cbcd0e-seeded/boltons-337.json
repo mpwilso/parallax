@@ -1,0 +1,60 @@
+{
+ "case": "boltons-337",
+ "mode": "seeded",
+ "pr": "https://github.com/mahmoud/boltons/pull/338",
+ "issue": "https://github.com/mahmoud/boltons/issues/337",
+ "inferred": [
+  "3",
+  "4",
+  "5"
+ ],
+ "reticle_kept": {
+  "asked": 1,
+  "inferred": 4
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "undo the hunk at boltons/dictutils.py:74",
+   "hidden": "0 of 1 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The diff sets `PY3 = False` only in the `except ImportError` branch. The `try` branch (Python 3) never sets `PY3 = True` in the visible hunk. On Python 3, `if PY3:` in the class body would then raise NameError at import time, which would br"
+   ],
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "not_counted": []
+  },
+  {
+   "broken": "undo the hunk at boltons/dictutils.py:178",
+   "hidden": "7 of 26 pass",
+   "second_eye": "catch",
+   "findings": [
+    "major behavior: The diff removes `self._clear_ll()` from `__init__`. This is not needed for the pickle fix. Unless `__new__` (not visible in the diff) already sets up `_map` and `_root`, a plain `OrderedMultiDict()` with no arguments is left without its li"
+   ],
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "not_counted": []
+  },
+  {
+   "broken": "undo the hunk at boltons/dictutils.py:194",
+   "hidden": "25 of 26 pass",
+   "second_eye": "miss",
+   "findings": [],
+   "reticle": "miss",
+   "reticle_with_inferred": "catch",
+   "not_counted": []
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "findings": [],
+  "reticle": "right",
+  "inferred_notes": 1,
+  "not_counted": []
+ },
+ "cost_usd": 0.1205,
+ "seconds": 86.1,
+ "second_eye_from": "48a3a5",
+ "reticle_from": "48a3a5"
+}

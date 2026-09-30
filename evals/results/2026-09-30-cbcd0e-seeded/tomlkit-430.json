@@ -1,0 +1,66 @@
+{
+ "case": "tomlkit-430",
+ "mode": "seeded",
+ "pr": "https://github.com/python-poetry/tomlkit/pull/520",
+ "issue": "https://github.com/python-poetry/tomlkit/issues/430",
+ "inferred": [
+  "4",
+  "5",
+  "6"
+ ],
+ "reticle_kept": {
+  "asked": 2,
+  "inferred": 2
+ },
+ "reticle_weak": [
+  "it passes on the base, so it doesn't show the problem"
+ ],
+ "versions": [
+  {
+   "broken": "flip == to != at tomlkit/api.py:266",
+   "hidden": "150 of 152 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker behavior: The condition is inverted. `len(keys) != 1` returns `keys[0]` for lists with two or more items, so they lose their DottedKey and become a SingleKey of the first part only. For a one-item list it still returns a DottedKey, so the bug is not "
+   ],
+   "not_counted": []
+  },
+  {
+   "broken": "change 1 to 2 at tomlkit/api.py:266",
+   "hidden": "150 of 152 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker behavior: The check is `len(keys) == 2`, not `== 1`. A one-item list still returns a DottedKey, so the bug is not fixed. A two-item list now returns only its first key and drops the second part. That breaks the existing two-part tests (tests/test_api"
+   ],
+   "not_counted": []
+  },
+  {
+   "broken": "change 0 to 1 at tomlkit/api.py:267",
+   "hidden": "151 of 152 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker behavior: `return keys[1]` indexes out of range when the list has one item (valid index is 0). `tomlkit.key([\"my_key\"])` raises IndexError instead of returning a SingleKey, so the bug is replaced by a crash. Should be `keys[0]`."
+   ],
+   "not_counted": []
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "reticle": "right",
+  "inferred_notes": 0,
+  "findings": [],
+  "not_counted": [
+   "major missing_test: The diff has no test for the one-item list case (`key([\"my_key\"])` returns a SingleKey, and `\"my_key\" in doc` after append). The change needs these tests, and without them a regression would go unnoticed."
+  ]
+ },
+ "cost_usd": 0.064,
+ "seconds": 47.5,
+ "second_eye_from": "9ba608",
+ "reticle_from": "9ba608"
+}
