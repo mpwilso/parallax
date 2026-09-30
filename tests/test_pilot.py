@@ -523,3 +523,26 @@ def test_every_needs_you_card_says_whose_call_and_why(proj, monkeypatch):
         proj.resolve(item["id"], False, "next case")
     assert set(decide.WHY_HUMAN) >= {"launch", "review", "cap", "conflict", "scope", "flows", "rework", "checker",
                                      "tests", "guard", "drafting", "error", "stuck", "turns"}
+
+
+# a placeholder in a draft: the same rule the docs test uses, before anything can be approved ----------------
+
+def test_a_draft_with_an_angle_bracket_placeholder_is_rewritten_before_it_can_be_approved(proj, monkeypatch):
+    """7ac365 was accepted with "<what>" in its intent and plan, and master's docs test went red."""
+    from parallax.markdown import placeholders
+    good = docs()
+    bad_intent = good["intent"].replace("The steps assume PowerShell.", "The steps assume PowerShell; name <what> fails.")
+    bad_plan = good["plan"].replace("1. Edit README.md.", "1. Edit README.md, saying <what> changed.")
+    assert placeholders(bad_intent) == ["<what>"]  # one rule: the docs test's own function
+    problems = lint.lint_lifecycle(bad_intent, "intent")
+    assert any("<what> reads as an HTML tag on GitHub and disappears: say it in words, or put it in backticks" in m
+               for _, m in problems)
+    assert not lint.lint_lifecycle(good["intent"].replace("PowerShell.", "PowerShell; `<what>` is in code."), "intent")
+    monkeypatch.setattr(build, "_spawn", lambda *a: 1)
+    tid = pilot.intake(proj, WANT)["task"]
+    drafter = FakeDrafter({"intent": [bad_intent, good["intent"]], "plan": [bad_plan, good["plan"]]})
+    assert pilot.draft_until_fit(proj, tid, drafter) == "fit"
+    redrafts = [r for r in drafter.requests if "<what> reads as an HTML tag" in r]
+    assert len(redrafts) == 2  # the intent and the plan each went back to Focus with the problem
+    for doc in ("intent", "plan"):
+        assert not placeholders(lifecycle._read(proj, tid, doc))

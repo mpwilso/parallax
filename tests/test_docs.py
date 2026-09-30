@@ -4,39 +4,13 @@ import re
 import subprocess
 from pathlib import Path
 
+from parallax.markdown import placeholders, prose  # the one rule, shared with the draft check (lint.py)
+
 ROOT = Path(__file__).resolve().parent.parent
-
-# the HTML the docs use on purpose; anything else in angle brackets outside code is a placeholder
-HTML_TAGS = {"a", "br", "code", "details", "img", "p", "picture", "source", "strong", "sub", "summary",
-             "table", "tr", "td", "th", "em", "b", "i", "kbd", "div", "span", "sup"}
-
 
 def markdown_files() -> list[Path]:
     out = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z", "*.md"], capture_output=True, text=True, check=True)
     return [ROOT / p for p in out.stdout.split("\0") if p]
-
-
-def prose(text: str) -> str:
-    """The text with fenced blocks, code spans and HTML comments blanked, line structure kept."""
-    def blank(m):
-        return re.sub(r"[^\n]", " ", m.group(0))
-    text = re.sub(r"^(`{3,}|~{3,})[^\n]*\n.*?^\1[^\n]*$", blank, text, flags=re.S | re.M)
-    text = re.sub(r"<!--.*?-->", blank, text, flags=re.S)
-    return re.sub(r"(`+)(?!`).*?(?<!`)\1(?!`)", blank, text, flags=re.S)
-
-
-def placeholders(text: str) -> list[str]:
-    out = []
-    for m in re.finditer(r"<([^<>\n]+)>", prose(text)):
-        inner = m.group(1)
-        name = re.match(r"/?([A-Za-z][\w-]*)", inner)
-        if name and name.group(1).lower() in HTML_TAGS and (inner.startswith("/") or inner == name.group(1)
-                                                                or inner[len(name.group(1))] in " \t\n/"):
-            continue
-        if re.match(r"https?://", inner):
-            continue  # an autolink
-        out.append(m.group(0))
-    return out
 
 
 def slug(heading: str) -> str:

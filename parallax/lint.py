@@ -267,9 +267,12 @@ def check_plan_data(data: dict) -> list[str]:
 
 
 def lint_lifecycle(text: str, doc: str) -> list[Problem]:
+    from .markdown import placeholder_lines
     lines = text.splitlines()
     _, _, problems = _header(lines, LIFECYCLE_HEADER)
     problems += _em_dashes(lines)
+    problems += [(n, f"{p} reads as an HTML tag on GitHub and disappears: say it in words, or put it in backticks")
+                 for n, p in placeholder_lines(text)]  # the docs test's rule too (tests/test_docs.py)
     if doc == "intent":
         fields = intent_fields(text)
         if fields.get("kind") not in KINDS:
