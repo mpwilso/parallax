@@ -188,7 +188,16 @@ def shell(command: str, folder: Path, limit: int | None = None) -> str:
     python = shutil.which("python3", path=SYSTEM_PATH)
     if not python or not script.is_file():
         return command
-    return f"{python} -I {shlex.quote(str(script))} {limit or COMMAND} -- bash -c {shlex.quote(command)}"
+    capped = f"{python} -I {shlex.quote(str(script))} {limit or COMMAND} -- bash -c"
+    # The command runs in a child shell, so its `cd` would end with it. Claude Code keeps the shell's
+    # working directory from one command to the next: the child writes where it ended up, and this
+    # shell goes there, keeping the command's exit code. No file (mktemp failed): run as is.
+    inner = f"trap 'pwd -P >\"$PARALLAX_CWD\"' EXIT\n{command}"
+    return (f"if __px_cwd=$(mktemp 2>/dev/null); then "
+            f"PARALLAX_CWD=\"$__px_cwd\" {capped} {shlex.quote(inner)}; __px_rc=$?; "
+            f"__px_to=$(cat \"$__px_cwd\" 2>/dev/null); rm -f \"$__px_cwd\"; "
+            f"if [ -n \"$__px_to\" ]; then cd \"$__px_to\" || true; fi; (exit $__px_rc); "
+            f"else {capped} {shlex.quote(command)}; fi")
 
 
 def program(argv: list[str], limit: int | None = None) -> list[str]:

@@ -116,6 +116,29 @@ def test_every_command_the_maker_runs_is_under_the_cap_and_the_sandbox_can_read_
     assert r.stderr.strip().splitlines()[-1].startswith("memory cap: the command used ")
 
 
+def claude_code_runs(command: str, cwd: Path, srt: Path | None = None) -> tuple[int, str, Path]:
+    """One Bash call the way Claude Code makes it: the command in a shell started in the working
+    directory, then that shell's `pwd -P` kept as the next call's working directory."""
+    script = f"{command}\n__rc=$?; pwd -P >&2; exit $__rc"
+    argv = ["srt", "--settings", str(srt), "-c", script] if srt else ["bash", "-c", script]
+    r = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=120, env=build.scrubbed_env(None))
+    return r.returncode, r.stdout, Path(r.stderr.strip().splitlines()[-1])
+
+
+def test_a_cd_in_one_maker_command_carries_over_to_the_next_as_it_did_uncapped(tmp_path):
+    folder = memcap.place(tmp_path / "home")
+    work = tmp_path / "wt"
+    (work / "sub").mkdir(parents=True)
+    (work / "sub" / "data.txt").write_text("in sub\n")
+    for wrap in (lambda c: c, lambda c: memcap.shell(c, folder)):  # uncapped, then capped: the same
+        code, _, cwd = claude_code_runs(wrap("cd sub"), work)
+        assert code == 0 and cwd == (work / "sub").resolve()
+        code, out, cwd = claude_code_runs(wrap("cat data.txt"), cwd)
+        assert (code, out) == (0, "in sub\n")
+        code, out, cwd = claude_code_runs(wrap("cd .. && (exit 3)"), cwd)
+        assert code == 3 and cwd == work.resolve()  # the exit code and the cd, both kept
+
+
 @pytest.mark.skipif(bool(why_not()), reason=str(why_not()))
 def test_in_the_real_sandbox_the_makers_capped_command_runs_and_stops_a_runaway(repo):
     from test_guard_and_checker import setup
@@ -130,6 +153,16 @@ def test_in_the_real_sandbox_the_makers_capped_command_runs_and_stops_a_runaway(
     r = subprocess.run(["srt", "--settings", str(srt), "-c", runaway], cwd=wt, env=env, capture_output=True, text=True,
                        timeout=120)
     assert r.returncode == memcap.EXIT and "memory cap: the command used " in r.stderr, r.stderr[-400:]
+
+    # Maker's working directory carries over between commands, as it did before the cap. The capped
+    # command notes it in a file in srt's TMPDIR, /tmp/claude, which Claude Code makes before any command
+    Path("/tmp/claude").mkdir(exist_ok=True)
+    (wt / "sub").mkdir()
+    (wt / "sub" / "data.txt").write_text("in sub\n")
+    code, _, cwd = claude_code_runs(memcap.shell("cd sub", folder), wt, srt)
+    assert code == 0 and cwd == (wt / "sub").resolve()
+    code, out, _ = claude_code_runs(memcap.shell("cat data.txt", folder), cwd, srt)
+    assert code == 0 and out.strip().endswith("in sub")
 
 
 def test_focus_and_reticle_run_no_commands_so_there_is_nothing_to_cap():
