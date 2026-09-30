@@ -1,5 +1,5 @@
 Type: FYI
-Bottom line: 3 of 3 cases passed the hidden tests.
+Bottom line: 3 of 3 fixes reached Ready and passed the hidden tests.
 Not looked at: nothing
 Next: nothing needs you: every fix passed and Second Eye was right.
 Found

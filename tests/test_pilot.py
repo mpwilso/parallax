@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from fakes import FakeChecker, FakeDrafter, ScriptedAgent, good_probe, junit_runner
-from parallax import approvals, build, inbox, lifecycle, lint, pilot, planfit, preflight, show, stats
+from parallax import approvals, build, decide, inbox, lifecycle, lint, pilot, planfit, preflight, show, stats
 from parallax.accept import accept
 from parallax.cli import main
 from parallax.core import POLICY_FILE, Project
@@ -57,7 +57,7 @@ def test_do_answers_at_once_and_the_pilot_needs_nobody(proj, monkeypatch, capsys
     assert run_pilot(proj, tid, FakeDrafter(docs())) == "ready"
     assert humans(proj, tid) == []  # no intent, plan or launch approval from you
     [g] = kinds(proj, "gate.approved")
-    assert g["actor"] == "parallax" and g["data"]["rule"].startswith("launch rule: a small task, cap $2.00")
+    assert g["actor"] == "parallax" and g["data"]["rule"].startswith("launch rule: a small task, cap $2.20")
     assert approvals.valid(approvals.load_key(), g["data"])  # signed, like yours
     assert inbox.items(proj) == [{"task": tid, "state": "ready", "title": "fixing the README install steps"}]
 
@@ -136,7 +136,7 @@ def test_a_misfit_is_redrafted_on_its_own_then_comes_to_you_after_two_tries(proj
 
 @pytest.mark.parametrize("policy,why", [
     ("[launch]\nreview_paths = [\"README.md\"]\n", "the plan touches README.md, which is in review_paths"),
-    ("[launch]\nauto_launch_usd = 1.0\n", "the budget cap ($2.00) is over auto_launch_usd ($1.00)"),
+    ("[launch]\nauto_launch_usd = 1.0\n", "the budget cap ($2.20) is over auto_launch_usd ($1.00)"),
     ("[launch]\nreview_plans = true\n", "review_plans is on in the policy, so every plan waits for you"),
 ])
 def test_outside_the_launch_rule_the_plan_waits_for_you(repo, monkeypatch, capsys, policy, why):
@@ -151,7 +151,7 @@ def test_outside_the_launch_rule_the_plan_waits_for_you(repo, monkeypatch, capsy
     assert kinds(proj, "review.requested")[0]["reason"] == why
     card = show.report(proj, tid)
     assert card.startswith("Type: Decision needed\nBottom line: The plan waits for you before it runs.")
-    assert f"why it waits: {why}" in card and "cost: estimated $0.90, cap $2.00" in card
+    assert f"why it waits: {why}" in card and "cost: estimated $0.90, cap $2.20" in card
 
     monkeypatch.setattr(preflight, "run_srt", good_probe)
     monkeypatch.chdir(proj.root)
@@ -324,6 +324,64 @@ def test_a_short_cap_is_raised_by_code_not_redrafted(proj, monkeypatch):
     raised = [e for e in kinds(proj, "draft.recorded") if e["actor"] == "parallax"]
     assert "raised the cap from $2.00 to $3.40" in raised[-1]["reason"]
     assert not kinds(proj, "draft.misfit") and stats.touches(proj)[tid] == 0  # no redraft, and not a hand edit
+
+
+# the cap's floor, from what Maker has really spent (capfloor.py) ----------------------------------------
+
+LOW = docs()["plan"].replace("estimated_cost_usd = 0.9", "estimated_cost_usd = 0.3").replace(
+    "budget_cap_usd = 2.0", "budget_cap_usd = 0.7")  # 41250f: plans like this stopped mid-build
+
+
+def past_tasks(proj, spends, size="small"):
+    """Finished tasks in the ledger, each with its intent and Maker's recorded spend."""
+    for cost in spends:
+        tid = proj.new_task("an earlier task", intent=True)["task"]
+        lifecycle._write(lifecycle.doc_path(proj, tid, "intent"), docs(size=size)["intent"])
+        proj.ledger.append("maker.finished", "maker", "", task=tid, stage="build", status="done", cost_usd=cost)
+
+
+def test_a_low_estimate_is_raised_to_what_maker_has_really_spent(proj, monkeypatch):
+    monkeypatch.setattr(build, "_spawn", lambda *a: 9)
+    past_tasks(proj, [0.4, 0.9, 1.2, 1.6, 2.4, 0.5])  # six small tasks: the 90th percentile is $2.40
+    past_tasks(proj, [9.0], size="large")  # another size doesn't count
+    tid = pilot.intake(proj, WANT)["task"]
+    assert pilot.draft_until_fit(proj, tid, FakeDrafter({**docs(), "plan": LOW})) == "fit"
+    assert lifecycle.plan_data(proj, tid)["budget_cap_usd"] == 2.6  # $2.40, plus $0.20 of drafting
+    [raised] = [e for e in kinds(proj, "draft.recorded") if e["actor"] == "parallax"]
+    assert raised["reason"] == ("raised the cap from $0.70 to $2.60: Maker's 90th-percentile spend over this repo's "
+                                "6 small tasks is $2.40, plus drafting so far $0.20, needs $2.60")
+    assert (raised["data"]["floor"], raised["data"]["floor_from"], raised["data"]["maker_floor"]) == ("history", "ledger", 2.4)
+    assert pilot.launch_rule(proj, tid)[0]  # $2.60 is within auto_launch_usd: it launches as usual
+    assert raised["data"]["sha"] == lifecycle.file_hash(lifecycle.doc_path(proj, tid, "plan"))  # the approved file holds it
+
+
+def test_a_repo_with_no_history_uses_the_policy_default(repo, monkeypatch):
+    (repo / POLICY_FILE).write_text("[budget]\nsmall_floor_usd = 1.5\n")
+    make_key()
+    proj = Project.init(repo)
+    monkeypatch.setattr(build, "_spawn", lambda *a: 9)
+    tid = pilot.intake(proj, WANT)["task"]
+    assert pilot.draft_until_fit(proj, tid, FakeDrafter({**docs(), "plan": LOW})) == "fit"
+    assert lifecycle.plan_data(proj, tid)["budget_cap_usd"] == 1.7
+    [raised] = [e for e in kinds(proj, "draft.recorded") if e["actor"] == "parallax"]
+    assert "the policy's small_floor_usd (this repo has 0 small tasks with Maker costs; its own record counts from 5)" \
+        " is $1.50" in raised["reason"] and raised["data"]["floor_from"] == "policy"
+
+
+def test_a_floor_over_the_launch_limit_asks_you_and_code_never_raises_it_after(repo, monkeypatch):
+    (repo / POLICY_FILE).write_text("[launch]\nauto_launch_usd = 1.0\n")
+    make_key()
+    proj = Project.init(repo)
+    monkeypatch.setattr(build, "_spawn", lambda *a: 9)
+    tid = pilot.intake(proj, WANT)["task"]
+    assert run_pilot(proj, tid, FakeDrafter({**docs(), "plan": LOW})) == "needs you"
+    [raised] = [e for e in kinds(proj, "draft.recorded") if e["actor"] == "parallax"]
+    assert "from $0.70 to $2.20" in raised["reason"]  # a $0.70 cap would have launched; the floor asks you
+    assert kinds(proj, "review.requested")[0]["reason"] == "the budget cap ($2.20) is over auto_launch_usd ($1.00)"
+    assert not kinds(proj, "gate.approved")
+    assert decide.apply(proj, tid, "launch").startswith("building")  # your launch approves the file as it stands
+    after = [e for e in proj.ledger.entries() if e["kind"] == "draft.recorded"]
+    assert after[-1]["id"] == raised["id"] and lifecycle.plan_data(proj, tid)["budget_cap_usd"] == 2.2
 
 
 def test_a_rejected_task_leaves_the_inbox(proj, monkeypatch, capsys):

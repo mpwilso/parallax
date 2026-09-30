@@ -170,7 +170,7 @@ def test_a_task_moves_through_every_state_live_and_says_who_has_it(page, proj):
                            task=tid, **data)
         expect(row(page, tid)).to_contain_text(says, timeout=WAIT)
     expect(row(page, tid)).to_contain_text("The link points at a missing file")
-    expect(row(page, tid)).to_contain_text("of $2.00")  # spent against the cap
+    expect(row(page, tid)).to_contain_text("of $2.20")  # spent against the cap, raised to the floor
     open_card(page, tid)
     expect(page.locator("#card .live")).to_contain_text("Maker reworking (1 of 3)")
 

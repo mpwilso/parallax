@@ -11,7 +11,8 @@ import tomllib
 from pathlib import Path
 
 DEFAULT_LIMITS = {"stuck_after": 3, "stale_minutes": 60, "maker_turns": 150}
-DEFAULT_BUDGET = {"drafting_usd": 2.0, "small_cap_usd": 5.0, "large_cap_usd": 20.0}  # estimated dollars
+DEFAULT_BUDGET = {"drafting_usd": 2.0, "small_cap_usd": 5.0, "large_cap_usd": 20.0,  # estimated dollars
+                  "small_floor_usd": 2.0, "large_floor_usd": 8.0}  # Maker's spend a cap covers, until the ledger knows (capfloor.py)
 DEFAULT_LAUNCH = {"auto_launch_usd": 3.0, "review_paths": [], "review_plans": False}
 DEFAULT_DRAFT = {"model": "claude-sonnet-5-5"}  # a fifth of Opus's drafting cost, no more redrafts (docs/plan.md)
 DEFAULT_UI_TESTER = {
@@ -40,6 +41,8 @@ maker_turns = 150              # the most turns one maker run may take; hitting 
 drafting_usd = 2.00            # the most one drafting call (intent, spec or plan) may spend
 small_cap_usd = 5.00           # the highest cap a small task's plan may set
 large_cap_usd = 20.00          # the highest cap a large task's plan may set
+small_floor_usd = 2.00         # a small task's cap covers at least this much Maker work, until 5 small tasks show better
+large_floor_usd = 8.00         # the same for a large task
 
 [launch]
 auto_launch_usd = 3.00         # a plan whose cap is at most this launches without asking you, if it crosses no boundary

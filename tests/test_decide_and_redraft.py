@@ -53,7 +53,7 @@ def test_reject_at_ready_redrafts_intent_and_plan_from_your_reason(proj, monkeyp
     assert all("say which shell each step runs in" in r for r in drafter.requests)  # intent and plan both hear it
     assert "Name the shell." in lifecycle.doc_path(proj, tid, "intent").read_text()  # the intent was redrafted too
     attempt = status.attempt(proj.ledger.entries(), tid)
-    assert [e["data"]["doc"] for e in attempt if e["kind"] == "draft.recorded"] == ["intent", "plan"]
+    assert [e["data"]["doc"] for e in attempt if e["kind"] == "draft.recorded" and e["actor"] == "drafter"] == ["intent", "plan"]
     assert [e["actor"] for e in attempt if e["kind"] == "gate.approved"] == ["parallax"]  # launched by the rule again
 
     accept(proj, tid)
@@ -64,9 +64,9 @@ def test_each_attempt_gets_a_fresh_cap(proj):
     tid = pilot.intake(proj, WANT)["task"]
     pilot_run(proj, tid, maker=ScriptedAgent(steps=[("write", "README.md", "ok\n")], cost=1.5))
     plan = lifecycle.plan_data(proj, tid)
-    assert costs.budget(proj, tid, plan)[1] == pytest.approx(0.3)  # 0.2 drafting + 1.5 build of the 2.00 cap
+    assert costs.budget(proj, tid, plan)[1] == pytest.approx(0.5)  # 0.2 drafting + 1.5 build of the 2.20 cap (the floor)
     pilot.redraft(proj, tid, "start over")
-    assert costs.budget(proj, tid, plan) == (2.0, 2.0)
+    assert costs.budget(proj, tid, plan) == (2.2, 2.2)
     assert proj.task(tid)["cost_usd"] == pytest.approx(1.7)  # the task's total still counts everything
 
 
@@ -110,22 +110,22 @@ def test_a_launch_over_the_threshold_asks_only_about_cost(repo, monkeypatch):
     pilot_run(proj, tid)
     dec = decide.decision(proj, tid)
     assert (dec.kind, dec.question, [o.name for o in dec.options]) == (
-        "launch", "Launch it, with a cap of $2.00?", ["launch", "drop"])
+        "launch", "Launch it, with a cap of $2.20?", ["launch", "drop"])
     card = show.report(proj, tid)
-    assert "cost: estimated $0.90, cap $2.00" in card and "the work: fixing the README install steps" in card
+    assert "cost: estimated $0.90, cap $2.20" in card and "the work: fixing the README install steps" in card
     assert lints(proj, card)
     assert decide.apply(proj, tid, "launch").startswith("building")
 
 
 def test_a_reached_cap_can_be_raised_and_the_task_picks_up(proj):
     tid = pilot.intake(proj, WANT)["task"]
-    assert pilot_run(proj, tid, maker=ScriptedAgent(steps=[("write", "README.md", "ok\n")], cost=1.9)) == "stuck"
+    assert pilot_run(proj, tid, maker=ScriptedAgent(steps=[("write", "README.md", "ok\n")], cost=2.1)) == "stuck"
     dec = decide.decision(proj, tid)
-    assert dec.kind == "cap" and dec.recommend == "raise" and dec.question == "Raise the cap to $3.00 so it can finish?"
+    assert dec.kind == "cap" and dec.recommend == "raise" and dec.question == "Raise the cap to $3.20 so it can finish?"
     card = show.report(proj, tid)
-    assert "Decide: Raise the cap to $3.00 so it can finish? Recommend: raise." in card and lints(proj, card)
+    assert "Decide: Raise the cap to $3.20 so it can finish? Recommend: raise." in card and lints(proj, card)
     assert decide.apply(proj, tid, "raise") == f"checking {tid} without you. it comes back to the inbox."
-    assert costs.budget(proj, tid, lifecycle.plan_data(proj, tid))[0] == pytest.approx(3.0)
+    assert costs.budget(proj, tid, lifecycle.plan_data(proj, tid))[0] == pytest.approx(3.2)
     assert kinds(proj, "budget.raised")[0]["actor"] == "human" and proj.inbox() == []
 
 

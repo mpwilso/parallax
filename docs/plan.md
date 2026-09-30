@@ -299,6 +299,8 @@ Built before M15 on purpose: the drafter model changed with no eval, and the beh
 
 Built. Checking the cases found that `[build] setup` broke any install that depends on where it ran, since it ran on a plain copy of the base that was then deleted: a version read from git tags had no `.git` (tabulate), and an editable install pointed at the deleted copy (cachetools, humanize, whose install also writes a `_version.py`). Fixed in Parallax, for every repo (`parallax/installs.py`): setup runs in a real git checkout of the base; afterwards Parallax reads the install's own records for its import roots and keeps the git-ignored files it generated there; wherever code runs (the worktree, the check's copy, Field's copy), those roots under that tree go on `PYTHONPATH` and the generated files are laid in.
 
+The first full run stopped four cases at caps Focus set too low ($0.67 to $0.80, where Maker needed up to $2.00). A plan's cap now has a floor before approval (`parallax/capfloor.py`): Maker's 90th-percentile spend over this repo's past tasks of the same size once there are 5, else the policy's `small_floor_usd` or `large_floor_usd`, plus drafting so far. The launch rule then judges the raised cap as usual. A fix counts as passed only if it reached Ready and passed the hidden tests.
+
 #### Later: a knowledge layer
 
 - Project context and past decisions for the agents to draw on: what the repo is, what was decided before and why (from the ledger and `docs/tasks/`), so drafters and makers don't relearn it on every task. Read-only for agents, like everything else they're given.

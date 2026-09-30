@@ -160,7 +160,9 @@ def test_each_case_is_scored_by_the_hidden_tests_and_second_eye_against_them(
     assert header["fingerprint"]["Second Eye's model"] == proj.policy.check["model"]
     text = (out / "summary.md").read_text()
     assert lint.lint_report(text, root=proj.root) == []  # the output shape, with every Found cited
-    assert text.splitlines()[1] == f"Bottom line: {int(hidden == 'pass')} of 1 case passed the hidden tests."
+    passed = int(end == "ready" and hidden == "pass")  # a fix passes only if it reached Ready and passed
+    assert text.splitlines()[1] == f"Bottom line: {passed} of 1 fix reached Ready and passed the hidden tests."
+    assert text.splitlines()[2] == "Not looked at: nothing"  # Second Eye judged every case here
     assert ("0.0 min to Ready" in text) == (end == "ready")
     assert text.splitlines()[3] == ("Next: nothing needs you: every fix passed and Second Eye was right."
                                     if judgment == "right" else "Next: you read calc-1 in Details, then decide what to change.")
@@ -182,6 +184,68 @@ def test_a_catch_that_rework_fixes_counts_both_trees(proj, upstream):
     r = result(out)
     assert [v["judgment"] for v in r["verdicts"]] == ["catch", "right"]
     assert (r["end"], r["hidden"], r["second_eye"]) == ("ready", "pass", "right")
+
+
+def test_a_fix_nothing_reviewed_never_counts_as_passed_and_is_named(proj, upstream):
+    """41250f: four builds stopped at their cap before the check. Their trees passed the hidden
+    tests, and the summary counted them as passed with Not looked at: nothing."""
+    cheap, dear = maker(FIXED), maker(FIXED, cost=2.5)  # $2.50 of build is past the $2.20 cap
+
+    def pipeline(project, work):
+        return scripted(dear if project.root.parent.name == "calc-2" else cheap, FakeChecker())(project, work)
+    out, _ = run(proj, [case_for(upstream, "calc-1"), case_for(upstream, "calc-2")], pipeline, per_case=3.0)
+    capped = result(out, "calc-2")
+    assert (capped["end"], capped["hidden"], capped["verdicts"]) == ("needs you", "pass", [])
+    text = (out / "summary.md").read_text()
+    lines = text.splitlines()
+    assert lines[1] == "Bottom line: 1 of 2 fixes reached Ready and passed the hidden tests."
+    assert lines[2] == "Not looked at: see Found (1)"  # the reason, cited, is too long for the header
+    assert "- calc-2 never reached the check: the budget cap ran out ($2.70 of $2.20 estimated); nothing reviewed its tree, " \
+        "which passes the hidden tests (evals/results/" in text
+    assert lines[3] == "Next: you read calc-2 in Details, then decide what to change."
+    assert "calc-2: ended needs you, hidden tests pass on a tree nothing reviewed, Second Eye never judged it" in text
+    assert lint.lint_report(text, root=proj.root) == []
+
+
+def test_four_cases_that_never_reached_the_check_are_each_named_with_why(tmp_path):
+    header = {"run": "r", "parallax": "p", "budget_usd": 15.0, "per_case_usd": 4.0, "spent_usd": 3.0,
+              "cases": ["a", "b", "c", "d", "e"], "done": ["a", "b", "c", "d", "e"], "stopped": None}
+    stuck = {"end": "needs you", "hidden": "pass", "verdicts": [], "cost_usd": 0.7, "seconds_to_ready": None, "touches": 2,
+             "decisions": ["the budget cap ran out ($0.72 of $0.70 estimated)."]}
+    results = [{"case": x, **stuck} for x in "abcd"] + [
+        {"case": "e", "end": "ready", "hidden": "pass", "cost_usd": 0.4, "seconds_to_ready": 60.0, "touches": 1,
+         "verdicts": [{"tree": "t", "verdict": "pass", "hidden": "pass", "judgment": "right"}]}]
+    out = tmp_path / "evals" / "results" / "r"
+    out.mkdir(parents=True)
+    for r in results:
+        (out / f"{r['case']}.json").write_text(json.dumps(r))
+    (out / "run.json").write_text(json.dumps(header))
+    text = evals.summary(tmp_path, out, header, results)
+    assert text.splitlines()[1] == "Bottom line: 1 of 5 fixes reached Ready and passed the hidden tests."
+    assert text.splitlines()[2] == "Not looked at: see Found (4)"  # too long for the header, so each is cited
+    for x in "abcd":
+        assert (f"- {x} never reached the check: the budget cap ran out ($0.72 of $0.70 estimated); nothing reviewed "
+                f"its tree, which passes the hidden tests (evals/results/r/{x}.json:1)") in text
+    assert lint.lint_report(text, root=tmp_path) == []
+
+
+def test_progress_lines_are_out_as_they_happen(proj, upstream, monkeypatch):
+    """By default every progress line is printed with a flush, so a file or a pipe gets it at once."""
+    printed = []
+    monkeypatch.setattr("builtins.print", lambda *a, **k: printed.append((a, k)))
+    evals.run(proj, [case_for(upstream)], 1.0, 3.0, pipeline=scripted(maker(FIXED), FakeChecker()))  # say: the default
+    assert printed == [(("stopped before calc-1: $0.00 spent, and the next case needs up to $3.30 (its $3.00 ceiling "
+                         "plus 10%) of the $1.00 budget.",), {"flush": True})]
+
+
+def test_both_committed_summaries_regenerate_from_their_json():
+    """The committed runs' summaries are what the summary code writes from their JSON today."""
+    root = Path(__file__).resolve().parents[1]
+    for run_dir in sorted((root / evals.RESULTS_DIR).glob("*/run.json")):
+        out = run_dir.parent
+        header = json.loads(run_dir.read_text())
+        results = [json.loads((out / f"{c}.json").read_text()) for c in header["done"]]
+        assert (out / "summary.md").read_text() == evals.summary(root, out, header, results), out.name
 
 
 # the hidden tests stay hidden ------------------------------------------------------------------------

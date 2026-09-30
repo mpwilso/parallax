@@ -131,7 +131,8 @@ def eval_policy(policy, case: Case, ceiling: float) -> str:
     tables = {
         "limits": policy.limits,
         "budget": {"drafting_usd": round(min(policy.budget["drafting_usd"], ceiling / DRAFT_SHARE), 2),
-                   "small_cap_usd": ceiling, "large_cap_usd": ceiling},
+                   "small_cap_usd": ceiling, "large_cap_usd": ceiling,
+                   "small_floor_usd": policy.budget["small_floor_usd"], "large_floor_usd": policy.budget["large_floor_usd"]},
         "launch": {"auto_launch_usd": ceiling, "review_paths": [], "review_plans": False},
         "build": {"setup": setup_command(case)},
         "draft": policy.draft,
@@ -296,11 +297,17 @@ def _write(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data, indent=1) + "\n", encoding="utf-8")
 
 
+def say_now(text: str) -> None:
+    """A progress line, out at once even when output goes to a file or a pipe."""
+    print(text, flush=True)
+
+
 def run(project: Project, cases: list[Case], budget: float, per_case: float | None = None,
-        pipeline: Pipeline = live_pipeline, runner=None, say: Callable[[str], None] = print,
+        pipeline: Pipeline = live_pipeline, runner=None, say: Callable[[str], None] | None = None,
         run_id: str | None = None) -> Path:
     """Run cases in order under a hard total budget. Each case starts only if what's spent, plus its
     ceiling and the margin, fits. Every case's result is written as it finishes. Returns the run's folder."""
+    say = say or say_now
     per_case = float(per_case or project.policy.budget["small_cap_usd"])
     need = round(per_case * (1 + MARGIN), 2)
     run_id = run_id or uuid.uuid4().hex[:6]
@@ -336,46 +343,64 @@ def run(project: Project, cases: list[Case], budget: float, per_case: float | No
 
 # the summary -------------------------------------------------------------------------------------
 
+def unchecked(r: dict) -> bool:
+    """The case never reached Second Eye: it crashed, or stopped before the check."""
+    return not r.get("verdicts") and r.get("end") != "ready"
+
+
+def _why(r: dict) -> str:
+    why = r.get("error") or (r.get("decisions") or ["it stopped before the check"])[0]
+    return why.rstrip(".")
+
+
 def tally(results: list[dict]) -> dict[str, int]:
-    """Second Eye's judgments over every tree it judged, and the hidden-test outcomes per case."""
+    """Second Eye's judgments over every tree it judged, and per case: a fix passed only if it
+    reached Ready and passed the hidden tests. A tree nothing reviewed never counts as passed."""
     counts = {"right": 0, "catch": 0, "miss": 0, "false alarm": 0}
     for r in results:
         for v in r.get("verdicts", []):
             counts[v["judgment"]] += 1
-    counts["pass"] = sum(r.get("hidden") == "pass" for r in results)
+    counts["pass"] = sum(r.get("end") == "ready" and r.get("hidden") == "pass" for r in results)
     counts["ready"] = sum(r.get("end") == "ready" for r in results)
     return counts
 
 
 def summary(root: Path, out: Path, header: dict, results: list[dict]) -> str:
-    """The run in the output shape: FYI, a Bottom line, the counts cited to their files, a table in Details."""
+    """The run in the output shape: FYI, a Bottom line, the counts cited to their files, every case
+    that never reached the check named under Not looked at, a line per case in Details."""
     rel = out.relative_to(root).as_posix()
     c = tally(results)
     n = len(results)
     stop = header.get("stopped")
-    bottom = (f"{c['pass']} of {_n(n, 'case')} passed the hidden tests"
+    bottom = (f"{c['pass']} of {_n(n, 'fix', 'fixes')} reached Ready and passed the hidden tests"
               + (f", and the budget stopped the run before {stop['case']}" if stop else "") + ".")
-    left = [x for x in header["cases"] if x not in header["done"]]
-    not_looked = (f"{_n(len(left), 'case')} the budget didn't reach." if left else "nothing") if n else "every case: none ran."
-    found = []
+    gaps = []
     for r in results:
-        cite = f"{rel}/{r['case']}.json:1"
-        if r.get("end") == "error":
-            found.append(f"{r['case']} crashed: {r['error']} ({cite})")
-    found.append(f"{c['ready']} of {n} reached Ready, for ${header['spent_usd']:.2f} estimated in all ({rel}/run.json:1)")
-    found.append(f"Second Eye was right {c['right']} times, caught {c['catch']} bad fixes, missed {c['miss']}, "
-                 f"and raised {c['false alarm']} false alarms ({rel}/run.json:1)")
+        if unchecked(r):
+            tree_ = {"pass": "passes", "fail": "fails"}.get(r.get("hidden"), "wasn't tested by")
+            gaps.append((f"{r['case']} never reached the check: {_why(r)}",
+                         f"{r['case']} never reached the check: {_why(r)}; nothing reviewed its tree, which "
+                         f"{tree_} the hidden tests ({rel}/{r['case']}.json:1)"))
+    left = [x for x in header["cases"] if x not in header["done"]]
+    if left:
+        gaps.append((f"{_n(len(left), 'case')} the budget didn't reach",
+                     f"{_n(len(left), 'case')} the budget didn't reach: {', '.join(left)} ({rel}/run.json:1)"))
+    if not n:
+        gaps = [("every case: none ran", f"every case: none ran ({rel}/run.json:1)")]
+    found = [f"{c['ready']} of {n} reached Ready, for ${header['spent_usd']:.2f} estimated in all ({rel}/run.json:1)",
+             f"Second Eye was right {c['right']} times, caught {c['catch']} bad fixes, missed {c['miss']}, "
+             f"and raised {c['false alarm']} false alarms ({rel}/run.json:1)"]
     if stop:
         found.append(f"stopped before {stop['case']}: {stop['why']} ({rel}/run.json:1)")
     details = [f"Run {header['run']} on parallax {header['parallax']}, budget ${header['budget_usd']:.2f}, "
                f"ceiling ${header['per_case_usd']:.2f} per case."]
     for r in results:
         ready = f"{r['seconds_to_ready'] / 60:.1f} min to Ready" if r.get("seconds_to_ready") is not None else "never Ready"
-        details.append(f"{r['case']}: ended {r.get('end')}, hidden tests {r.get('hidden', 'not run')}, Second Eye "
-                       f"{r.get('second_eye', 'did not run')}, ${r.get('cost_usd') or 0:.2f}, {ready}, "
-                       f"{_n(r.get('touches', 0), 'touch', 'touches')}.")
-    next_ = _next(results, stop)
-    text = lint.report("FYI", bottom, not_looked, next_, found, details)
+        judged = "never judged it" if unchecked(r) else r.get("second_eye", "did not run")
+        details.append(f"{r['case']}: ended {r.get('end')}, hidden tests {r.get('hidden', 'not run')}"
+                       f"{' on a tree nothing reviewed' if unchecked(r) else ''}, Second Eye {judged}, "
+                       f"${r.get('cost_usd') or 0:.2f}, {ready}, {_n(r.get('touches', 0), 'touch', 'touches')}.")
+    text = lint.shaped("FYI", bottom, gaps, _next(results, stop), found, details=details)
     return lint.fit(text, root=root)[0] + "\n"
 
 

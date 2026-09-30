@@ -78,32 +78,44 @@ def _reserve(project: Project, plan: dict) -> float:
 
 
 def _room_for_rework(project: Project, task_id: str, plan: dict) -> dict:
-    """A cap too short for one rework round is raised by code, and the plan's hash recorded again.
+    """A cap too short is raised by code before approval, and the plan's hash recorded again.
 
-    Only Parallax knows what drafting cost once the plan is written, so it sets the floor. Never
-    when the intent names a budget: that's yours, and a short one comes back as a misfit."""
+    Two floors, the higher wins: room for one rework round (drafting so far plus twice the
+    estimate), and what Maker has really spent on tasks of this size (capfloor.py) plus drafting so
+    far. Only Parallax knows what drafting cost once the plan is written, so it sets them. Never past
+    the size's limit, and never when the intent names a budget: that's yours, and a short one comes
+    back as a misfit. The launch rule then judges the raised cap, so one over auto_launch_usd asks you."""
+    from . import capfloor
     intent = lifecycle._read(project, task_id, "intent")
     if lint.budget_of(intent) is not None:
         return plan
-    spent = costs.spent(project, task_id)
-    floor = planfit.rework_floor(float(plan["estimated_cost_usd"]), spent, _reserve(project, plan))
-    cap = float(plan["budget_cap_usd"])
-    if cap >= floor:
-        return plan
+    spent, reserve = costs.spent(project, task_id), _reserve(project, plan)
+    rework = planfit.rework_floor(float(plan["estimated_cost_usd"]), spent, reserve)
     size = lint.intent_fields(intent).get("size", "small")
     limit = float(project.policy.budget["large_cap_usd" if size == "large" else "small_cap_usd"])
-    if floor > limit:  # no cap fits: planfit tells the drafter the most it may estimate
+    if rework > limit:  # no cap fits: planfit tells the drafter the most it may estimate
         return plan
-    new = min(math.ceil(floor * 10 - 1e-9) / 10, limit)  # up to the next ten cents
+    maker, source, where = capfloor.floor(project, size, exclude=task_id)
+    history = round(spent + maker + reserve, 2)
+    floor = max(rework, history)
+    cap = float(plan["budget_cap_usd"])
+    new = min(math.ceil(floor * 10 - 1e-9) / 10, limit)  # up to the next ten cents, never past the limit
+    if cap >= new:
+        return plan
     path = lifecycle.doc_path(project, task_id, "plan")
     text = path.read_text(encoding="utf-8")
     text, n = re.subn(r"(?m)^budget_cap_usd\s*=.*$", f"budget_cap_usd = {new:.2f}", text)
     if n != 1:
         return plan
     path.write_text(text, encoding="utf-8")
-    project.ledger.append("draft.recorded", "parallax", f"raised the cap from ${cap:.2f} to ${new:.2f}: drafting spent "
-                          f"${spent:.2f}, and the work twice plus any UI tester share needs ${floor:.2f}",
-                          task=task_id, doc="plan", sha=lifecycle.file_hash(path))
+    if history > rework:
+        why = (f"raised the cap from ${cap:.2f} to ${new:.2f}: {source} is ${maker:.2f}, plus drafting so far "
+               f"${spent:.2f}" + (f" and Field's ${reserve:.2f}" if reserve else "") + f", needs ${history:.2f}")
+    else:
+        why = (f"raised the cap from ${cap:.2f} to ${new:.2f}: drafting spent ${spent:.2f}, and the work twice "
+               f"plus any UI tester share needs ${rework:.2f}")
+    project.ledger.append("draft.recorded", "parallax", why, task=task_id, doc="plan", sha=lifecycle.file_hash(path),
+                          floor="history" if history > rework else "rework", maker_floor=maker, floor_from=where)
     return lifecycle.plan_data(project, task_id)
 
 
