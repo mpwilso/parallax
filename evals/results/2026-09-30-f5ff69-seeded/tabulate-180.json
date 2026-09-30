@@ -1,0 +1,63 @@
+{
+ "case": "tabulate-180",
+ "mode": "seeded",
+ "pr": "https://github.com/astanin/python-tabulate/commit/20c6370d5da2dae89b305bfb6c7f12a0f8b7236c",
+ "issue": "https://github.com/astanin/python-tabulate/issues/180",
+ "inferred": [
+  "3",
+  "4",
+  "5"
+ ],
+ "reticle_kept": {
+  "asked": 3,
+  "inferred": 2
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "change 0 to 1 at tabulate/__init__.py:1507",
+   "hidden": "29 of 30 pass",
+   "second_eye": "catch",
+   "reticle": "miss",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker: In _wrap_text_to_colwidths the new code uses len(list_of_lists[1]) (index 1, not 0) when the list is non-empty. With a single-row table this raises IndexError, and with multiple rows it reads the wrong row's width. The original used [0]. Th",
+    "major: The maxheadercolwidths path, which uses the same pattern, is not changed. Outcome 3 is inferred, so this is non-blocking in principle. It is still unaddressed, and it is unclear whether empty data reaches it safely."
+   ],
+   "test_only": [
+    "major: No regression test was added. The diff covers only tabulate/__init__.py. The outcome asks for a test, and a test would have caught the [1] index bug."
+   ]
+  },
+  {
+   "broken": "undo the hunk at tabulate/__init__.py:1506",
+   "hidden": "29 of 30 pass",
+   "second_eye": "miss",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [],
+   "test_only": []
+  },
+  {
+   "broken": "undo the hunk at tabulate/__init__.py:2069",
+   "hidden": "29 of 30 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "major: The constraints say the fix stays in the `tabulate` function's width handling and must not change `_wrap_text_to_colwidths`. The diff edits only `_wrap_text_to_colwidths`, and leaves `tabulate` untouched. The change is behavior-preserving f"
+   ],
+   "test_only": []
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "reticle": "right",
+  "inferred_notes": 1,
+  "findings": [],
+  "test_only": []
+ },
+ "cost_usd": 0.0856,
+ "seconds": 56.3,
+ "second_eye_from": "9ba608",
+ "reticle_from": "9ba608"
+}

@@ -1,0 +1,47 @@
+{
+ "case": "boltons-348",
+ "mode": "seeded",
+ "pr": "https://github.com/mahmoud/boltons/pull/349",
+ "issue": "https://github.com/mahmoud/boltons/issues/348",
+ "inferred": [
+  "3",
+  "4",
+  "5",
+  "6"
+ ],
+ "reticle_kept": {
+  "asked": 4,
+  "inferred": 5
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "undo the hunk at boltons/cacheutils.py:240",
+   "hidden": "11 of 18 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker: The diff deletes the `super().__setitem__(key, value)` call from the new-key branch instead of adding it to the overwrite (`else`) branch. New keys are no longer stored in the underlying dict, so `dict(cache)`, `values()`, `len`, `in` and `",
+    "major: An overwrite still does not move the key to the most recent position in the linked list, which a constraint requires. The diff does not address this.",
+    "major: The change moves the Python 2.7 CI job into a separate job. This is unrelated to the cache bug and was not requested. The file also now lacks a trailing newline."
+   ],
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "test_only": [
+    "major: No regression test was added for LRU or LRI overwrite, which the outcome asks for."
+   ]
+  }
+ ],
+ "real_fix": {
+  "second_eye": "false alarm",
+  "findings": [
+   "major: The change edits the CI workflow. It removes py27 from the main matrix and adds a separate tests-py27 job that runs in a container on ubuntu-20.04. The outcome doesn't ask for this and it has nothing to do with the cache overwrite bug. It c"
+  ],
+  "reticle": "right",
+  "inferred_notes": 0,
+  "test_only": []
+ },
+ "cost_usd": 0.0493,
+ "seconds": 42.1,
+ "second_eye_from": "48a3a5",
+ "reticle_from": "48a3a5"
+}

@@ -48,14 +48,18 @@ Reticle writes tests of what you asked, before the build; Maker can't see or cha
 
 **Seeded versions are mechanical edits, not real mistakes.** The rates below describe that kind of error: one wrong operator, constant or missing hunk inside a fix that is otherwise the maintainers' own. They don't say how often either checker catches the mistakes Maker actually makes.
 
-23 broken versions from 10 of the 11 cases (cachetools-387 gave none that failed the hidden tests), and 11 real fixes. Runs 9ba608-seeded and 48a3a5-seeded for Reticle, 221c3e-seeded for Second Eye.
+23 broken versions from 10 of the 11 cases (cachetools-387 gave none that failed the hidden tests), and 11 real fixes. Runs 9ba608-seeded and 48a3a5-seeded for Reticle, 221c3e-seeded and f5ff69-seeded for Second Eye before and after its input changed.
 
 | | Broken versions caught | False alarms on the real fixes |
 |---|---|---|
 | Reticle, tests of what you asked | 19 of 23 (it had a test for 22) | 1 of 10 it had a test for (tabulate-231) |
-| Second Eye, findings about behavior | 23 of 23 | 7 of 11 |
+| Second Eye before (221c3e): outcomes without their marks | 23 of 23 by the rule, 22 by hand | 7 of 11 by the rule, 6 by hand |
+| Second Eye now (f5ff69): marked outcomes, fails only on asked ones | 20 of 23 by the rule and by hand | 4 of 11 by the rule, 3 by hand |
 
 - **Reticle** missed three versions its tests didn't reach, and had no test at all for tabulate-190. It costs about $0.03 to $0.08 a task. It's on by default since these results (`[reticle] enabled = true`).
+- **What changed for Second Eye, and why.** In 221c3e most of its false alarms were correct fixes doing less than Focus's intent asked, and much of that intent was Focus's own inferred outcomes, the same ones behind Reticle's early false alarms. Second Eye used to get the outcomes without their marks. It now sees each one marked asked or inferred, and its rules let a blocking or scope finding rest only on an asked outcome or a constraint; an inferred one is at most a note. The review template also makes housekeeping (a changelog entry, docs) a note unless a repo's REVIEW.md says otherwise. Rerun on the same versions and intents (f5ff69, $0.75):
+  - False alarms fell from 6 to 3 of 11 by hand. tabulate-180 and tomlkit-430 now pass (tomlkit-430 had failed only on a missing CHANGELOG entry), and tabulate-231's one remaining finding is a missing test. The 3 left: boltons-348, a scope finding on the maintainers' own CI change; humanize-174, which cites a constraint Focus wrote (results under an hour stay the same) that the maintainers' broader fix breaks; and tabulate-190, which rests on inferred outcomes 3 and 4 against its own rule. tabulate-231 still counts by the rule only because that missing-test finding went unrecognised.
+  - Catches fell from 22 to 20 of 23 by hand. tabulate-180's broken version breaks only outcome 3, which Focus inferred, so Second Eye now passes it; Reticle's tests caught it. boltons-319's undone hunk is now missed. boltons-337's old catch rested only on a missing-test finding, so it was never a real one.
 - **Second Eye** is scored in this mode on findings about behavior. No seeded version has tests, since they're the hidden ones, so a finding that only says a test is missing would flag every version and every real fix; those are kept with each result but don't count. By hand, one of the 7 false alarms (tomlkit-512) is only such a finding in words the rule missed, so 6 of 11. One more (tomlkit-430) counts only because a CHANGELOG entry is missing. Most of the rest are the real fix doing less than Focus's intent asks, such as tabulate-180 guarding one of two blocks the intent names, or doing something it doesn't ask, such as boltons-348 changing the CI workflow. Second Eye judges the change against the intent, not against what the maintainers decided.
 - **Inferred-outcome notes were tried and rejected.** With Reticle also testing the outcomes Focus inferred, failures shown as notes on the card and never sent back, the seeded runs showed 5 notes on the 11 real fixes, all noise by definition, for 3 more catches (22 of 23). On humanize-174 run through the whole pipeline (7eb145), the one case where a note could have mattered, there was none. Reticle now tests only what you asked.
 
@@ -64,7 +68,7 @@ Reticle writes tests of what you asked, before the build; Maker can't see or cha
 ## What they don't show
 
 - **How often Second Eye catches a bad fix Maker made.** Only one fix was bad, and it wasn't caught. One case can't give a rate. The seeded rates above are for mechanical edits.
-- **Its false-alarm rate on Maker's fixes.** None in 11 judgments is too few to say it's rare. On the maintainers' real fixes, seeded, it was 7 of 11.
+- **Its false-alarm rate on Maker's fixes.** None in 11 judgments is too few to say it's rare. On the maintainers' real fixes, seeded, it was 6 of 11 by hand, and 3 of 11 since it fails only on asked outcomes.
 - **Anything beyond small, pure-Python repos,** or any variance: each case ran once.
 - **An independent test of the cap floor.** Its $2.00 default came from Maker's costs on these same cases, so the rerun succeeding is expected.
 - **One consistent version.** The runs span three commits of Parallax.

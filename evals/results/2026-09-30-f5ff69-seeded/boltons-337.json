@@ -1,0 +1,64 @@
+{
+ "case": "boltons-337",
+ "mode": "seeded",
+ "pr": "https://github.com/mahmoud/boltons/pull/338",
+ "issue": "https://github.com/mahmoud/boltons/issues/337",
+ "inferred": [
+  "3",
+  "4",
+  "5"
+ ],
+ "reticle_kept": {
+  "asked": 1,
+  "inferred": 4
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "undo the hunk at boltons/dictutils.py:74",
+   "hidden": "0 of 1 pass",
+   "second_eye": "catch",
+   "findings": [
+    "major: The diff only sets PY3 = False in the except branch. It shows no PY3 = True in the try branch, and PY3 may not be defined earlier in the file. If it isn't, `if PY3:` in the class body raises NameError on Python 3 at import time, which would"
+   ],
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "test_only": [
+    "major: The diff has no regression test. The outcome asks for tests covering empty, single-value and multi-value round trips, and only boltons/dictutils.py changed."
+   ]
+  },
+  {
+   "broken": "undo the hunk at boltons/dictutils.py:178",
+   "hidden": "7 of 26 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker: The diff removes `self._clear_ll()` from `__init__`. Nothing else in the diff sets up `_map` and `_root` for a newly built object. `OrderedMultiDict()` and `OrderedMultiDict({'a': 1})` therefore never create the linked list, and the first `"
+   ],
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "test_only": [
+    "major: No regression test is in the diff. The outcome asks for tests covering the empty, single-value and multi-value cases. Without them nothing shows that the fix works or that it fails before the change."
+   ]
+  },
+  {
+   "broken": "undo the hunk at boltons/dictutils.py:194",
+   "hidden": "25 of 26 pass",
+   "second_eye": "miss",
+   "findings": [],
+   "reticle": "miss",
+   "reticle_with_inferred": "catch",
+   "test_only": []
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "findings": [],
+  "reticle": "right",
+  "inferred_notes": 1,
+  "test_only": []
+ },
+ "cost_usd": 0.1251,
+ "seconds": 86.1,
+ "second_eye_from": "48a3a5",
+ "reticle_from": "48a3a5"
+}

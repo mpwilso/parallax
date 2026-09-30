@@ -1,0 +1,72 @@
+{
+ "case": "tomlkit-430",
+ "mode": "seeded",
+ "pr": "https://github.com/python-poetry/tomlkit/pull/520",
+ "issue": "https://github.com/python-poetry/tomlkit/issues/430",
+ "inferred": [
+  "4",
+  "5",
+  "6"
+ ],
+ "reticle_kept": {
+  "asked": 2,
+  "inferred": 2
+ },
+ "reticle_weak": [
+  "it passes on the base, so it doesn't show the problem"
+ ],
+ "versions": [
+  {
+   "broken": "flip == to != at tomlkit/api.py:266",
+   "hidden": "150 of 152 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker: The condition is inverted. `len(keys) != 1` returns `keys[0]`, so a two-or-more item list returns only its first key as a SingleKey, which breaks DottedKey behavior. An empty iterable raises IndexError instead of keeping its current behavio"
+   ],
+   "test_only": [
+    "major: No test was added for the one-item list case or the `in` check, which the outcome lists as expected. Existing two-part tests would fail with this change."
+   ]
+  },
+  {
+   "broken": "change 1 to 2 at tomlkit/api.py:266",
+   "hidden": "150 of 152 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker: The check is `len(keys) == 2`, not `== 1`. A one-item list still returns a DottedKey, so outcomes 1, 2 and 4 are not met. Two-item lists now lose their DottedKey and return only the first key, silently dropping the second part. That breaks "
+   ],
+   "test_only": [
+    "major: No test was added for the one-item list case or the `in` check on the document (outcome 6)."
+   ]
+  },
+  {
+   "broken": "change 0 to 1 at tomlkit/api.py:267",
+   "hidden": "151 of 152 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker: `return keys[1]` is an off-by-one. With a one-item list, keys has only index 0, so this raises IndexError. `tomlkit.key([\"my_key\"])` crashes instead of returning a SingleKey. It should be `keys[0]`. This breaks outcomes 1, 2 and 4."
+   ],
+   "test_only": [
+    "major: No test was added for the one-item list case or the `in doc` check, and the diff has no docstring update. A test would have caught the IndexError."
+   ]
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "reticle": "right",
+  "inferred_notes": 0,
+  "findings": [],
+  "test_only": [
+   "major: The diff has no test for the one-item list case or the `in doc` check. Outcome item 6 is only inferred, but REVIEW.md pass 3 treats a missing test for new behavior as major."
+  ]
+ },
+ "cost_usd": 0.0637,
+ "seconds": 47.5,
+ "second_eye_from": "9ba608",
+ "reticle_from": "9ba608"
+}

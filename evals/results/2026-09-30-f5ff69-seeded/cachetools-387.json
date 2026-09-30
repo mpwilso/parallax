@@ -1,0 +1,30 @@
+{
+ "case": "cachetools-387",
+ "mode": "seeded",
+ "pr": "https://github.com/tkem/cachetools/commit/57d2e4813d9801f97034559e22428bac6f7c6c9b",
+ "issue": "https://github.com/tkem/cachetools/issues/387",
+ "inferred": [
+  "3",
+  "4",
+  "5"
+ ],
+ "reticle_kept": {
+  "asked": 2,
+  "inferred": 1
+ },
+ "reticle_weak": [
+  "it fails on TypeError, not an assertion or a crash the request shows"
+ ],
+ "versions": [],
+ "real_fix": {
+  "second_eye": "right",
+  "reticle": "right",
+  "inferred_notes": 0,
+  "findings": [],
+  "test_only": []
+ },
+ "cost_usd": 0.0196,
+ "seconds": 38.2,
+ "second_eye_from": "9ba608",
+ "reticle_from": "9ba608"
+}
