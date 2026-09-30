@@ -30,7 +30,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import build, costs, lifecycle, lint, sandbox, status, tree
+from . import build, costs, installs, lifecycle, lint, sandbox, status, tree
 from .core import ParallaxError, Project
 
 # newer MCP versions put their browser behind a Unix socket, which the sandbox refuses (Part 3 spike)
@@ -351,6 +351,7 @@ def test(project: Project, task_id: str, p, tester_for) -> tuple[str, str]:
     s = tree.stage(p.worktree, p.task["base"], home / "index")
     copy, work, shots = home / "app", home / "work", home / "shots"
     tree.export(p.worktree, s.tree, copy)
+    installs.place(p.venv, copy)
     cfg_path = _sandbox(home, copy, tools, p.venv, [work, shots, work / "tmp"])
     origin = re.sub(r"[#?].*$", "", cfg["url"])
     mcp = (f"cd {shlex.quote(str(work))} && exec node {shlex.quote(str(tools.modules / '@playwright' / 'mcp' / 'cli.js'))} "
@@ -358,7 +359,7 @@ def test(project: Project, task_id: str, p, tester_for) -> tuple[str, str]:
            f"--output-dir {shlex.quote(str(shots))} --allowed-origins {shlex.quote(origin)}")
     script = _script(cfg["start"], cfg["url"], copy, work / "app.log", mcp, work / "tmp")
     server = {"command": "srt", "args": ["--settings", str(cfg_path), "-c", script],
-              "env": _env(tools, p.venv, work, cfg["url"])}
+              "env": {**_env(tools, p.venv, work, cfg["url"]), **installs.env(p.venv, copy)}}
     plan = p.plan
     left = costs.budget(project, task_id, plan)[1]
     limit = round(min(left, cfg["max_usd"]), 2)  # its limit is its reserve in the plan's cap, never more
@@ -456,7 +457,7 @@ def _run_specs(project: Project, tools: Tools, home: Path, copy: Path, specs: Pa
                      f"cd {shlex.quote(str(work))} && node {shlex.quote(str(cli))} test --config {shlex.quote(str(config))}",
                      work / "tmp")
     from .testrun import _srt
-    code, output = (runner or _srt)(cfg_path, copy, script, _env(tools, venv, work, cfg["url"]))
+    code, output = (runner or _srt)(cfg_path, copy, script, {**_env(tools, venv, work, cfg["url"]), **installs.env(venv, copy)})
     tail = "\n".join(output.strip().splitlines()[-15:])
     if code == APP_FAILED:
         log = (work / "app.log").read_text(errors="replace") if (work / "app.log").exists() else ""
@@ -477,6 +478,7 @@ def run_flows(project: Project, task_id: str, p, reviewed: str, runner=None) -> 
     shutil.rmtree(home, ignore_errors=True)
     home.mkdir(parents=True)
     tree.export(p.worktree, reviewed, home / "app")
+    installs.place(p.venv, home / "app")
     for rel, data in found.items():  # laid out by task, so two tasks' files never collide
         target = home / "specs" / rel.split("/")[2] / Path(rel).name
         target.parent.mkdir(parents=True, exist_ok=True)

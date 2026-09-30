@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from fakes import FakeChecker, FakeDrafter, ScriptedAgent, blocker, good_probe
-from parallax import build, evals, lint, pilot, stats
+from parallax import build, evals, lint, pilot, review, stats
 from parallax.agents import claude
 from parallax.agents.base import Review
 from parallax.cli import main
@@ -237,14 +237,14 @@ def test_each_case_runs_hands_free_under_your_policy_and_its_ceiling(proj, upstr
     assert p.budget["drafting_usd"] == 0.5 and not p.ui_tester["enabled"]  # six drafting calls fit the ceiling
     assert (p.check, p.draft, p.limits) == (proj.policy.check, proj.policy.draft, proj.policy.limits)
     assert p.build["setup"].startswith('uv venv -q --python /usr/bin/python3 "$PARALLAX_VENV"')
-    assert "uv pip install -e . pytest" in p.build["setup"] and "parallax_eval_src.pth" in p.build["setup"]
-    assert "SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0" in p.build["setup"]  # the setup copy has no .git to read tags from
+    assert p.build["setup"].endswith("&& uv pip install -e . pytest")  # nothing else: Parallax's setup does the rest
 
+    (proj.root / "REVIEW.md").write_text(review.TEMPLATE + "\n7. A rule for this repo only.\n")
     out, _ = run(proj, [case_for(upstream)], scripted(maker(FIXED), FakeChecker()))
     scratch = Project(Path(result(out)["scratch"]))
     [g] = [e for e in scratch.ledger.entries() if e["kind"] == "gate.approved"]
     assert g["actor"] == "parallax" and "within auto_launch_usd $3.00" in g["data"]["rule"]
-    assert (scratch.root / "REVIEW.md").read_text() == (proj.root / "REVIEW.md").read_text()
+    assert (scratch.root / "REVIEW.md").read_text() == review.TEMPLATE  # not this repo's own REVIEW.md
 
 
 # staleness in stats -------------------------------------------------------------------------------------
@@ -257,13 +257,17 @@ def test_stats_says_when_the_evals_are_older_than_what_steers_the_agents(proj, u
     assert stats.report(proj)[-1].startswith(f"evals are current: run {json.loads((out / 'run.json').read_text())['run']}")
 
     (proj.root / "REVIEW.md").write_text((proj.root / "REVIEW.md").read_text() + "\n- one more rule\n")
-    assert stats.report(proj)[-1].startswith("evals are older than REVIEW.md. last run ")
+    (proj.root / "CLAUDE.md").write_text("rules for agents building this repo\n")
+    assert stats.report(proj)[-1].startswith("evals are current")  # no eval agent reads either file
+
+    monkeypatch.setattr(review, "TEMPLATE", review.TEMPLATE + "\n6. One more pass for every repo.\n")
+    assert stats.report(proj)[-1].startswith("evals are older than parallax/review.py (TEMPLATE). last run ")
     monkeypatch.setattr(claude, "BLIND_PROMPT", claude.BLIND_PROMPT + " Be brief.")
     (proj.root / POLICY_FILE).write_text((proj.root / POLICY_FILE).read_text().replace(
         'model = "claude-sonnet-5-5"    # the drafters', 'model = "claude-opus-5"    # the drafters'))
     proj.reload_policy()
-    assert stats.report(proj)[-1].startswith("evals are older than REVIEW.md, parallax.policy.toml, "
-                                             "parallax/agents/claude.py (BLIND_PROMPT), Focus's model. ")
+    assert stats.report(proj)[-1].startswith("evals are older than parallax.policy.toml, parallax/agents/claude.py "
+                                             "(BLIND_PROMPT), parallax/review.py (TEMPLATE), Focus's model. ")
 
 
 def test_a_run_that_finished_no_case_doesnt_make_the_evals_current(proj, upstream):

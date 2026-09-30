@@ -2,7 +2,8 @@
 
 Per case: a scratch clone of the upstream repo at the base commit, with no history after it, so
 the fix can't be found. Its policy is yours, with the case's setup, the UI tester off, and the
-per-case ceiling as both the small-task cap and the launch rule. The issue text goes to
+per-case ceiling as both the small-task cap and the launch rule. Its REVIEW.md is the general
+template `parallax init` gives any repo. The issue text goes to
 `pilot.intake` exactly as `parallax do` would take it, and the pilot runs to Ready or to one
 Decision needed. Nothing answers a decision; the case ends there.
 
@@ -17,7 +18,6 @@ from __future__ import annotations
 
 import json
 import os
-import shlex
 import shutil
 import signal
 import subprocess
@@ -29,9 +29,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from . import build, fingerprint, lint, pilot, sandbox, status, testrun, tree
+from . import build, fingerprint, installs, lint, pilot, sandbox, status, testrun, tree
 from .core import POLICY_FILE, ParallaxError, Project
-from .review import REVIEW_FILE
 
 CASES_FILE = Path("evals") / "cases.toml"
 RESULTS_DIR = Path("evals") / "results"
@@ -39,14 +38,6 @@ MARGIN = 0.10          # of a case's ceiling, kept back for a turn in flight pas
 DRAFT_SHARE = 6        # a drafting call may spend at most the ceiling over this: 3 tries of intent and plan
 CASE_TIMEOUT = 2 * 3600
 PYTHON = "/usr/bin/python3"  # the sandbox can read it; a uv-managed Python lives under $HOME, which it can't
-# A src/ layout package installed editable points at the setup copy, which is gone once setup ends.
-# This puts ./src first on the path for any Python run from the tree's root, the way pytest's
-# rootdir does for a flat layout. Written by the eval's own setup, as you, never by an agent.
-SRC_PTH = ('import pathlib, site; pathlib.Path(site.getsitepackages()[0], "parallax_eval_src.pth").write_text('
-           '"import os, sys; os.path.isdir(\'src\') and sys.path.insert(0, os.path.abspath(\'src\'))\\n")')
-# setup runs on a plain copy of the base, with no .git, so a version read from git tags
-# (setuptools_scm, hatch-vcs) has nothing to read. The version doesn't matter to any test.
-SCM_VERSION = "0.0.0"
 DECISIONS = ("stuck.raised", "disagreement.raised", "review.requested")
 
 Pipeline = Callable[[Project, str], str]  # (the case's scratch project, the work as typed) -> task id
@@ -124,9 +115,7 @@ def setup_command(case: Case) -> str:
     if not case.setup:
         return ""
     steps = " && ".join(case.setup)
-    return (f'uv venv -q --python {PYTHON} "$PARALLAX_VENV" && export VIRTUAL_ENV="$PARALLAX_VENV" UV_LINK_MODE=copy'
-            f' SETUPTOOLS_SCM_PRETEND_VERSION={SCM_VERSION}'
-            f' && {steps} && "$PARALLAX_VENV/bin/python" -c {shlex.quote(SRC_PTH)}')
+    return f'uv venv -q --python {PYTHON} "$PARALLAX_VENV" && export VIRTUAL_ENV="$PARALLAX_VENV" UV_LINK_MODE=copy && {steps}'
 
 
 def _toml(value) -> str:
@@ -166,19 +155,15 @@ def run_hidden(repo: Path, base: str, treeish: str, hidden: dict[str, bytes], te
 
 
 def _venv(case: Case, repo: Path, where: Path) -> Path | None:
-    """For eval check: the case's setup on a copy of the base, as the pilot's setup does it."""
+    """For eval check: the case's setup, made exactly the way a task's is (installs.py)."""
     command = setup_command(case)
     if not command:
         return None
-    venv, base = where / "venv", where / "setup-base"
-    tree.export(repo, case.base, base)
-    out = subprocess.run(command, shell=True, cwd=base, capture_output=True, text=True,
-                         env={**os.environ, "PARALLAX_VENV": str(venv), "PARALLAX_WORKTREE": str(base)})
-    shutil.rmtree(base, ignore_errors=True)
+    out, _ = installs.make(command, repo, case.base, where / "venv", where / "setup-base")
     if out.returncode != 0:
         lines = (out.stderr or out.stdout).strip().splitlines() or ["no output"]
         raise ParallaxError(f"setup failed: {next((x.strip() for x in lines if 'error' in x.lower()), lines[-1])[:200]}")
-    return venv
+    return where / "venv"
 
 
 # eval check: no model ------------------------------------------------------------------------------
@@ -288,8 +273,7 @@ def score(project: Project, task_id: str, case: Case, cache: Path, runner=None) 
     }
 
 
-def run_case(case: Case, where: Path, ceiling: float, policy, review_text: str, pipeline: Pipeline,
-             runner=None) -> dict:
+def run_case(case: Case, where: Path, ceiling: float, policy, pipeline: Pipeline, runner=None) -> dict:
     started = time.monotonic()
     r: dict = {"case": case.id, "pr": case.pr, "issue": case.issue, "ceiling_usd": ceiling}
     try:
@@ -297,8 +281,7 @@ def run_case(case: Case, where: Path, ceiling: float, policy, review_text: str, 
         repo = where / "repo"
         clone_at(cache, case.base, repo)
         (repo / POLICY_FILE).write_text(eval_policy(policy, case, ceiling), encoding="utf-8")
-        (repo / REVIEW_FILE).write_text(review_text, encoding="utf-8")
-        project = Project.init(repo, actor="parallax")
+        project = Project.init(repo, actor="parallax")  # REVIEW.md: the general template, as any repo gets
         task_id = pipeline(project, case.goal.strip())
         r.update(score(project, task_id, case, cache, runner))
         r["scratch"] = str(repo)
@@ -330,7 +313,6 @@ def run(project: Project, cases: list[Case], budget: float, per_case: float | No
     header = {"run": run_id, "started": now.isoformat(timespec="seconds"), "parallax": head,
               "budget_usd": budget, "per_case_usd": per_case, "cases": [c.id for c in cases],
               "fingerprint": fingerprint.current(project.root, project.policy)}
-    review_text = (project.root / REVIEW_FILE).read_text(encoding="utf-8") if (project.root / REVIEW_FILE).exists() else ""
     spent, done, stopped = 0.0, [], None
     for n, case in enumerate(cases, 1):
         if spent + need > budget:
@@ -339,7 +321,7 @@ def run(project: Project, cases: list[Case], budget: float, per_case: float | No
             say(f"stopped before {case.id}: {stopped['why']}.")
             break
         say(f"[{n}/{len(cases)}] {case.id}: running, ceiling ${per_case:.2f}")
-        r = run_case(case, scratch / case.id, per_case, project.policy, review_text, pipeline, runner)
+        r = run_case(case, scratch / case.id, per_case, project.policy, pipeline, runner)
         spent = round(spent + (r.get("cost_usd") or 0), 4)
         _write(out / f"{case.id}.json", r)
         done.append(r)

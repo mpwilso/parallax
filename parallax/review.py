@@ -15,6 +15,9 @@ import re
 from pathlib import Path
 
 REVIEW_FILE = "REVIEW.md"
+# TEMPLATE below is the general REVIEW.md: passes that apply to any code. It ships with Parallax,
+# `parallax init` installs it where a repo has none, and evals use it. Parallax's own REVIEW.md is
+# this template plus one pass for Parallax's own rules (tests/test_docs.py pins that).
 SEVERITIES = ("blocker", "major", "minor", "nit")
 DEFAULT_BLOCKING = ("blocker", "major")
 

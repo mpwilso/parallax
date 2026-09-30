@@ -13,7 +13,6 @@ tokens, and CLAUDE_CODE_SUBPROCESS_ENV_SCRUB set. The build never pauses; the ma
 from __future__ import annotations
 
 import os
-import shutil
 import signal
 import subprocess
 import sys
@@ -23,7 +22,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
-from . import costs, guard, lifecycle, lint, preflight, sandbox
+from . import costs, guard, installs, lifecycle, lint, preflight, sandbox
 from .agents.base import Agent, AgentResult
 from .core import ROOT_ENV, TASK_ENV, ParallaxError, Project, inside_task, refuse_inside_task
 from .gate import Scope, make_permission_fn
@@ -76,27 +75,22 @@ def goal(project: Project, task_id: str) -> str:
 
 
 def _setup_venv(project: Project, task_id: str, worktree: Path, home: Path) -> Path | None:
-    """Run [build] setup once, as you, on a fresh copy of the base commit, never the worktree.
+    """Run [build] setup once, as you, on a fresh checkout of the base commit, never the worktree.
 
     setup may run repo code (a build backend, say), and nothing the maker wrote may ever run as
     you. Running it on the base commit makes that true whatever state the worktree is in, so a
-    lost venv can always be made again."""
+    lost venv can always be made again. The checkout is a real git one, so a version read from git
+    tags works; installs.py makes what setup installed work where the code runs, once it's gone."""
     command = project.policy.build["setup"].strip()
     if not command:
         return None
     venv = home / "venv"
     if venv.exists():
         return venv
-    from . import tree
-    base = home / "setup-base"
-    shutil.rmtree(base, ignore_errors=True)
-    tree.export(worktree, project.task(task_id)["base"], base)
-    env = {**os.environ, "PARALLAX_VENV": str(venv), "PARALLAX_WORKTREE": str(base)}
     started = time.monotonic()
-    out = subprocess.run(command, shell=True, cwd=base, env=env, capture_output=True, text=True)
-    shutil.rmtree(base, ignore_errors=True)
+    out, found = installs.make(command, worktree, project.task(task_id)["base"], venv, home / "setup-base")
     project.ledger.append("setup.ran", "parallax", command, task=task_id, exit=out.returncode,
-                          seconds=round(time.monotonic() - started, 1))
+                          seconds=round(time.monotonic() - started, 1), **found)
     if out.returncode != 0:
         tail = (out.stderr or out.stdout).strip().splitlines()[-1:] or ["no output"]
         raise ParallaxError(f"the [build] setup command failed: {tail[0]}")
@@ -131,6 +125,7 @@ def prepare(project: Project, task_id: str, setup: bool = True, launching: bool 
     home.mkdir(parents=True, exist_ok=True)
     os.chmod(home, 0o700)
     venv = _setup_venv(project, task_id, wt, home) if setup else (home / "venv" if (home / "venv").exists() else None)
+    installs.place(venv, wt)  # files the install generated, which git ignores: the maker's tests need them too
     reads = [str(Path(r).expanduser()) for r in plan["outside_reads"]]
     refused = sandbox.refused_reads(reads)
     if refused:  # invariant 1: the plan can open the boundary, never the key or your login
@@ -188,6 +183,7 @@ def run_build(project: Project, task_id: str, maker_for: Callable[[float, str], 
            "PATH": (f"{p.venv}/bin:" if p.venv else "") + SYSTEM_PATH}  # set here, whatever the pilot's PATH
     if p.venv:
         env["VIRTUAL_ENV"] = str(p.venv)
+    env.update(installs.env(p.venv, p.worktree))
     fn = make_permission_fn(project, task_id, p.worktree, scope=p.scope)
     before = sandbox.untracked(p.worktree)
     res = _make(project, task_id, maker_for(p.left, str(p.settings)), goal(project, task_id) + (f"\n\n{extra}" if extra else ""), "build",

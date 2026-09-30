@@ -88,3 +88,13 @@ def test_every_relative_link_and_anchor_resolves():
             elif anchor and dest.suffix == ".md" and anchor not in anchors(dest):
                 bad.append(f"{md.relative_to(ROOT)}: {target} (no heading #{anchor})")
     assert not bad, "\n".join(bad)
+
+
+def test_parallax_reviews_itself_with_the_general_template_plus_one_pass_for_its_own_rules():
+    """The template ships with Parallax and is what `parallax init` and evals use. Parallax's own
+    REVIEW.md is that template plus pass 6, and nothing else."""
+    from parallax import review
+    own = (ROOT / "REVIEW.md").read_text().splitlines(keepends=True)
+    extra = [line for line in own if line.startswith("6. Parallax's own rules:")]
+    assert len(extra) == 1 and "".join(line for line in own if line not in extra) == review.TEMPLATE
+    assert "Parallax" not in review.TEMPLATE.split("## Passes", 1)[1]  # no Parallax rule in the general passes

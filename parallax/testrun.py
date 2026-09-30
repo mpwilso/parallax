@@ -19,7 +19,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-from . import sandbox, tree
+from . import installs, sandbox, tree
 
 HARNESS = ("conftest.py", "pytest.ini", ".pytest.ini", "tox.ini", "setup.cfg", "pyproject.toml",
            "package.json", "noxfile.py")
@@ -112,7 +112,7 @@ def run(worktree: Path, base: str, reviewed: str, plan: dict, home: Path, venv: 
     shutil.rmtree(copy, ignore_errors=True)
     tree.export(worktree, reviewed, copy)
     reset = harness_from_base(worktree, base, reviewed, copy)
-    for rel, data in (overlay or {}).items():
+    for rel, data in {**installs.files(venv), **(overlay or {})}.items():
         (copy / rel).parent.mkdir(parents=True, exist_ok=True)
         (copy / rel).write_bytes(data)
     # the tests' temp folder sits beside the copy, never inside it: a test that walks up from its
@@ -135,6 +135,7 @@ def run(worktree: Path, base: str, reviewed: str, plan: dict, home: Path, venv: 
     if tools:
         rules.allow_read.append(str(tools.dir))
         env = {**env, "PARALLAX_BROWSER": str(tools.exe), **({"LD_LIBRARY_PATH": str(tools.lib)} if tools.lib else {})}
+    env = {**env, **installs.env(venv, copy)}
     cfg = home / "tests-srt.json"
     cfg.write_text(json.dumps(rules.srt()))
     # the tests' TMPDIR is set inside the sandbox: srt keeps its own short one for its sockets,

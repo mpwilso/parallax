@@ -1,7 +1,9 @@
 """What steers the agents, as hashes, so `parallax stats` can say when the evals are older than it.
 
 The playbook's rule: rerun the evals whenever the model, a prompt, CLAUDE.md or REVIEW.md
-changes. Each eval run records this fingerprint; stats compares it with today's.
+changes. Each eval run records this fingerprint; stats compares it with today's. Only what an
+eval's agents actually get counts: CLAUDE.md reaches none of them (setting_sources=[]), and evals
+review with the REVIEW.md template, not this repo's own file, so neither is here.
 """
 from __future__ import annotations
 
@@ -10,7 +12,7 @@ import inspect
 import json
 from pathlib import Path
 
-FILES = ("CLAUDE.md", "REVIEW.md", "parallax.policy.toml")
+FILES = ("parallax.policy.toml",)
 
 
 def _sha(data: str | bytes) -> str:
@@ -29,6 +31,7 @@ def prompts() -> dict[str, str]:
     out["parallax/build.py (MAKER_GOAL)"] = build.MAKER_GOAL
     out["parallax/check.py (REWORK)"] = check.REWORK
     out["parallax/review.py (the checker's brief)"] = inspect.getsource(review.brief)
+    out["parallax/review.py (TEMPLATE)"] = review.TEMPLATE  # the REVIEW.md every eval repo gets
     return out
 
 
