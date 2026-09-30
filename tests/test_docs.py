@@ -64,6 +64,8 @@ def links(text: str) -> list[str]:
 def test_no_placeholder_outside_code_in_any_markdown_file():
     bad = {}
     for md in markdown_files():
+        if md.relative_to(ROOT).parts[:2] == ("docs", "tasks"):
+            continue  # task records are hashed in the ledger, so they're kept as written
         found = placeholders(md.read_text())
         if found:
             bad[str(md.relative_to(ROOT))] = found
