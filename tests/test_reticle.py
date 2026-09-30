@@ -3,11 +3,14 @@
 The repo's add() subtracts. The outcome: add returns the sum. Parallax really runs Reticle's file with
 pytest, on the base and at every check, so kept and weak are decided the way they would be live."""
 import json
+import re
+import shlex
 import subprocess
+from pathlib import Path
 
 import pytest
 
-from fakes import FakeChecker, FakeDrafter, good_probe
+from fakes import FakeChecker, FakeDrafter, ScriptedAgent, good_probe
 from parallax import build, check, costs, evals, lifecycle, pilot, reticle, show
 from parallax.agents.base import AgentResult
 from parallax.core import POLICY_FILE, Project
@@ -110,6 +113,65 @@ def test_a_failure_goes_back_to_maker_as_the_outcome_and_message_never_the_code(
         assert "def test_" not in g and "add(-1, 1)" not in g and "test_reticle" not in g
     assert all("that you can't see" not in b and "sums_negatives" not in b for b in checker.briefs)  # Second Eye's input as ever
     assert len(checker.briefs) == 2  # it judged both trees, so the eval can tell the two apart
+
+
+CLASSY = ("import unittest\n\nfrom calc import add\n\n\nclass SumTest(unittest.TestCase):\n"
+          "    def test_outcome_1_sums_negatives(self):\n        self.assertEqual(add(-1, 1), 0)\n")
+
+
+class Twice:
+    """Maker: a first build, then a second one for the rework."""
+
+    def __init__(self, first, second):
+        self.makers, self.goals = [first, second], []
+
+    def run(self, goal, cwd, fn, stage="build", env=None):
+        self.goals.append(goal)
+        return self.makers[min(len(self.goals), 2) - 1].run(goal, cwd, fn, stage, env)
+
+
+def test_tests_in_a_class_are_found_and_run_at_every_check(proj):
+    """Seen live on pathspec-77: unittest methods were asked for without their class, nothing ran,
+    and "it didn't run" went to Maker as seven findings until the cap ran out."""
+    make = Twice(maker(WRONG), maker(FIXED))
+    tid, status = go(proj, FakeReticle(CLASSY), make)
+    [rec] = kinds(proj, "reticle.recorded")
+    assert [t["node"] for t in rec["data"]["kept"]] == ["test_reticle.py::SumTest::test_outcome_1_sums_negatives"]
+    first, last = kinds(proj, "reticle.ran")
+    assert first["data"]["failed"][0]["message"].startswith("AssertionError: 2 != 0")  # it ran, on the bad fix
+    assert (last["data"]["passed"], last["data"]["failed"]) == (1, [])
+    assert status == "ready" and "fails: AssertionError: 2 != 0" in make.goals[1]
+
+
+def dropping(case):
+    """The test runner, except the check's run of Reticle's file loses this test from its report."""
+    def run(config, cwd, cmd, env):
+        code, out = plain_runner(config, cwd, cmd, env)
+        if "reticle-check" in str(cwd):
+            junit = Path(shlex.split(cmd.split("--junitxml=", 1)[1])[0])
+            junit.write_text(re.sub(rf'<testcase [^>]*name="{case}".*?(/>|</testcase>)', "", junit.read_text(), flags=re.S))
+        return code, out
+    return run
+
+
+def test_a_kept_test_that_didnt_run_comes_to_you_never_to_maker(proj):
+    reticle.WRITER = FakeReticle(KEPT)
+    tid = pilot.intake(proj, "add subtracts")["task"]
+    make = maker(FIXED)
+    status = build.run_mode(proj, tid, "pilot", FakeDrafter({"intent": INTENT, "plan": PLAN}), lambda left, settings: make,
+                            FakeChecker(), test_runner=dropping("test_outcome_1_sums_negatives"), preflight_runner=good_probe)
+    assert status == "disputed" and not kinds(proj, "rework.started") and len(make.goals) == 1
+    [item] = [e for e in proj.inbox() if e["data"]["task"] == tid]
+    assert item["reason"].startswith("Reticle's tests couldn't run: 1 of Reticle's 1 kept tests didn't run")
+
+
+def test_a_change_that_breaks_what_the_tests_import_goes_to_maker_with_the_load_error(proj):
+    renamed = ScriptedAgent(steps=[("write", "calc.py", "def total(a, b):\n    return a + b\n"),
+                                   ("write", "tests/test_mine.py", "def test_sum():\n    pass\n")], cost=0.3)
+    make = Twice(renamed, maker(FIXED))
+    tid, status = go(proj, FakeReticle(KEPT), make)
+    assert status == "ready"
+    assert "a test of outcome 1 that you can't see fails: its tests don't load on this change: " in make.goals[1]
 
 
 def test_maker_never_receives_the_tests_and_reticle_never_sees_the_plan(proj):

@@ -120,6 +120,7 @@ def parse_cases(path: Path, tests: list[str]) -> list[dict]:
         outcome = {"error": "error", "failure": "fail", "skipped": "skip", None: "pass"}[tag]
         message = ANSI.sub("", found[tag].get("message") or "") if tag else ""
         out.append({"file": _file_of(case.get("classname", ""), case.get("file"), tests), "name": case.get("name", ""),
+                    "classname": case.get("classname", ""),
                     "outcome": outcome, "message": (message.strip().splitlines() or [""])[0][:300]})
     return out
 

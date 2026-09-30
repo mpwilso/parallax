@@ -83,6 +83,15 @@ def _unfence(text: str) -> str:
     return (m.group(1) if m else text).strip() + "\n"
 
 
+def node(case: dict) -> str:
+    """A test's pytest id in the file, class included: test_reticle.py::SomeTest::test_outcome_1_x.
+    A method of a class is only found by its full id (seen live: pathspec-77's unittest classes)."""
+    stem = FILE.removesuffix(".py")
+    parts = case.get("classname", "").split(".")
+    classes = parts[parts.index(stem) + 1:] if stem in parts else []
+    return "::".join([FILE, *classes, case["name"]])
+
+
 def judge(cases: list[dict], outcomes: list[str]) -> tuple[list[dict], list[dict]]:
     """(kept, weak) from the tests' run on the base commit."""
     keep, weak = [], []
@@ -104,7 +113,7 @@ def judge(cases: list[dict], outcomes: list[str]) -> tuple[list[dict], list[dict
             kind = c["message"].split(":", 1)[0] or "an error"
             weak.append({"name": c["name"], "why": f"it fails on {kind}, not an assertion"})
         else:
-            keep.append({"node": f"{FILE}::{c['name']}", "name": c["name"], "outcome": m.group(1),
+            keep.append({"node": node(c), "name": c["name"], "outcome": m.group(1),
                          "base_message": c["message"]})
     return keep, weak
 
@@ -168,16 +177,34 @@ def tampered(project: Project, task_id: str) -> bool:
     return not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != rec["data"]["sha"]
 
 
+class Unrun(Exception):
+    """Kept tests that didn't run, and not because of the change: Parallax's problem, never Maker's."""
+
+
 def check(project: Project, task_id: str, p, treeish: str, runner=None) -> tuple[testrun.Results, list[dict]] | None:
-    """Run the kept tests on a reviewed tree. None if there are none. Returns (results, failing kept tests)."""
+    """Run Reticle's file on a reviewed tree and judge its kept tests. None if there are none.
+    Returns (results, failing kept tests). The whole file runs, and each kept test is found by its id.
+
+    A file that won't load on this tree fails every kept test with the load error: the change broke
+    what the outcome's tests import. A kept test missing for any other reason raises Unrun."""
     tests = kept(project, task_id)
     if not tests:
         return None
     text = stored(project, task_id).read_bytes()
-    results = _run(project, p, treeish, text, [t["node"] for t in tests], "reticle-check", runner)
-    by_name = {c["name"]: c for c in results.cases if c["file"] == FILE}
-    failing = [{**t, "message": by_name.get(t["name"], {}).get("message") or "it didn't run"}
-               for t in tests if by_name.get(t["name"], {}).get("outcome") != "pass"]
+    results = _run(project, p, treeish, text, [FILE], "reticle-check", runner)
+    ran = {node(c): c for c in results.cases if c["file"] == FILE and NAME.match(c["name"])}
+    broken = next((c for c in results.cases if c["outcome"] == "error" and not NAME.match(c["name"])), None)
+    missing = [t for t in tests if t["node"] not in ran]
+    if missing and broken is None:
+        raise Unrun(f"{len(missing)} of Reticle's {len(tests)} kept tests didn't run (exit {results.exit}), "
+                    f"{missing[0]['node']} among them")
+    failing = []
+    for t in tests:
+        c = ran.get(t["node"])
+        if c is None:
+            failing.append({**t, "message": f"its tests don't load on this change: {broken['message']}"})
+        elif c["outcome"] != "pass":
+            failing.append({**t, "message": c["message"]})
     return results, failing
 
 

@@ -174,7 +174,10 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
 
     # Reticle's tests of the outcomes, on this tree. A failure goes back to Maker as a finding; Second
     # Eye still judges the tree, so the eval can tell the two apart
-    ran = reticle.check(project, task_id, p, s.tree, test_runner)
+    try:
+        ran = reticle.check(project, task_id, p, s.tree, test_runner)
+    except reticle.Unrun as err:  # never a finding for Maker: nothing it did made them not run
+        return _to_you(project, task_id, "check", f"Reticle's tests couldn't run: {err}", tree=s.tree), []
     if ran is not None:
         r_results, failing = ran
         project.ledger.append("reticle.ran", "parallax", r_results.tail, task=task_id, tree=s.tree, exit=r_results.exit,
