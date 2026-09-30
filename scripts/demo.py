@@ -1,14 +1,15 @@
 """Record docs/brand/demo.gif: the UI with scripted agents, dark theme, in about fifteen seconds.
 
-Type a task, watch Focus, Maker and Second Eye take their turns, the card turns Ready, open it,
+Type a task, watch Focus, Reticle, Maker and Second Eye take their turns, the card turns Ready, open it,
 accept. No model runs and nothing costs anything: the agents are the test suite's fakes, slowed
 down so the page shows each stage. Rerun it whenever the UI changes:
 
     scripts/demo.py
 
-It needs the pinned Playwright (scripts/test.sh fetches its Chromium) and Pillow to write the GIF:
+It needs the pinned Playwright (scripts/test.sh fetches its Chromium), Pillow to write the GIF, and
+pytest to run Reticle's test:
 
-    uv run --no-project --python 3.12 --with playwright==1.63.0 --with pillow --with-editable . scripts/demo.py
+    uv run --no-project --python 3.12 --with playwright==1.63.0 --with pillow --with pytest --with-editable . scripts/demo.py
 """
 import os
 import shutil
@@ -23,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "tests")]
 
 FRAME_EVERY = 0.25   # seconds between frames
-SECONDS = 15         # the GIF's length, at most
+SECONDS = 18         # the GIF's length, at most
 WIDTH, HEIGHT = 1100, 700
 GIF_WIDTH = 800
 OUT = ROOT / "docs" / "brand" / "demo.gif"
@@ -53,8 +54,8 @@ def main() -> None:
     from playwright.sync_api import sync_playwright
 
     from fakes import FakeChecker, FakeDrafter, ScriptedAgent, good_probe, junit_runner
-    from parallax import build, ui
-    from parallax.agents.base import Review
+    from parallax import build, reticle, ui
+    from parallax.agents.base import AgentResult, Review
     from parallax.core import Project
     import test_lifecycle_gates as gates
 
@@ -82,6 +83,25 @@ def main() -> None:
             time.sleep(1.8)
             return super().check(brief)
 
+    class SlowReticle:  # writes its test of what was asked, which fails on the typo and passes once it's fixed
+        def __call__(self, limit, model):
+            return self
+
+        def run(self, goal, cwd, fn, stage="build", env=None):
+            time.sleep(2.2)
+            return AgentResult("done", "from pathlib import Path\n\n\ndef test_outcome_1_the_readme_says_calculator():\n"
+                                       "    assert \"calculator\" in Path(\"README.md\").read_text()\n", 0.02)
+
+    reticle.WRITER = SlowReticle()
+    plan_tests = junit_runner()
+
+    def runner(cfg, cwd, cmd, env):  # Reticle's file runs for real; the plan's tests are the fake's
+        if reticle.FILE not in cmd:
+            return plan_tests(cfg, cwd, cmd, env)
+        out = subprocess.run(["bash", "-c", cmd], cwd=cwd, capture_output=True, text=True,
+                             env={**env, "PATH": f"{Path(sys.executable).parent}:{env['PATH']}"})
+        return out.returncode, out.stdout + out.stderr
+
     docs = gates.docs()
     docs["intent"] = docs["intent"].replace("fixing the README install steps", "fixing the calculator typo") \
         .replace("Fix the README install steps so they work in WSL.", "Fix the typo in the README.") \
@@ -91,7 +111,7 @@ def main() -> None:
         maker = ScriptedAgent(steps=[("call", lambda cwd: time.sleep(3.0)),
                                      ("write", "README.md", "# calc\n\nA calculator that adds numbers.\n")])
         build.run_mode(proj, tid, "pilot", Slow(docs), lambda left, s: maker, SlowChecker(reviews=[Review("pass")]),
-                       test_runner=junit_runner(), preflight_runner=good_probe)
+                       test_runner=runner, preflight_runner=good_probe)
 
     app = ui.UI(repo, port=0)
     threading.Thread(target=app.server.serve_forever, daemon=True).start()

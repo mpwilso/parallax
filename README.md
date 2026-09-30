@@ -11,7 +11,7 @@
 
 Parallax is a local tool for developers who use AI coding agents. The agents plan, build and check the work on their own, inside a sandbox. Parallax checks what they produce and only comes to you when a person has to decide. For most tasks that's one decision: accept the result or send it back.
 
-<p align="center"><img src="docs/brand/demo.gif" alt="The app: a task typed in, Focus, Maker and Second Eye taking their turns, the card turning Ready, and the accept" width="800"></p>
+<p align="center"><img src="docs/brand/demo.gif" alt="The app: a task typed in, Focus, Reticle, Maker and Second Eye taking their turns, the card turning Ready, and the accept" width="800"></p>
 
 <p align="center"><sub>Demo with scripted agents, so it runs in seconds and costs nothing. Real runs are in <a href="docs/ui-runs/">docs/ui-runs/</a>.</sub></p>
 
