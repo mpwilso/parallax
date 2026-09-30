@@ -192,6 +192,7 @@ def run_case(case, where: Path, policy, drafter_for, checker_for, runner=None) -
             ran = reticle.check(project, tid, p, tree, runner)
             failing = ran[1] if ran else []
             return {"tree": tree, "second_eye_flags": any(f.severity in blocking for f in rv.findings),
+                    "findings": [f"{f.severity}: {' '.join(f.text.split())[:240]}" for f in rv.findings if f.severity in blocking],
                     "reticle_asked": None if not r["reticle_kept"]["asked"] else bool(reticle.blocking(failing)),
                     "reticle_any": None if not kept else bool(failing),
                     "notes": sum(t.get("kind") == "inferred" for t in failing)}
@@ -208,12 +209,12 @@ def run_case(case, where: Path, policy, drafter_for, checker_for, runner=None) -
                 continue
             j = judge(files, len(versions))
             versions.append({"broken": name, "hidden": f"{res.passed} of {res.total} pass",
-                             "second_eye": "catch" if j["second_eye_flags"] else "miss",
+                             "second_eye": "catch" if j["second_eye_flags"] else "miss", "findings": j["findings"],
                              "reticle": {None: "no test", True: "catch", False: "miss"}[j["reticle_asked"]],
                              "reticle_with_inferred": {None: "no test", True: "catch", False: "miss"}[j["reticle_any"]]})
         r["versions"] = versions
         real = judge(fix_files(cache, case), len(versions))
-        r["real_fix"] = {"second_eye": "false alarm" if real["second_eye_flags"] else "right",
+        r["real_fix"] = {"second_eye": "false alarm" if real["second_eye_flags"] else "right", "findings": real["findings"],
                          "reticle": {None: "no test", True: "false alarm", False: "right"}[real["reticle_asked"]],
                          "inferred_notes": real["notes"]}
         r["cost_usd"] = round(sum(e["data"].get("cost_usd") or 0 for e in project.ledger.entries()), 4)

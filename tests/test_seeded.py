@@ -85,7 +85,8 @@ def test_second_eye_and_reticle_are_scored_on_each_broken_version_and_the_real_f
     assert [v["second_eye"] for v in r["versions"]] == ["catch", "miss", "miss"]
     assert [v["reticle"] for v in r["versions"]] == ["miss", "catch", "miss"]  # its asked test is of add
     assert [v["reticle_with_inferred"] for v in r["versions"]] == ["catch", "catch", "catch"]  # clamp's test too
-    assert r["real_fix"] == {"second_eye": "right", "reticle": "right", "inferred_notes": 0}
+    assert r["real_fix"] == {"second_eye": "right", "findings": [], "reticle": "right", "inferred_notes": 0}
+    assert r["versions"][0]["findings"] == ["blocker: wrong cap"]  # what Second Eye said, kept with the result
     assert r["reticle_kept"] == {"asked": 1, "inferred": 1} and r["inferred"] == ["2"]
     assert r["cost_usd"] == pytest.approx(0.08)  # the intent and Reticle; the fake checker costs nothing
     # Second Eye's exact normal input, and never the hidden tests: in its brief or in Reticle's
