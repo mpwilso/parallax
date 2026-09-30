@@ -42,7 +42,8 @@ INTEGER = re.compile(r"(?<![\w.])(\d+)(?![\w.])")
 # a finding that only says a test is missing: it says one is absent, and every sentence is about tests
 ABSENT = re.compile(r"\b(no|missing|without|lacks?|adds? no|has no|doesn't add|does not add|nothing)\b[^.]*\btests?\b"
                     r"|\btests?\b[^.]*\b(missing|absent|not (added|included|in the diff|changed))\b", re.I)
-ABOUT_TESTS = re.compile(r"\btest|regression|\bcover|unnoticed|nothing (would fail|shows|proves)|\bverif", re.I)
+ABOUT_TESTS = re.compile(r"\btest|regression|\bcover|unnoticed|\bverif|would fail|\breverted\b"
+                         r"|nothing (shows|proves)|\bnone (is|are) (present|there)\b", re.I)
 
 
 def _git(repo: Path, *args: str, env: dict | None = None, data: bytes | None = None) -> str:

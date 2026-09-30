@@ -118,6 +118,12 @@ def test_the_seeded_run_stops_before_a_case_the_budget_cant_cover(proj, upstream
     ("No regression test is in the diff. Outcome item 5 requires one in test/test_regression.py covering items 1 to 4.", True),
     ("Outcome 4 requires a regression test for the reported table with psql and exact expected output. The diff adds no test.", True),
     ("The diff has no test for the one-item list case or the `in` check (outcome 6). Nothing would fail without the change.", True),
+    ("The diff adds no test. The outcome requires a new test for the December case, such as step=(1,0,0) from "
+     "2012-12-25. Nothing in the diff would fail without the fix.", True),  # these three from the first rerun, 2dcb3c
+    ("The diff has no test changes. The outcome requires tests for `[^...]` matching. Nothing here would fail if the "
+     "fix were reverted.", True),
+    ("No tests are in the diff. The outcome requires a regression test for 10799 in tests/test_time.py, and updates "
+     "to any floor-based tests. None are present.", True),
     ("No tests in the diff. The closing bracket scan is not changed, so `[^]a]` is read wrong.", False),  # behavior too
     ("Only the maxcolwidths block is guarded. The maxheadercolwidths block has the same pattern.", False),
     ("The diff has no CHANGELOG entry, which outcome 6 requires.", False),
