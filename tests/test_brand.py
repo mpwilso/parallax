@@ -112,7 +112,7 @@ def test_the_brand_is_plain_words_and_its_own():
     text = Path(brand.__file__).read_text(encoding="utf-8")
     assert "\u2014" not in text and "\u2014" not in (ROOT / "docs" / "brand" / "party.svg").read_text()
     ours = {"Focus", "Maker", "Second", "Eye", "Field", "Parallax", "Scope"}
-    prose = " ".join(re.findall(r'"""(.*?)"""', text, re.S)) + " ".join(re.findall(r"#\s*(.*)", text))
+    prose = " ".join(re.findall(r'"""(.*?)"""', text, re.S)) + " ".join(re.findall(r"(?:^|\s)#\s+(.*)", text))  # comments, not #hex colors
     capitalised = {w for w in re.findall(r"(?<![.!?]\s)(?<!^)\b([A-Z][a-z]+)\b", prose, re.M)}
     common = {"The", "A", "An", "One", "Names", "Portraits", "Motion", "Any", "Both", "Claude", "Code", "Both", "Focus"}
     assert capitalised - ours - common == set(), capitalised - ours - common

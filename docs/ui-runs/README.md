@@ -10,14 +10,14 @@ this repo, 2026-09-28 and 29. Screenshots of each state are in each run's folder
 `tester-saw-*.png` are the UI tester's own screenshots, as they appear on the card. `run.json` is
 the driver's timeline.
 
-Time to Ready counts agent time from intake: time a task waited on a person is left out.
+Time to Ready counts agent time from intake to the Ready row on the page, from each run's `run.json`: time a task waited on a person is left out.
 Costs are estimates at API list prices, from the ledger.
 
 ## The three runs
 
 | Run | Result | Touches | Time to Ready | Drafters | Maker | Checker | UI tester | Total |
 |---|---|---|---|---|---|---|---|---|
-| 1. `remove the em dash on README.md line 81` | Ready, accepted | 1: accept | 3m 22s | $0.41 | $0.48 | $0.03 | not run | $0.92 |
+| 1. `remove the em dash on README.md line 81` | Ready, accepted | 1: accept | 3m 25s | $0.41 | $0.48 | $0.03 | not run | $0.92 |
 | 2. UI: a count beside each queue heading | Ready, accepted | 2: launch confirm, accept | 7m 38s | $1.11 | $1.50 | $0.03 | $0.08 | $2.72 |
 | 3. UI: show each task's id; rejected at Ready, redrafted | Ready twice, accepted | 2: reject, accept | 5m 34s, then 10m 55s after the reject | $1.51 | $2.59 | $0.05 | $0.29 (two runs) | $4.44 |
 

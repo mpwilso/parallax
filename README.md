@@ -9,22 +9,24 @@
 
 **Agents do the work. You make the calls.**
 
-**The rules are the baseline. Nothing gets measured without them.**
+Parallax is a local tool for developers who use AI coding agents. The agents plan, build and check the work on their own, inside a sandbox. Parallax checks what they produce and only comes to you when a person has to decide. For most tasks that's one decision: accept the result or send it back.
 
-A local tool that runs Claude Code agents on your repo inside a sandbox, checks their work, and brings you one decision per task. You describe the work in plain words; Focus drafts the intent and plan, Maker builds it in a sandbox, your tests run, Second Eye reviews the result blind, Field tries the UI, and it comes back as one card. Merging is always yours.
+<p align="center"><img src="docs/brand/demo.gif" alt="The app: a task typed in, Focus, Maker and Second Eye taking their turns, the card turning Ready, and the accept" width="800"></p>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/ui-runs/final-ui/ready-dark.png">
-  <img src="docs/ui-runs/final-ui/ready.png" alt="A Ready card: the stages with each agent's portrait, the bottom line, one question with its options and the recommended one, what wasn't looked at, and the evidence with its ledger ids" width="1280">
-</picture>
+<p align="center"><sub>Demo with scripted agents, so it runs in seconds and costs nothing. Real runs are in <a href="docs/ui-runs/">docs/ui-runs/</a>.</sub></p>
 
-## What's distinctive
+| 3 min 25 s from request to Ready | $0.92 in agent costs (estimate) | 1 decision: accept |
+|:---:|:---:|:---:|
 
-- **One human touch per normal task is the goal, and it's measured.** `parallax stats` counts touches per task; a task that needs nothing from you until Ready takes one, the accept.
-- **Every question is one decision.** The question, the options, what each does, whose call it is and why a human, with a recommendation written by code, never by a model.
-- **The boundary is part of the approval.** What a task may cross (network domains, reads outside its worktree, new dependencies) is in the plan that gets signed, and both sandbox layers are tested before every launch. A plan that opens the boundary never launches without you.
-- **A checker that never sees the making.** Second Eye gets only the intended outcome, the rules in `REVIEW.md` and the diff, never the plan or Maker's notes, on the first review and every re-review. That input is pinned by a test.
-- **Code routes, models return text.** Which agent runs next, and on what, is decided by code. Every step is on an append-only, hash-chained ledger, and every approval is signed with a key the sandbox can't read.
+A real task: a one-line README fix, run through the UI. All three real runs, with every screen and cost: [docs/ui-runs/](docs/ui-runs/README.md).
+
+## Why it exists
+
+AI can now write code faster than people can review it. The bottleneck has moved to judgment: what to build, what to trust, what to ship. Parallax runs the execution without you, and every question that reaches you comes with what you need to answer it.
+
+## How a task moves
+
+<p align="center"><img src="docs/brand/flow.svg" width="900" alt="How a task moves: you describe it, Focus writes a plan, Parallax checks the plan and starts the build when it's small and safe, Maker builds in a sandbox, your tests, Second Eye and Field check it, and one card comes back for your accept and your merge, every step on a tamper-evident log"></p>
 
 ## The agents
 
@@ -35,21 +37,43 @@ A local tool that runs Claude Code agents on your repo inside a sandbox, checks 
 
 **Focus** drafts the intent and plan. **Maker** builds in the sandbox. **Second Eye** is the blind checker: it sees only the result, never the making. **Field** is the UI tester, which uses your app in a real browser and leaves tests behind. Here they take turns the way a task moves through them; in the UI a portrait moves only while its agent is working on that task, and everything else is still.
 
-## How a task moves
+## What's distinctive
 
-<p align="center"><img src="docs/brand/flow.svg" width="900" alt="How a task moves: your words go through Focus, the plan check by code, the launch rule, Maker in the sandbox and the check by your tests, Second Eye and Field, then come back as one card for your accept and your merge, with every step on the hash-chained ledger"></p>
+**The rules are the baseline. Nothing gets measured without them.**
+
+- **One decision per task, and it's measured.** `parallax stats` counts how often each task needed you. The goal is once: accept.
+- **Every question comes ready to answer:** the options, what each one does, whose call it is and why a person has to make it, and a recommendation written by code, not by a model.
+- **What an agent may reach is part of what you approve.** Network access, files outside its workspace and new dependencies are listed in the plan, and the sandbox is tested before every launch. A plan that asks for more never starts without you.
+- **The reviewer never sees how the work was made.** Second Eye gets only the goal, the review rules and the change itself, never the plan or the builder's notes. A test pins that.
+- **Code decides what happens next, not a model.** Every step goes into a tamper-evident log, and every approval is signed with a key the agents can't read.
 
 ## Many ways in, one way through
 
-Work comes in from the UI's box or `parallax do`; a task is resumed by `parallax decide`, `approve`, `build` or `recheck`, or by a rework. Every one of those ends in the same code: a signed approval, the budget cap, a preflight of both sandbox layers, and a ledger entry, before any agent starts. One test drives every entry point and checks that.
+You can start work from the app or the terminal, and pick it back up several ways. Every one of them passes the same checks before any agent runs: your signed approval, a spending cap, a test of the sandbox, and an entry in the log. One test proves that for every way in.
 
 ## Day to day
 
-**Start it.** In your repo, `parallax ui` and open the link it prints (the link stays the same between runs). **Type work in** the box and press Enter; that's all. **Read the list** ([the queue](docs/ui-runs/final-ui/queue.png)): Waiting on you is the only part that needs you, riskiest first; Working shows which agent has each task, for how long and what it has spent; Done is folded away. **Open a card** (click it, or `n` for the next one that waits): the stages, the bottom line, the one question with its options and which one is recommended, what nobody looked at, and the evidence, with the change, intent and plan one click away.
+1. **Start it.** In your repo, run `parallax ui` and open the link it prints. The link stays the same between runs.
+2. **Type the task** into the box at the top and press Enter. That's all.
+3. **Watch the list.** Waiting on you: the only part that needs you, riskiest first. Working: which agent has each task, for how long, and what it has spent. Done: folded away.
+4. **Open a card.** It shows the stages, the bottom line, the one question with its options and which one is recommended, what nobody looked at, and the evidence, with the change, the intent and the plan one click away.
+5. **Accept, then merge yourself.** Accept commits the reviewed change to the task's branch and shows the merge command, which you run.
 
-**Ready** means the listed checks passed: the plan's tests ran on the exact reviewed tree, the card says for each outcome in the intent which test that ran covers it or that none does, and Second Eye found nothing blocking. It does not mean the code is bug-free. Accept commits the reviewed change to the task's branch and shows the merge command, which you run yourself. **Needs you** means one decision only you can make; the card says whose call it is and why a human. Anything that sends work back, drops it or accepts a risk asks for a one-line reason, and Focus redrafts from it.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/ui-runs/final-ui/ready-dark.png">
+  <img src="docs/ui-runs/final-ui/ready.png" alt="A Ready card: the stages with each agent's portrait, the bottom line, one question with its options and the recommended one, what wasn't looked at, and the evidence with its ledger ids" width="1280">
+</picture>
 
-**Keys:** `/` type work, `n` next waiting, `j`/`k` move, `a` then `Enter` accept, `r` reject, `1` to `9` then `Enter` pick an option, `d` the change, `Esc` back. The terminal has the same: `parallax do`, `inbox`, `show <task>`, `accept <task>`, `reject <task> --reason "..."`, `decide <task> <option>`, `stats`.
+**Ready** means the listed checks passed: the plan's tests ran on the exact reviewed tree, the card says for each outcome in the intent which test that ran covers it or that none does, and Second Eye found nothing blocking. It does not mean the code is bug-free. **Needs you** means one decision only you can make; the card says whose call it is and why a person has to make it. Anything that sends work back, drops it or accepts a risk asks for a one-line reason, and Focus redrafts from it.
+
+<details>
+<summary>Keyboard and terminal</summary>
+
+Keys in the app: `/` type a task, `n` next waiting, `j` and `k` move, `a` then `Enter` accept, `r` reject, `1` to `9` then `Enter` pick an option, `d` the change, `Esc` back.
+
+The terminal has the same: `parallax do "..."`, `parallax inbox`, `parallax show <task>`, `parallax accept <task>`, `parallax reject <task> --reason "..."`, `parallax decide <task> <option>`, `parallax stats`.
+
+</details>
 
 ## Status and known limits
 
@@ -113,4 +137,4 @@ Linux, or Windows through WSL2. On Windows, make the distro first: [docs/wsl.md]
 
 **Stop and remove.** `Ctrl+C` in the terminal running `parallax ui` stops the page; `parallax stop` ends every running build now and records it. To remove Parallax: `uv tool uninstall parallax`, then delete `~/.local/share/parallax` (worktrees, task folders, Field's tools) and `~/.config/parallax` (the approval key and UI links). A repo keeps only `parallax.policy.toml`, `REVIEW.md`, its ledger in `.parallax/` and the `docs/tasks/` it accepted; delete those to leave no trace.
 
-The tests never call a model. `scripts/test.sh` runs ruff and the whole suite exactly as CI does, with the browser tests; `scripts/test.sh browser` fetches the pinned Chromium once.
+The tests never call a model. `scripts/test.sh` runs ruff and the whole suite exactly as CI does, with the browser tests; `scripts/test.sh browser` fetches the pinned Chromium once. `scripts/demo.py` re-records the demo above.

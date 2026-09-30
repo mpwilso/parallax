@@ -25,6 +25,9 @@ MEASURE = """() => {
   for (const n of svg.querySelectorAll('.note')) out.notes.push({step: n.dataset.step, box: box(n), text: n.textContent});
   for (const a of svg.querySelectorAll('.arrow')) out.arrows.push(box(a));
   for (const c of ['.bracket', '.bracket-label', '.ledger']) out.other.push({name: c, box: box(svg.querySelector(c))});
+  const ls = [...svg.querySelectorAll('.legend')].map(box);
+  out.legend = {l: Math.min(...ls.map(b => b.l)), t: Math.min(...ls.map(b => b.t)), r: Math.max(...ls.map(b => b.r)), b: Math.max(...ls.map(b => b.b))};
+  for (const g of svg.querySelectorAll('.legend')) out.other.push({name: 'legend ' + g.dataset.owner, box: box(g)});
   return out; }"""
 
 
@@ -54,6 +57,7 @@ def measured():
 
 def test_every_text_fits_its_box_with_padding(measured):
     assert len(measured["steps"]) == len(brand.FLOW_STEPS)
+    assert inside(measured["legend"], measured["tile"], PADDING)
     for s in measured["steps"]:
         assert inside(s["label"], s["box"], PADDING), f"step {s['step']} spills: {s['text']!r} {s['label']} in {s['box']}"
         for p in s["portraits"]:
@@ -119,15 +123,29 @@ def measured_lockup():
     return data
 
 
+def test_every_step_has_an_owner_and_the_legend_shows_the_three():
+    svg = brand.flow_svg()
+    owners = re.findall(r'<g class="step" data-step="\d+" data-owner="(\w+)">', svg)
+    assert len(owners) == len(brand.FLOW_STEPS) and set(owners) <= set(brand.OWNERS)
+    assert {o for _, _, _, o in brand.FLOW_STEPS} == {"you", "agents", "parallax"}
+    legend = re.findall(r'<g class="legend" data-owner="(\w+)">.*?<text[^>]*>([^<]+)</text>', svg)
+    assert legend == [("you", "You"), ("agents", "Agents"), ("parallax", "Parallax (automatic)")]
+    for key, (label, fill, edge) in brand.OWNERS.items():  # each step's box carries its owner's fill
+        for m in re.finditer(rf'data-owner="{key}"><rect class="box"[^>]*fill="([^"]+)"', svg):
+            assert m.group(1) == fill
+    assert "tamper-evident log" in svg
+
+
 def test_notes_sit_beside_their_boxes():
     """A side note is vertically centered on the box it belongs to, in the column to the right."""
     svg = brand.flow_svg()
-    boxes = {m.group(1): (float(m.group(2)), float(m.group(3))) for m in
-             re.finditer(r'data-step="(\d+)"><rect class="box" x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"', svg)}
+    boxes = {m.group(1): (float(m.group(2)), float(m.group(3)), float(m.group(4)), float(m.group(5))) for m in
+             re.finditer(r'data-step="(\d+)"[^>]*><rect class="box" x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"', svg)}
+    assert len(boxes) == len(brand.FLOW_STEPS)
     for m in re.finditer(r'<text class="note" data-step="(\d+)" x="([\d.]+)" y="([\d.]+)"', svg):
         step, x, y = m.group(1), float(m.group(2)), float(m.group(3))
-        bx, by = boxes[step]
-        assert x > bx + 400, "the note is right of its box"
+        bx, by, bw, bh = boxes[step]
+        assert x > bx + bw, "the note is right of its box"
         lines = svg[m.end():].split("</text>", 1)[0].count("<tspan")
         centre = y + (lines - 1) * 13 * 1.3 / 2
-        assert abs(centre - (by + 25)) < 1.0, f"note {step} isn't centred on its box"
+        assert abs(centre - (by + bh / 2)) < 1.0, f"note {step} isn't centred on its box"
