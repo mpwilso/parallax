@@ -11,4 +11,3 @@ Details
 - tomlkit-512: ended ready, hidden tests pass, Second Eye right, $0.95, 3.5 min to Ready, 1 touch.
 - cachetools-387: ended ready, hidden tests pass, Second Eye right, $1.15, 3.3 min to Ready, 1 touch.
 - tabulate-231: ended ready, hidden tests pass, Second Eye right, $1.45, 4.8 min to Ready, 1 touch.
-

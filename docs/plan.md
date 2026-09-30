@@ -312,6 +312,11 @@ Second Eye passed humanize-174's bad fix: the diff looked right for the one unit
 - The Ready card says per outcome whether Reticle's test passed, failed, or why there's none. Its cost counts against the cap, which keeps its `max_usd` for it.
 - Off by default: `[reticle] enabled = false`, model empty for the drafters'. `parallax eval --reticle` runs the cases with it on and scores it against the hidden tests: catch, miss, false alarm, its cost, and the rework its false alarms cause. It joins the live loop only if it catches what Second Eye misses, with fewer false alarms than Second Eye.
 
+Changed after its first eval (run 492eaf: five false alarms on three good fixes, where it tested past what the maintainers decided):
+- Reticle gets your request as typed, beside the outcomes and constraints. Focus marks each outcome `asked` (your words state or clearly imply it) or `inferred` (its own addition); the card shows which. Reticle tests only asked outcomes, exactly as stated, through the public interface. Second Eye and Field get each outcome without its mark.
+- A test also counts when it fails on an exception your request itself shows (a crash bug). Import, collection and syntax errors never count. Prose around Reticle's code is stripped.
+- When only Reticle fails (the plan's tests and Second Eye pass), Maker gets one rework for it. Still failing after that, the task goes to Ready with the disagreement on the card, and the call is yours. When anything else fails too, rework goes on as before.
+
 #### Later: a knowledge layer
 
 - Project context and past decisions for the agents to draw on: what the repo is, what was decided before and why (from the ledger and `docs/tasks/`), so drafters and makers don't relearn it on every task. Read-only for agents, like everything else they're given.

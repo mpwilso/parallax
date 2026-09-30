@@ -24,7 +24,7 @@ scope: README.md, tests/**, Makefile, extra.py, pytest.ini, tox.ini
 The steps assume PowerShell.
 
 ## Outcome
-1. A new user on WSL can follow them.
+1. asked: A new user on WSL can follow them.
 
 ## Constraints
 Keep the macOS steps.

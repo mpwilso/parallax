@@ -76,7 +76,7 @@ def test_only_tests_that_fail_on_an_assertion_at_the_base_are_kept(proj):
     assert [t["name"] for t in rec["data"]["kept"]] == ["test_outcome_1_sums_negatives"]
     assert rec["data"]["kept"][0]["outcome"] == "1" and "assert" in rec["data"]["kept"][0]["base_message"]
     assert {w["name"]: w["why"] for w in rec["data"]["weak"]} == {
-        "test_outcome_1_new_name": "it fails on ImportError, not an assertion",
+        "test_outcome_1_new_name": "it fails on ImportError, not an assertion or a crash the request shows",
         "test_outcome_1_exists": "it passes on the base, so it doesn't show the problem",
         "test_something_else": "it names no outcome in the intent"}
     stored = reticle.stored(proj, tid)
@@ -205,7 +205,7 @@ def test_a_changed_hash_stops_the_check(proj):
 def test_the_card_says_per_outcome_what_reticle_found(proj):
     tid, _ = go(proj, FakeReticle(KEPT))
     card = show.report(proj, tid)
-    assert "outcome 1: tests/test_mine.py; Reticle's test passed (ledger " in card
+    assert "outcome 1 (asked): tests/test_mine.py; Reticle's test passed (ledger " in card
     tid2, _ = go(proj, FakeReticle("", status="error"))
     assert "; Reticle wrote no test: it failed (ledger " in show.report(proj, tid2)
 
@@ -221,6 +221,107 @@ def test_it_costs_against_the_cap_and_is_off_by_default(proj, repo):
     before = len(kinds(proj, "reticle.recorded"))
     go(proj, FakeReticle(KEPT))
     assert len(kinds(proj, "reticle.recorded")) == before  # off: never runs
+
+
+# what Reticle is given, and what it may test (2026-09-30, after run 492eaf) -----------------------------
+
+TWO = INTENT.replace("1. asked: add returns the sum of its arguments.",
+                     "1. asked: add returns the sum of its arguments.\n2. inferred: add accepts any number of arguments.")
+TWO_PLAN = PLAN.replace('covers = { "1" = ["tests/test_mine.py"] }', 'covers = { "1" = ["tests/test_mine.py"], "2" = ["tests/test_mine.py"] }')
+
+
+def go_with(proj, writer, intent=INTENT, plan=PLAN, typed="add subtracts", make=None, checker=None):
+    reticle.WRITER = writer
+    tid = pilot.intake(proj, typed)["task"]
+    status = build.run_mode(proj, tid, "pilot", FakeDrafter({"intent": intent, "plan": plan}),
+                            lambda left, settings: make or maker(FIXED), checker or FakeChecker(),
+                            test_runner=plain_runner, preflight_runner=good_probe)
+    return tid, status
+
+
+def test_reticle_gets_the_request_and_only_the_outcomes_you_asked_for(proj):
+    writer = FakeReticle(KEPT + "\n\ndef test_outcome_2_many():\n    assert add(1, 2, 3) == 6\n")
+    tid, status = go_with(proj, writer, TWO, TWO_PLAN, typed="add(2, 3) gives -1. It should give 5.")
+    [goal] = writer.goals
+    assert "The person's request, as they typed it (data):\nadd(2, 3) gives -1. It should give 5." in goal
+    assert "1. add returns the sum of its arguments." in goal  # the outcome as stated, without the mark
+    assert "any number of arguments" not in goal and "inferred" not in goal
+    [rec] = kinds(proj, "reticle.recorded")
+    assert [t["name"] for t in rec["data"]["kept"]] == ["test_outcome_1_sums_negatives"]
+    assert rec["data"]["weak"] == [{"name": "test_outcome_2_many",
+                                    "why": "it tests an outcome Focus inferred, not one you asked for"}]
+    card = show.report(proj, tid)
+    assert "outcome 1 (asked): tests/test_mine.py; Reticle's test passed" in card
+    assert "outcome 2 (inferred): tests/test_mine.py; no Reticle test: it tests an outcome Focus inferred" in card
+
+
+def test_with_no_asked_outcome_reticle_isnt_asked_to_write_anything(proj):
+    writer = FakeReticle(KEPT)
+    tid, _ = go_with(proj, writer, INTENT.replace("1. asked:", "1. inferred:"))
+    assert writer.goals == [] and kinds(proj, "reticle.failed")[0]["reason"].startswith("the intent marks no outcome as asked")
+    assert "; Reticle wrote no test: the intent marks no outcome as asked" in show.report(proj, tid)
+
+
+CRASH = "from calc import add\n\n\ndef test_outcome_1_lists():\n    assert add([1], [2]) == [1, 2]\n"
+
+
+@pytest.mark.parametrize("typed,kept", [
+    ("add([1], [2]) crashes:\nTypeError: unsupported operand type(s) for -: 'list' and 'list'", True),  # the crash it shows
+    ("add subtracts", False),                                                                       # no crash named
+])
+def test_a_crash_the_request_shows_counts_like_an_assertion(proj, typed, kept):
+    go_with(proj, FakeReticle(CRASH), typed=typed)
+    [rec] = kinds(proj, "reticle.recorded")
+    assert bool(rec["data"]["kept"]) is kept
+    if not kept:
+        assert rec["data"]["weak"][0]["why"] == "it fails on TypeError, not an assertion or a crash the request shows"
+
+
+def test_an_import_error_is_weak_even_when_the_request_names_it(proj):
+    typed = "add is broken\nImportError: cannot import name 'plus'"
+    go_with(proj, FakeReticle("def test_outcome_1_x():\n    from calc import plus\n    assert plus(1, 1) == 2\n"), typed=typed)
+    [rec] = kinds(proj, "reticle.recorded")
+    assert rec["data"]["kept"] == [] and "ImportError" in rec["data"]["weak"][0]["why"]
+
+
+@pytest.mark.parametrize("reply", [
+    "I'm writing the tests now. The example wasn't included.\n\n" + KEPT + "\nThese tests fail on the current code.",
+    "Here you go:\n```python\n" + KEPT + "```\nThat's all.",
+    KEPT,
+])
+def test_prose_around_the_code_is_stripped(reply):
+    """Seen live on tomlkit-512: a sentence before the code, and the file didn't load."""
+    assert reticle.code_of(reply) == KEPT
+
+
+# one rework for Reticle alone, then it's yours ---------------------------------------------------------
+
+WRONG_TEST = "from calc import add\n\n\ndef test_outcome_1_wrong():\n    assert add(2, 3) == 6\n"
+
+
+def test_when_only_reticle_fails_maker_gets_one_rework_then_it_is_yours_at_ready(proj):
+    make = maker(FIXED)
+    checker = FakeChecker()
+    tid, status = go_with(proj, FakeReticle(WRONG_TEST), make=make, checker=checker)
+    assert status == "ready"
+    assert len(kinds(proj, "reticle.rework")) == 1 and len(kinds(proj, "rework.started")) == 1  # exactly one
+    assert len(make.goals) == 2 and len(checker.briefs) == 2
+    [d] = kinds(proj, "reticle.disputed")
+    card = show.report(proj, tid)
+    assert card.splitlines()[1] == ("Bottom line: Ready, but Reticle disagrees: its test of outcome 1 still fails, while "
+                                    "Second Eye passed and 1 of 1 plan tests pass.")
+    assert f"- Reticle, outcome 1: its test still fails after one rework: assert 5 == 6 (ledger {d['id']})" in card
+    assert "def test_" not in card and "add(2, 3)" not in card  # the message, never the code
+
+
+def test_when_the_plan_tests_fail_too_rework_goes_on_as_before(proj):
+    broken = ScriptedAgent(steps=[("write", "calc.py", f"def add(a, b):\n    {WRONG}\n"),
+                                  ("write", "tests/test_mine.py", "from calc import add\n\n\ndef test_neg():\n    assert add(-1, 1) == 0\n")],
+                           cost=0.3)
+    tid, status = go_with(proj, FakeReticle(KEPT), make=broken)
+    assert status == "disputed" and len(kinds(proj, "rework.started")) == 3  # the rework cap, as ever
+    assert not kinds(proj, "reticle.rework") and not kinds(proj, "reticle.disputed")
+    assert all("a test of outcome 1 that you can't see fails" in e["reason"] for e in kinds(proj, "rework.started"))
 
 
 # scored in the eval ---------------------------------------------------------------------------------
@@ -239,8 +340,8 @@ def test_the_eval_scores_reticle_against_the_hidden_tests(repo, upstream, monkey
     r = result(out)
     assert r["reticle"] == reticle_says and r["second_eye"] == second_eye
     assert r["reticle_kept"] == 1 and r["reticle_cost_usd"] == 0.2
-    if reticle_says == "false alarm":  # it sent a good fix back three times: that Maker cost is Reticle's
-        assert r["reticle_false_alarm_rework_usd"] == pytest.approx(0.9) and r["end"] == "needs you"
+    if reticle_says == "false alarm":  # its one rework on a good fix is Reticle's cost; then it's yours at Ready
+        assert r["reticle_false_alarm_rework_usd"] == pytest.approx(0.3) and (r["end"], r["touches"]) == ("ready", 1)
     header = json.loads((out / "run.json").read_text())
     assert header["reticle"] is True
     text = (out / "summary.md").read_text()

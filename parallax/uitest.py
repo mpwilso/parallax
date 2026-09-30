@@ -311,7 +311,7 @@ def outcomes(project: Project, task_id: str) -> str:
     """The outcomes the plan names as user flows: the only thing the tester learns about the work."""
     intent = lifecycle._read(project, task_id, "intent")
     m = re.search(r"^#+\s*Outcomes?\s*$(.*?)(?=^#+\s|\Z)", intent, re.M | re.S)
-    section = m.group(1).strip() if m else ""
+    section = lint.unmark(m.group(1).strip()) if m else ""  # the outcome as stated, not whose it is
     wanted = {str(n) for n in (lifecycle.plan_data(project, task_id) or {}).get("user_flows", [])}
     items = re.findall(r"^\s*(\d+)[.)]\s+(.*)$", section, re.M)
     picked = [f"{n}. {text.strip()}" for n, text in items if n in wanted]

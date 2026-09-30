@@ -111,9 +111,11 @@ def _outcomes(project: Project, task_id: str, tests: dict | None) -> list[str]:
     cite = f"(ledger {tests['id']})" if tests else f"(docs/tasks/{task_id}/plan.md:1)"
     out = []
     said = _reticle(project, task_id)
+    kinds = lint.outcome_kinds(intent)
     for n in lint.outcomes_of(intent):
         files = sorted({c.split("::", 1)[0] for c in covers.get(n, []) if c.split("::", 1)[0] in ran})
-        line = f"outcome {n}: {', '.join(files)}" if files else f"outcome {n}: no test exercises this outcome"
+        name = f"outcome {n} ({kinds[n]})" if kinds.get(n) else f"outcome {n}"  # asked by you, or Focus's own
+        line = f"{name}: {', '.join(files)}" if files else f"{name}: no test exercises this outcome"
         out.append(f"{line}{said(n)} {cite}")
     return out
 
@@ -130,8 +132,9 @@ def _reticle(project: Project, task_id: str):
 
     def said(n: str) -> str:
         cite = f" (ledger {(ran or rec)['id']})"
-        if rec["kind"] == "reticle.failed":
-            return f"; Reticle wrote no test: it failed{cite}"
+        if rec["kind"] == "reticle.failed":  # Parallax's own reason when it has one, like no asked outcome
+            why = lint.one_sentence(rec["reason"]).rstrip(".") if rec["actor"] == "parallax" else "it failed"
+            return f"; Reticle wrote no test: {why}{cite}"
         if any(t["outcome"] == n for t in kept):
             if n in failed:
                 return f"; Reticle's test failed: {' '.join(failed[n].split())[:80]}{cite}"
@@ -252,6 +255,14 @@ def report(project: Project, task_id: str) -> str:
         bottom = f"Ready: Second Eye {how} and {passed} of {total} plan tests pass."
         if lead:
             bottom = f"Ready again after your reject: Second Eye {how} and {passed} of {total} plan tests pass."
+        disputed = _last(_attempt(entries, task_id), "reticle.disputed")
+        if disputed and staged and disputed["data"]["tree"] == staged["data"]["tree"]:  # Reticle disagrees: yours to judge
+            outs = sorted({t["outcome"] for t in disputed["data"]["failed"]})
+            bottom = (f"Ready, but Reticle disagrees: its test of outcome {', '.join(outs)} still fails, while Second Eye "
+                      f"{how} and {passed} of {total} plan tests pass.")
+            found = [f"Reticle, outcome {t['outcome']}: its test still fails after one rework: "
+                     f"{' '.join(t['message'].split())[:120]} (ledger {disputed['id']})"
+                     for t in disputed["data"]["failed"]] + found
         return lint.shaped("Decision needed", bottom, gaps, f"you run parallax accept {task_id}, or reject it with a reason.",
                            found, changed, "the checker", boundary + findings)
     if status in ("accepted", "merged"):

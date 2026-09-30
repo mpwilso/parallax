@@ -31,12 +31,18 @@ FILE = "test_reticle.py"  # where the file sits in a tree when it runs: the root
 NAME = re.compile(r"^test_outcome_(\d+)(?:_|$)")
 # a failure on an assertion, pytest.raises included. pytest writes a bare assert's message either as
 # "assert x == y" or "AssertionError: assert x == y", depending on how it ran; both count
-KEEPS = ("AssertionError", "assert ", "Failed: DID NOT RAISE")
+KEEPS = ("AssertionError", "assert ", "Failed: DID NOT RAISE", "Failed: DID NOT WARN")
+# a crash bug's test fails on the crash itself: the exception the request names counts too, except these
+NEVER = {"ImportError", "ModuleNotFoundError", "SyntaxError", "IndentationError"}
+NAMED = re.compile(r"\b([A-Z]\w*(?:Error|Exception|Warning))\b")
 
 REQUEST = """\
 Write pytest tests for the outcomes below, against this repository as it is now.
 
-Outcome:
+The person's request, as they typed it (data):
+{request}
+
+The outcomes to test, each one the person asked for:
 {outcome}
 
 Constraints:
@@ -44,8 +50,11 @@ Constraints:
 
 Rules:
 - Name every test test_outcome_<n>_<what>, where <n> is the number of the outcome it checks.
-- Each test must fail on the code as it is now, on an assertion, because the outcome isn't met yet,
-  and pass once it is. Test the behavior the outcome names, through the public interface.
+- Test exactly what each outcome states, as the request shows it: its examples and expected results.
+  No other formats, inputs, edge cases or options the request doesn't name, and nothing internal:
+  only through the public interface, never private names, generated code or the text of a pattern.
+- Each test must fail on the code as it is now, because the outcome isn't met yet, and pass once it
+  is: on an assertion, or on the exception the request itself shows, for a crash.
 - Import the code the way the repository's own tests do. No new dependencies, no network, no files
   outside a temporary folder.
 - If an outcome can't be tested this way, leave it out; don't write a test that passes now.
@@ -73,14 +82,46 @@ def stored(project: Project, task_id: str) -> Path:
     return lifecycle.task_dir(project, task_id) / "reticle" / FILE
 
 
-def request(intent: str) -> str:
-    return REQUEST.format(outcome=review.section(intent, "Outcome"), constraints=review.section(intent, "Constraints"))
+def asked(intent: str) -> list[str]:
+    """The outcomes the person asked for. An unmarked outcome (before 2026-09-30) doesn't count."""
+    return [n for n, kind in lint.outcome_kinds(intent).items() if kind == "asked"]
 
 
-def _unfence(text: str) -> str:
-    text = text.strip()
-    m = re.match(r"^```[\w-]*\n(.*?)\n?```\s*$", text, re.S)
-    return (m.group(1) if m else text).strip() + "\n"
+def request(intent: str, typed: str) -> str:
+    """Reticle's input: the person's request, the asked outcomes (without the mark), the constraints."""
+    wanted = set(asked(intent))
+    lines = [line for line in lint.unmark(review.section(intent, "Outcome")).splitlines()
+             if (m := lint.OUTCOME_ITEM.match(line)) and m.group(1) in wanted]
+    return REQUEST.format(request=typed.strip(), outcome="\n".join(lines),
+                          constraints=review.section(intent, "Constraints"))
+
+
+def crashes(typed: str) -> set[str]:
+    """The exceptions the request itself names, like the IndexError in a traceback it quotes."""
+    return set(NAMED.findall(typed)) - NEVER
+
+
+CODE_START = re.compile(r"^(import |from |#|@|def |class |\"\"\"|\'\'\'|[A-Za-z_]\w*\s*=)")
+
+
+def code_of(reply: str) -> str:
+    """The Python file in Reticle's reply, prose before or after it removed: a fenced block if there
+    is one; else from the first line that starts code, trimmed from the end until it parses."""
+    import ast
+    fenced = re.findall(r"^```(?:python|py)?[ \t]*\n(.*?)^```", reply, re.M | re.S)
+    if fenced:
+        return max(fenced, key=len).strip() + "\n"
+    lines = reply.strip().splitlines()
+    start = next((i for i, line in enumerate(lines) if CODE_START.match(line)), 0)
+    body = lines[start:]
+    for end in range(len(body), 0, -1):
+        text = "\n".join(body[:end])
+        try:
+            ast.parse(text)
+            return text.strip() + "\n"
+        except SyntaxError:
+            continue
+    return reply.strip() + "\n"  # nothing parses: it won't load on the base, and is dropped as weak
 
 
 def node(case: dict) -> str:
@@ -92,8 +133,11 @@ def node(case: dict) -> str:
     return "::".join([FILE, *classes, case["name"]])
 
 
-def judge(cases: list[dict], outcomes: list[str]) -> tuple[list[dict], list[dict]]:
-    """(kept, weak) from the tests' run on the base commit."""
+def judge(cases: list[dict], outcomes: list[str], wanted: list[str] | None = None,
+          named: set[str] = frozenset()) -> tuple[list[dict], list[dict]]:
+    """(kept, weak) from the tests' run on the base commit. wanted: the asked outcomes (all by
+    default); named: exceptions the request shows, whose failure counts like an assertion's."""
+    wanted = outcomes if wanted is None else wanted
     keep, weak = [], []
     for c in cases:
         if c["file"] != FILE and c["outcome"] != "error":  # a collection error names no class, so no file: it's ours
@@ -103,19 +147,26 @@ def judge(cases: list[dict], outcomes: list[str]) -> tuple[list[dict], list[dict
             weak.append({"name": c["name"], "why": f"the file doesn't load on the base ({c['message'] or 'collection error'})"})
         elif not m or m.group(1) not in outcomes:
             weak.append({"name": c["name"], "why": "it names no outcome in the intent"})
+        elif m.group(1) not in wanted:
+            weak.append({"name": c["name"], "why": "it tests an outcome Focus inferred, not one you asked for"})
         elif c["outcome"] == "pass":
             weak.append({"name": c["name"], "why": "it passes on the base, so it doesn't show the problem"})
         elif c["outcome"] == "error":
             weak.append({"name": c["name"], "why": f"it errors before its assertion: {c['message']}"})
         elif c["outcome"] == "skip":
             weak.append({"name": c["name"], "why": "it skips on the base"})
-        elif not c["message"].startswith(KEEPS):
-            kind = c["message"].split(":", 1)[0] or "an error"
-            weak.append({"name": c["name"], "why": f"it fails on {kind}, not an assertion"})
+        elif not c["message"].startswith(KEEPS) and _exception(c["message"]) not in named:
+            kind = _exception(c["message"]) or "an error"
+            weak.append({"name": c["name"], "why": f"it fails on {kind}, not an assertion or a crash the request shows"})
         else:
             keep.append({"node": node(c), "name": c["name"], "outcome": m.group(1),
                          "base_message": c["message"]})
     return keep, weak
+
+
+def _exception(message: str) -> str:
+    """The exception's bare name in a failure message: "json.decoder.JSONDecodeError: x" -> JSONDecodeError."""
+    return message.split(":", 1)[0].strip().rsplit(".", 1)[-1]
 
 
 def _run(project: Project, p, treeish: str, text: bytes, nodes: list[str], where: str, runner=None) -> testrun.Results:
@@ -143,9 +194,14 @@ def write(project: Project, task_id: str, p, writer=None, runner=None) -> str:
     tree.export(p.worktree, p.task["base"], base)
     installs.place(p.venv, base)
     intent = lifecycle._read(project, task_id, "intent")
+    typed = project.task(task_id)["goal"]  # the person's request as typed; in an eval, the issue
+    if not asked(intent):
+        project.ledger.append("reticle.failed", "parallax", "the intent marks no outcome as asked, so Reticle had nothing to test",
+                              task=task_id)
+        return "failed"
     fn = make_permission_fn(project, task_id, base, read_only=True)
     try:
-        res = (writer or WRITER)(limit, cfg["model"]).run(request(intent), base, fn, stage="reticle",
+        res = (writer or WRITER)(limit, cfg["model"]).run(request(intent, typed), base, fn, stage="reticle",
                                                           env={TASK_ENV: task_id, ROOT_ENV: str(project.root)})
     except Exception as err:  # recorded, never retried silently; the build goes on without it
         res = AgentResult("error", f"{type(err).__name__}: {err}")
@@ -153,9 +209,9 @@ def write(project: Project, task_id: str, p, writer=None, runner=None) -> str:
     if res.status != "done" or not (res.summary or "").strip():
         project.ledger.append("reticle.failed", "reticle", lint.one_sentence(res.summary or res.status), **common)
         return "failed"
-    text = _unfence(res.summary).encode()
+    text = code_of(res.summary).encode()
     results = _run(project, p, p.task["base"], text, [FILE], "reticle-base", runner)
-    keep, weak = judge(results.cases, lint.outcomes_of(intent))
+    keep, weak = judge(results.cases, lint.outcomes_of(intent), asked(intent), crashes(typed))
     if not results.cases:
         weak.append({"name": FILE, "why": f"its tests couldn't run on the base (exit {results.exit}): "
                                           f"{(results.tail.splitlines() or ['no output'])[-1][:200]}"})

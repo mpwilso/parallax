@@ -35,6 +35,7 @@ LEDGER_ID = re.compile(r"\bledger ([0-9a-f]{8})\b")
 LIST_ITEM = re.compile(r"^\s*(?:[-*]|\d+\.)\s+(.*)$")
 FIELD = re.compile(r"^(kind|size|title|scope|budget):\s*(.*?)\s*$", re.I)
 OUTCOME_ITEM = re.compile(r"^\s*(\d+)[.)]\s+\S")
+OUTCOME_KIND = re.compile(r"^\s*\d+[.)]\s+\**(asked|inferred)\**\s*:", re.I)  # whose outcome it is: the person's, or Focus's
 HOST = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$")
 
 PLAN_FIELDS = {
@@ -283,6 +284,10 @@ def lint_lifecycle(text: str, doc: str) -> list[Problem]:
             problems.append((1, "intent's 'budget:' must be a dollar amount, like 4.00"))
         if not outcomes_of(text):
             problems.append((1, "intent's '## Outcome' needs a numbered list: 1. ..., 2. ..."))
+        for n, kind in outcome_kinds(text).items():
+            if kind is None:
+                problems.append((1, f"outcome {n} needs 'asked:' (the person's words state or clearly imply it) or "
+                                    "'inferred:' (your own addition) right after its number"))
         names = [s for s, _ in _sections(lines, 0)]
         for name in INTENT_SECTIONS:
             if name not in names:
@@ -386,6 +391,22 @@ def outcomes_of(intent: str) -> list[str]:
     lines = intent.splitlines()
     return [m.group(1) for _, line in _section_lines(lines, _sections(lines, 0), "Outcome")
             if (m := OUTCOME_ITEM.match(line))]
+
+
+def unmark(outcomes: str) -> str:
+    """Outcome lines without Focus's asked or inferred mark: for agents that judge the outcome as stated."""
+    return re.sub(r"(?im)^(\s*\d+[.)]\s+)\**(?:asked|inferred)\**\s*:\s*", r"\1", outcomes)
+
+
+def outcome_kinds(intent: str) -> dict[str, str | None]:
+    """outcome number -> "asked", "inferred", or None when the outcome isn't marked (intents before 2026-09-30)."""
+    lines = intent.splitlines()
+    out = {}
+    for _, line in _section_lines(lines, _sections(lines, 0), "Outcome"):
+        if (m := OUTCOME_ITEM.match(line)):
+            k = OUTCOME_KIND.match(line)
+            out[m.group(1)] = k.group(1).lower() if k else None
+    return out
 
 
 # normalizing and fitting: Parallax never shows or saves its own output failing its own lint -----------

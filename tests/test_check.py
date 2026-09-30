@@ -217,7 +217,7 @@ def test_show_at_ready_is_the_plans_shape(repo, monkeypatch, capsys):
         f"- changed: README.md, 1 line; parallax diff {tid} shows it (ledger {kinds(proj, 'check.staged')[-1]['id']})\n"
         f"- tests: 3 of 3 passed (ledger {t['id']})\n"
         f"- Second Eye, the blind checker: pass, no findings (ledger {v['id']})\n"
-        f"- outcome 1: tests/test_readme.py (ledger {t['id']})\n"
+        f"- outcome 1 (asked): tests/test_readme.py (ledger {t['id']})\n"
         f"- preflight: passed (ledger {kinds(proj, 'preflight.recorded')[-1]['id']})\n"
         f"- no harness files were reset (ledger {t['id']})\n")
 
@@ -227,7 +227,8 @@ def test_the_ready_card_says_which_outcome_no_test_exercises(repo):
     make_key()
     proj = Project.init(repo)
     d = docs()
-    d["intent"] = d["intent"].replace("1. A new user on WSL can follow them.\n", "1. A new user on WSL can follow them.\n2. The doctor sample matches.\n")
+    d["intent"] = d["intent"].replace("1. asked: A new user on WSL can follow them.\n",
+                                      "1. asked: A new user on WSL can follow them.\n2. inferred: The doctor sample matches.\n")
     d["plan"] = d["plan"].replace('covers = { "1" = ["tests/test_readme.py"] }',
                                   'covers = { "1" = ["tests/test_readme.py"], "2" = ["tests/test_other.py"] }')
     tid = lifecycle.new_intent(proj, "fix the readme", FakeDrafter(d))["task"]
@@ -235,8 +236,8 @@ def test_the_ready_card_says_which_outcome_no_test_exercises(repo):
     maker = built(proj, tid, [("write", "README.md", "ok\n")])
     assert run(proj, tid, maker, runner=junit_runner({"tests/test_readme.py": (3, 0)})) == "ready"
     card = show.report(proj, tid)
-    assert "- outcome 1: tests/test_readme.py (ledger " in card
-    assert "- outcome 2: no test exercises this outcome (ledger " in card
+    assert "- outcome 1 (asked): tests/test_readme.py (ledger " in card  # whose outcome each is, too
+    assert "- outcome 2 (inferred): no test exercises this outcome (ledger " in card
     t = kinds(proj, "tests.recorded")[-1]
     assert f"- no harness files were reset (ledger {t['id']})" in card
     ids = {e["id"] for e in proj.ledger.entries()}

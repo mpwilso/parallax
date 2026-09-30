@@ -10,4 +10,3 @@ Details
 - tomlkit-430: ended ready, hidden tests pass, Second Eye right, $0.54, 1.5 min to Ready, 1 touch.
 - tabulate-190: ended ready, hidden tests pass, Second Eye right, $0.65, 2.2 min to Ready, 1 touch.
 - boltons-319: ended ready, hidden tests pass, Second Eye right, $0.51, 1.9 min to Ready, 1 touch.
-

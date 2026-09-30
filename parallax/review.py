@@ -66,11 +66,13 @@ def section(text: str, name: str) -> str:
 
 
 def brief(intent: str, review_text: str, tightening: str, diff: str) -> str:
-    """Exactly what the checker sees, and nothing else."""
+    """Exactly what the checker sees, and nothing else. Each outcome as stated, without Focus's mark of
+    whose it is (asked or inferred): the checker judges the change against the outcome, not its source."""
     review_part = review_text.rstrip()
     if tightening.strip():
         review_part += f"\n\n## This task only\n\n{tightening.strip()}"
-    return (f"Outcome:\n{section(intent, 'Outcome')}\n\n"
+    from .lint import unmark
+    return (f"Outcome:\n{unmark(section(intent, 'Outcome'))}\n\n"
             f"Constraints:\n{section(intent, 'Constraints')}\n\n"
             f"REVIEW.md:\n{review_part}\n\n"
             f"Diff:\n{diff or '(empty)'}\n")

@@ -79,6 +79,11 @@ def _retried_checker(project: Project, task_id: str) -> bool:
     return any(e["kind"] == "check.retried" for e in status.attempt(project.ledger.entries(), task_id))
 
 
+def _reticle_reworked(project: Project, task_id: str) -> bool:
+    """Has Maker had its one rework for Reticle alone, this attempt?"""
+    return any(e["kind"] == "reticle.rework" for e in status.attempt(project.ledger.entries(), task_id))
+
+
 def rework_cycles(project: Project, task_id: str) -> int:
     """Rework cycles in this attempt."""
     return sum(e["kind"] == "rework.started" for e in status.attempt(project.ledger.entries(), task_id))
@@ -174,6 +179,7 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
 
     # Reticle's tests of the outcomes, on this tree. A failure goes back to Maker as a finding; Second
     # Eye still judges the tree, so the eval can tell the two apart
+    reticle_fix, reticle_failed = [], []
     try:
         ran = reticle.check(project, task_id, p, s.tree, test_runner)
     except reticle.Unrun as err:  # never a finding for Maker: nothing it did made them not run
@@ -186,7 +192,8 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
         if not r_results.reported:
             return _to_you(project, task_id, "check", f"Reticle's tests couldn't run (exit {r_results.exit}): "
                            f"{lint.one_sentence((r_results.tail.splitlines() or ['no output'])[-1])}", tree=s.tree), []
-        flow_fix = flow_fix + [reticle.finding(t) for t in failing]
+        reticle_failed = [{k: t[k] for k in ("name", "outcome", "message")} for t in failing]
+        reticle_fix = [reticle.finding(t) for t in failing]
 
     # code findings first: they go straight back to the maker, and the checker isn't paid to spot them.
     # The em dash rule is Parallax's own style: only a repo whose policy turns it on gets it
@@ -194,7 +201,7 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
               for path, line, text in tree.added_lines(s.diff) if lint.EM_DASH in text] if settings["no_em_dashes"] else []
     if dashes:
         project.ledger.append("check.found", "parallax", "; ".join(dashes), task=task_id, tree=s.tree, findings=dashes)
-        return "rework", dashes + flow_fix + ([] if results.ok else [f"tests failed (exit {results.exit})"])
+        return "rework", dashes + flow_fix + reticle_fix + ([] if results.ok else [f"tests failed (exit {results.exit})"])
 
     intent = lifecycle.doc_path(project, task_id, "intent").read_text(encoding="utf-8")
     review_text = review.load(project.root)
@@ -238,11 +245,22 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
         return _to_you(project, task_id, "conflict",
                        f"intent and plan disagree: Second Eye says {f.where} goes against the intent "
                        f"({' '.join(f.text.split())}), but your approved plan lists {_path(f.where)}", tree=s.tree), []
-    if results.ok and not blockers and not flow_fix:
+    if results.ok and not blockers and not flow_fix and not reticle_fix:
         project.ledger.append("check.finished", "parallax", "", task=task_id, status="ready", tree=s.tree)
         return "ready", []
+    # only Reticle disagrees: Maker gets one rework for it. Still failing after that, it's yours to
+    # judge at Ready, with the disagreement on the card; Reticle alone never spends the rework cap
+    if reticle_fix and results.ok and not blockers and not flow_fix:
+        if _reticle_reworked(project, task_id):
+            project.ledger.append("reticle.disputed", "parallax", "; ".join(reticle_fix), task=task_id, tree=s.tree,
+                                  failed=reticle_failed)
+            project.ledger.append("check.finished", "parallax", "", task=task_id, status="ready", tree=s.tree,
+                                  reticle_disputed=True)
+            return "ready", []
+        project.ledger.append("reticle.rework", "parallax", "one rework for Reticle's failing tests: the plan's tests "
+                              "and Second Eye pass", task=task_id, tree=s.tree)
 
-    fix = [f"{f.severity} {f.where}: {f.text}".replace(" :", ":") for f in blockers] + flow_fix
+    fix = [f"{f.severity} {f.where}: {f.text}".replace(" :", ":") for f in blockers] + flow_fix + reticle_fix
     for f, (passed, counted, _) in results.per_file.items():
         if passed < counted:
             fix.append(f"tests: {f} has {counted - passed} of {counted} failing")

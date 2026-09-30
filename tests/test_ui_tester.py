@@ -335,8 +335,8 @@ def test_every_accepted_tasks_flows_rerun_on_later_tasks(proj):
 
 def test_the_tester_sees_only_the_outcomes_the_plan_names(proj, monkeypatch):
     from parallax import planfit
-    intent = docs()["intent"].replace("1. A new user on WSL can follow them.",
-                                      "1. A new user on WSL can follow them.\n2. The page lists the steps in order.")
+    intent = docs()["intent"].replace("1. asked: A new user on WSL can follow them.",
+                                      "1. asked: A new user on WSL can follow them.\n2. inferred: The page lists the steps in order.")
     plan = {**lint.plan_block(flows_docs()["plan"])[0], "user_flows": ["3"]}
     assert "user_flows names outcome 3, which the intent doesn't have" in planfit.problems(intent, plan, 0.2, proj.policy.budget)
     from parallax import pilot as p

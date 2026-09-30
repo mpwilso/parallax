@@ -41,7 +41,8 @@ budget: <only if the human's words name a budget: that amount in dollars, like 4
 <what is wrong or missing. cite files you read as path:line>
 
 ## Outcome
-<a numbered list: 1. ..., 2. ... each one observable and testable>
+<a numbered list, each one observable and testable, and marked: 1. asked: ..., 2. inferred: ...
+asked: the person's words state it or clearly imply it. inferred: your own addition>
 
 ## Constraints
 <what must not change: behavior, interfaces, compatibility, limits>

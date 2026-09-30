@@ -33,7 +33,7 @@ scope: calc.py, tests/**
 add subtracts.
 
 ## Outcome
-1. add returns the sum of its arguments.
+1. asked: add returns the sum of its arguments.
 
 ## Constraints
 Keep the function's name.
@@ -199,7 +199,7 @@ def test_a_fix_nothing_reviewed_never_counts_as_passed_and_is_named(proj, upstre
     text = (out / "summary.md").read_text()
     lines = text.splitlines()
     assert lines[1] == "Bottom line: 1 of 2 fixes reached Ready and passed the hidden tests."
-    assert lines[2] == "Not looked at: see Found (1)"  # the reason, cited, is too long for the header
+    assert lines[2] == "Not looked at: 1 case never checked, in Found"  # the reason, cited, is too long for the header
     assert "- calc-2 never reached the check: the budget cap ran out ($2.70 of $2.20 estimated); nothing reviewed its tree, " \
         "which passes the hidden tests (evals/results/" in text
     assert lines[3] == "Next: you read calc-2 in Details, then decide what to change."
@@ -222,11 +222,32 @@ def test_four_cases_that_never_reached_the_check_are_each_named_with_why(tmp_pat
     (out / "run.json").write_text(json.dumps(header))
     text = evals.summary(tmp_path, out, header, results)
     assert text.splitlines()[1] == "Bottom line: 1 of 5 fixes reached Ready and passed the hidden tests."
-    assert text.splitlines()[2] == "Not looked at: see Found (4)"  # too long for the header, so each is cited
+    assert text.splitlines()[2] == "Not looked at: 4 cases never checked, in Found"  # too long for the header, so each is cited
     for x in "abcd":
         assert (f"- {x} never reached the check: the budget cap ran out ($0.72 of $0.70 estimated); nothing reviewed "
                 f"its tree, which passes the hidden tests (evals/results/r/{x}.json:1)") in text
     assert lint.lint_report(text, root=tmp_path) == []
+
+
+def test_the_header_names_every_case_the_budget_didnt_reach(tmp_path):
+    """492eaf's header said only "and the budget stopped.": the three cases it never ran weren't named."""
+    left = ["boltons-337", "boltons-348", "humanize-174"]
+    header = {"run": "r", "parallax": "p", "budget_usd": 15.0, "per_case_usd": 4.0, "spent_usd": 11.81,
+              "cases": ["a", "b", "c", "d", *left], "done": ["a", "b", "c", "d"],
+              "stopped": {"case": "boltons-337", "why": "$11.81 spent, and the next case needs up to $4.40"}}
+    stuck = {"end": "needs you", "hidden": "pass", "verdicts": [], "cost_usd": 2.7, "seconds_to_ready": None, "touches": 2,
+             "decisions": ["the budget cap ran out ($2.80 of $2.80 estimated) while rework was fixing a long list."]}
+    results = [{"case": x, **stuck} for x in "abcd"]
+    out = tmp_path / "evals" / "results" / "r"
+    out.mkdir(parents=True)
+    for r in results:
+        (out / f"{r['case']}.json").write_text(json.dumps(r))
+    (out / "run.json").write_text(json.dumps(header))
+    text = evals.summary(tmp_path, out, header, results)
+    head = text.splitlines()[:4]
+    assert head[2] == ("Not looked at: boltons-337, boltons-348, humanize-174: the budget didn't reach them; "
+                       "4 unchecked, in Found")
+    assert lint.lint_report(text, root=tmp_path) == []  # under the caps, names and all
 
 
 def test_progress_lines_are_out_as_they_happen(proj, upstream, monkeypatch):
@@ -289,7 +310,7 @@ def test_the_run_stops_before_a_case_that_might_not_fit_and_says_what_it_finishe
     assert not (out / "calc-2.json").exists()
     assert said[-1].startswith("stopped before calc-2: $0.50 spent, and the next case needs up to $3.30")
     text = (out / "summary.md").read_text()
-    assert "the budget stopped the run before calc-2" in text and "1 case the budget didn't reach" in text
+    assert "Not looked at: calc-2: the budget didn't reach it" in text  # named in the header
     assert "Next: you rerun the rest with a larger budget." in text
     assert lint.lint_report(text, root=proj.root) == []
 

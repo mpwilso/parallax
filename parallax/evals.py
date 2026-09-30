@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from . import build, fingerprint, installs, lint, pilot, sandbox, status, testrun, tree
+from . import build, fingerprint, installs, lifecycle, lint, pilot, sandbox, status, testrun, tree
 from .core import POLICY_FILE, ParallaxError, Project
 
 CASES_FILE = Path("evals") / "cases.toml"
@@ -276,6 +276,8 @@ def score(project: Project, task_id: str, case: Case, cache: Path, runner=None) 
         "seconds_to_ready": _seconds(mine[0]["ts"], ready) if ready else None,
         "touches": len(raised) + 1,  # each Decision needed, plus the final accept or reject
         "decisions": [lint.one_sentence(r)[:300] for r in raised],
+        "inferred": sorted(n for n, k in lint.outcome_kinds(lifecycle._read(project, task_id, "intent")).items()
+                           if k == "inferred"),
         **_reticle_score(mine, reticle_verdicts, final),
     }
 
@@ -414,9 +416,8 @@ def summary(root: Path, out: Path, header: dict, results: list[dict]) -> str:
     c = tally(results)
     n = len(results)
     stop = header.get("stopped")
-    bottom = (f"{c['pass']} of {_n(n, 'fix', 'fixes')} reached Ready and passed the hidden tests"
-              + (f", and the budget stopped the run before {stop['case']}" if stop else "") + ".")
-    gaps = []
+    bottom = f"{c['pass']} of {_n(n, 'fix', 'fixes')} reached Ready and passed the hidden tests."
+    gaps = []  # cases that never reached the check: (inline, cited)
     for r in results:
         if unchecked(r):
             tree_ = {"pass": "passes", "fail": "fails"}.get(r.get("hidden"), "wasn't tested by")
@@ -424,11 +425,6 @@ def summary(root: Path, out: Path, header: dict, results: list[dict]) -> str:
                          f"{r['case']} never reached the check: {_why(r)}; nothing reviewed its tree, which "
                          f"{tree_} the hidden tests ({rel}/{r['case']}.json:1)"))
     left = [x for x in header["cases"] if x not in header["done"]]
-    if left:
-        gaps.append((f"{_n(len(left), 'case')} the budget didn't reach",
-                     f"{_n(len(left), 'case')} the budget didn't reach: {', '.join(left)} ({rel}/run.json:1)"))
-    if not n:
-        gaps = [("every case: none ran", f"every case: none ran ({rel}/run.json:1)")]
     found = [f"{c['ready']} of {n} reached Ready, for ${header['spent_usd']:.2f} estimated in all ({rel}/run.json:1)",
              f"Second Eye was right {c['right']} times, caught {c['catch']} bad fixes, missed {c['miss']}, "
              f"and raised {c['false alarm']} false alarms ({rel}/run.json:1)"]
@@ -452,15 +448,38 @@ def summary(root: Path, out: Path, header: dict, results: list[dict]) -> str:
                        + (f"Reticle {r.get('reticle', 'did not run')} (${r.get('reticle_cost_usd') or 0:.2f}), "
                           if header.get("reticle") else "")
                        + f"${r.get('cost_usd') or 0:.2f}, {ready}, {_n(r.get('touches', 0), 'touch', 'touches')}.")
-    text = lint.shaped("FYI", bottom, gaps, _next(results, stop), found, details=details)
-    return lint.fit(text, root=root)[0] + "\n"
+    return _fitted(root, bottom, left, gaps, _next(results, stop), found, details) + "\n"
+
+
+def _fitted(root: Path, bottom: str, left: list[str], gaps: list[tuple[str, str]], next_: str,
+            found: list[str], details: list[str]) -> str:
+    """The summary, with every case the budget didn't reach named in the header. Other words are
+    shortened to fit, never those names: the unchecked cases move to Found, then Next is cut short."""
+    unreached = [f"{', '.join(left)}: the budget didn't reach {'it' if len(left) == 1 else 'them'}"] if left else []
+    short_next = next_.replace(", then decide what to change.", ".")  # the names stay; the clause goes
+    long_gaps = unreached + ([f"{_n(len(gaps), 'case')} never checked, in Found"] if gaps else [])
+    short_gaps = unreached + ([f"{len(gaps)} unchecked, in Found"] if gaps else [])
+    cited = [c for _, c in gaps]
+    tries = [(unreached + [g for g, _ in gaps], [], next_), (long_gaps, cited, next_), (long_gaps, cited, short_next),
+             (short_gaps, cited, short_next), (short_gaps, cited, "you read Details.")]
+    text = ""
+    for inline, cited, nxt in tries:
+        not_looked = "; ".join(inline) or "nothing"
+        text = lint.report("FYI", bottom, not_looked, nxt, found + cited, details)
+        problems = [m for _, m in lint.lint_report(text, root=root)]
+        if any("body is" in m for m in problems):  # the cited gaps go to Details before the header gives way
+            text = lint.report("FYI", bottom, not_looked, nxt, found, [c.rsplit(" (", 1)[0] for c in cited] + details)
+            problems = [m for _, m in lint.lint_report(text, root=root)]
+        if not any("header is" in m for m in problems):
+            return text
+    return text
 
 
 def flagged(r: dict) -> bool:
     """A case worth your reading: it crashed, didn't reach Ready, failed the hidden tests, or Second
-    Eye missed a bad fix or raised a false alarm on any tree."""
+    Eye or Reticle missed a bad fix or raised a false alarm on any tree."""
     return (r.get("end") != "ready" or r.get("hidden") != "pass"
-            or any(v["judgment"] in ("miss", "false alarm") for v in r.get("verdicts", [])))
+            or any(v["judgment"] in ("miss", "false alarm") for v in r.get("verdicts", []) + r.get("reticle_verdicts", [])))
 
 
 def _next(results: list[dict], stop: dict | None) -> str:

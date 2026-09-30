@@ -1,7 +1,7 @@
 Type: FYI
 Bottom line: 3 of 8 fixes reached Ready and passed the hidden tests.
-Not looked at: see Found (4)
-Next: you read pathspec-77, tomlkit-512, cachetools-387 and 2 more in Details, then decide what to change.
+Not looked at: 4 cases never checked, in Found
+Next: you read pathspec-77, tomlkit-512, cachetools-387 and 2 more in Details.
 Found
 - 4 of 8 reached Ready, for $4.96 estimated in all (evals/results/2026-09-30-41250f/run.json:1)
 - Second Eye was right 3 times, caught 0 bad fixes, missed 1, and raised 0 false alarms (evals/results/2026-09-30-41250f/run.json:1)
@@ -19,4 +19,3 @@ Details
 - boltons-337: ended ready, hidden tests pass, Second Eye right, $0.54, 2.0 min to Ready, 1 touch.
 - boltons-348: ended ready, hidden tests pass, Second Eye right, $0.55, 1.5 min to Ready, 1 touch.
 - humanize-174: ended ready, hidden tests fail, Second Eye miss, $0.56, 1.8 min to Ready, 1 touch.
-
