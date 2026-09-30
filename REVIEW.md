@@ -9,7 +9,7 @@ How Second Eye, the blind checker, reviews a change. You own this file; agents c
 3. Tests: do they test the new behavior, and would they fail without the change?
 4. Safety: secrets, injection, unsafe file or shell handling, files that run automatically.
 5. Scope: anything the outcome didn't ask for.
-6. Parallax's own rules: the invariants in CLAUDE.md hold, core stays stdlib, new behavior has a test, and no em dash is added in any changed file (a blocker; Parallax also checks for it by code).
+6. Parallax's own rules: the invariants in CLAUDE.md hold, core stays stdlib, CLI output has no em dashes, and new behavior has a test. Any em dash added in a changed file is a blocker; Parallax also checks for it by code.
 
 ## Severities
 

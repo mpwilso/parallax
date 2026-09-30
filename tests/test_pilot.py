@@ -173,6 +173,9 @@ def test_a_large_task_gets_its_intent_approved_by_code_and_its_plan_waits(proj, 
 # the em dash, by code --------------------------------------------------------------------------------
 
 def test_an_added_em_dash_is_reworked_before_the_checker_sees_it(proj, monkeypatch):
+    """Parallax's own style rule, in a repo whose policy turns it on: Parallax's own."""
+    (proj.root / POLICY_FILE).write_text("[check]\nno_em_dashes = true\n")
+    proj.reload_policy()
     monkeypatch.setattr(build, "_spawn", lambda *a: 1)
     tid = pilot.intake(proj, WANT)["task"]
     maker = ScriptedAgent(steps=[("write", "README.md", "one \u2014 two\n")])
@@ -193,6 +196,18 @@ def test_an_added_em_dash_is_reworked_before_the_checker_sees_it(proj, monkeypat
     [found] = kinds(proj, "check.found")
     assert found["data"]["findings"] == ["blocker README.md:1: an em dash was added; use a comma or a colon"]
     assert len(checker.briefs) == 1 and "\u2014" not in checker.briefs[0]
+
+
+def test_in_any_other_repo_an_em_dash_is_fine(proj, monkeypatch):
+    """The default policy, as parallax init gives any repo: no rework, and Second Eye sees the dash."""
+    assert proj.policy.check["no_em_dashes"] is False
+    monkeypatch.setattr(build, "_spawn", lambda *a: 1)
+    tid = pilot.intake(proj, WANT)["task"]
+    checker = FakeChecker()
+    assert run_pilot(proj, tid, FakeDrafter(docs()), ScriptedAgent(steps=[("write", "README.md", "one \u2014 two\n")]),
+                     checker) == "ready"
+    assert not kinds(proj, "check.found") and not kinds(proj, "rework.started")
+    assert len(checker.briefs) == 1 and "+one \u2014 two" in checker.briefs[0]
 
 
 # your own output never fails your own lint --------------------------------------------------------------

@@ -282,6 +282,8 @@ def test_a_test_that_fails_on_the_build_it_describes_is_dropped_not_reworked(pro
 
 
 def test_its_own_em_dash_is_not_the_makers_finding(proj, monkeypatch):
+    (proj.root / POLICY_FILE).write_text((proj.root / POLICY_FILE).read_text() + "\n[check]\nno_em_dashes = true\n")
+    proj.reload_policy()  # Parallax's own rule on, so this shows the tester's file is exempt from it
     class Dashing(FakeTester):
         def run(self, goal, cwd, server, allowed):
             out = super().run(goal, cwd, server, allowed)

@@ -22,6 +22,7 @@ DEFAULT_CHECK = {
     "model": "claude-sonnet-5-5",  # a different Claude model from the maker's; the eval measures it
     "diff_cap": 400,               # changed lines a blind review can take reliably
     "rework_cap": 3,               # rework cycles before the task comes to you
+    "no_em_dashes": False,         # Parallax's own style rule, on in its own policy only
     "test_command": "python -m pytest -q -p no:cacheprovider -o junit_family=xunit1 --junitxml={junit} {tests}",
 }
 
@@ -55,6 +56,7 @@ model = "claude-sonnet-5-5"    # the drafters' model: they write the intent, spe
 model = "claude-sonnet-5-5"    # the blind checker's model
 diff_cap = 400                 # a bigger diff comes to you to split, or to accept the risk
 rework_cap = 3                 # rework cycles before a failing check comes to you
+no_em_dashes = false           # true: an em dash added in a changed file is a blocker, found by code
 test_command = "python -m pytest -q -p no:cacheprovider -o junit_family=xunit1 --junitxml={junit} {tests}"  # runs the plan's tests
 
 [ui_tester]
@@ -118,6 +120,8 @@ class Policy:
             v = check.get(key, DEFAULT_CHECK[key])
             if not isinstance(v, int) or isinstance(v, bool) or v < 1:
                 raise ValueError(f"[check] {key} must be a whole number of 1 or more")
+        if not isinstance(check.get("no_em_dashes", False), bool):
+            raise ValueError("[check] no_em_dashes must be true or false")
         for key in ("model", "test_command"):
             if not isinstance(check.get(key, ""), str):
                 raise ValueError(f"[check] {key} must be text")

@@ -1,7 +1,7 @@
 Type: FYI
 Bottom line: 3 of 3 cases passed the hidden tests.
 Not looked at: nothing
-Next: you read the misses and crashes, then decide.
+Next: nothing needs you: every fix passed and Second Eye was right.
 Found
 - 3 of 3 reached Ready, for $1.70 estimated in all (evals/results/2026-09-30-419a5e/run.json:1)
 - Second Eye was right 3 times, caught 0 bad fixes, missed 0, and raised 0 false alarms (evals/results/2026-09-30-419a5e/run.json:1)

@@ -170,9 +170,10 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
                                f"Field's test \"{c['name']}\" ({Path(c['file']).name}) still fails after a rework: "
                                f"{c['message']}. Either the test or the app is wrong", tree=s.tree, files=files), []
 
-    # code findings first: they go straight back to the maker, and the checker isn't paid to spot them
+    # code findings first: they go straight back to the maker, and the checker isn't paid to spot them.
+    # The em dash rule is Parallax's own style: only a repo whose policy turns it on gets it
     dashes = [f"blocker {path}:{line}: an em dash was added; use a comma or a colon"
-              for path, line, text in tree.added_lines(s.diff) if lint.EM_DASH in text]
+              for path, line, text in tree.added_lines(s.diff) if lint.EM_DASH in text] if settings["no_em_dashes"] else []
     if dashes:
         project.ledger.append("check.found", "parallax", "; ".join(dashes), task=task_id, tree=s.tree, findings=dashes)
         return "rework", dashes + flow_fix + ([] if results.ok else [f"tests failed (exit {results.exit})"])

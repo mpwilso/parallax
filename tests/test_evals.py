@@ -162,6 +162,10 @@ def test_each_case_is_scored_by_the_hidden_tests_and_second_eye_against_them(
     assert lint.lint_report(text, root=proj.root) == []  # the output shape, with every Found cited
     assert text.splitlines()[1] == f"Bottom line: {int(hidden == 'pass')} of 1 case passed the hidden tests."
     assert ("0.0 min to Ready" in text) == (end == "ready")
+    assert text.splitlines()[3] == ("Next: nothing needs you: every fix passed and Second Eye was right."
+                                    if judgment == "right" else "Next: you read calc-1 in Details, then decide what to change.")
+    (out / "summary.md").write_text("stale\n")
+    assert evals.resummarize(proj.root, out).read_text() == text  # the same summary, from the committed JSON
     assert f"Second Eye was right {int(judgment == 'right')} times, caught {int(judgment == 'catch')}" in text
 
 
@@ -222,6 +226,7 @@ def test_the_run_stops_before_a_case_that_might_not_fit_and_says_what_it_finishe
     assert said[-1].startswith("stopped before calc-2: $0.50 spent, and the next case needs up to $3.30")
     text = (out / "summary.md").read_text()
     assert "the budget stopped the run before calc-2" in text and "1 case the budget didn't reach" in text
+    assert "Next: you rerun the rest with a larger budget." in text
     assert lint.lint_report(text, root=proj.root) == []
 
     out, said = run(proj, cases, scripted(maker(FIXED), FakeChecker()), budget=3.0, per_case=3.0)
@@ -235,7 +240,9 @@ def test_each_case_runs_hands_free_under_your_policy_and_its_ceiling(proj, upstr
     p = Policy.from_dict(tomllib.loads(text))
     assert (p.budget["small_cap_usd"], p.launch["auto_launch_usd"], p.launch["review_plans"]) == (3.0, 3.0, False)
     assert p.budget["drafting_usd"] == 0.5 and not p.ui_tester["enabled"]  # six drafting calls fit the ceiling
-    assert (p.check, p.draft, p.limits) == (proj.policy.check, proj.policy.draft, proj.policy.limits)
+    assert (p.check, p.draft, p.limits) == ({**proj.policy.check, "no_em_dashes": False}, proj.policy.draft, proj.policy.limits)
+    mine = Policy.from_dict({"check": {"no_em_dashes": True}})  # Parallax's own style rule never reaches a case
+    assert "no_em_dashes = false" in evals.eval_policy(mine, case_for(upstream), 3.0)
     assert p.build["setup"].startswith('uv venv -q --python /usr/bin/python3 "$PARALLAX_VENV"')
     assert p.build["setup"].endswith("&& uv pip install -e . pytest")  # nothing else: Parallax's setup does the rest
 

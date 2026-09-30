@@ -135,7 +135,7 @@ def eval_policy(policy, case: Case, ceiling: float) -> str:
         "launch": {"auto_launch_usd": ceiling, "review_paths": [], "review_plans": False},
         "build": {"setup": setup_command(case)},
         "draft": policy.draft,
-        "check": policy.check,
+        "check": {**policy.check, "no_em_dashes": False},  # Parallax's own style rule, not the case's
         "ui_tester": {"enabled": False},
     }
     lines = [f"# written by parallax eval for case {case.id}: your policy, run hands-free under a ${ceiling:.2f} ceiling"]
@@ -374,9 +374,37 @@ def summary(root: Path, out: Path, header: dict, results: list[dict]) -> str:
         details.append(f"{r['case']}: ended {r.get('end')}, hidden tests {r.get('hidden', 'not run')}, Second Eye "
                        f"{r.get('second_eye', 'did not run')}, ${r.get('cost_usd') or 0:.2f}, {ready}, "
                        f"{_n(r.get('touches', 0), 'touch', 'touches')}.")
-    next_ = "you read the misses and crashes, then decide." if n else "you rerun with a larger budget."
+    next_ = _next(results, stop)
     text = lint.report("FYI", bottom, not_looked, next_, found, details)
     return lint.fit(text, root=root)[0] + "\n"
+
+
+def flagged(r: dict) -> bool:
+    """A case worth your reading: it crashed, didn't reach Ready, failed the hidden tests, or Second
+    Eye missed a bad fix or raised a false alarm on any tree."""
+    return (r.get("end") != "ready" or r.get("hidden") != "pass"
+            or any(v["judgment"] in ("miss", "false alarm") for v in r.get("verdicts", [])))
+
+
+def _next(results: list[dict], stop: dict | None) -> str:
+    """What's actually true for this run: who does what, if anyone."""
+    if not results:
+        return "you rerun with a larger budget."
+    ids = [r["case"] for r in results if flagged(r)]
+    if ids:
+        more = f" and {len(ids) - 3} more" if len(ids) > 3 else ""
+        return f"you read {', '.join(ids[:3])}{more} in Details, then decide what to change."
+    if stop:
+        return "you rerun the rest with a larger budget."
+    return "nothing needs you: every fix passed and Second Eye was right."
+
+
+def resummarize(root: Path, out: Path) -> Path:
+    """Write a run's summary.md again from its committed JSON files."""
+    header = json.loads((out / "run.json").read_text(encoding="utf-8"))
+    results = [json.loads((out / f"{c}.json").read_text(encoding="utf-8")) for c in header["done"]]
+    (out / "summary.md").write_text(summary(Path(root), out, header, results), encoding="utf-8")
+    return out / "summary.md"
 
 
 def _n(count: int, one: str, many: str = "") -> str:
