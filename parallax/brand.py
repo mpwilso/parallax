@@ -123,13 +123,17 @@ def portrait_svg(key: str, size: int = 64) -> str:
             f'{portrait_body(key)}</svg>')
 
 
-def party_svg() -> str:
-    """The four in a row, names under them, for the README."""
+NAME_INK = {"light": "#5f6480", "dark": "#a8adc4"}  # the names under the portraits, on a light or a dark page
+
+
+def party_svg(scheme: str = "light") -> str:
+    """The four in a row, names under them, for the README. One fixed name color per file: an image can't
+    know the page's theme, so the README picks the light or the dark file with a <picture>."""
     gap, size = 3, 16
     width = len(AGENTS) * size + (len(AGENTS) - 1) * gap
     parts = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} 22" width="{width * 6}" height="{22 * 6}" '
              'shape-rendering="crispEdges" role="img" aria-label="Focus, Maker, Second Eye and Field">',
-             '<style>text{fill:#5f6480}@media (prefers-color-scheme: dark){text{fill:#a8adc4}}</style>']
+             f'<style>text{{fill:{NAME_INK[scheme]}}}</style>']
     for n, key in enumerate(AGENTS):
         x = n * (size + gap)
         parts.append(f'<g transform="translate({x} 0)">{portrait_body(key)}</g>')
@@ -281,8 +285,9 @@ WORD_INK = {"light": "#1c1c1a", "dark": "#ecebe6"}  # app.css --ink in each sche
 WORD_EM = 0.66  # a monospace advance is about 0.6em; the lockup test measures the real thing
 
 
-def lockup_svg() -> str:
-    """The animated P (as mark-animated.svg) and "parallax" beside it, centred on the P, sized from the text."""
+def lockup_svg(scheme: str = "light") -> str:
+    """The animated P (as mark-animated.svg) and "parallax" beside it, centred on the P, sized from the text.
+    One fixed wordmark color per file, the UI's ink for that scheme; the README picks the file with a <picture>."""
     size = 10.5
     word_w = WORD_EM * size * len("parallax")
     gap = 5
@@ -291,8 +296,7 @@ def lockup_svg() -> str:
     return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w:.1f} {LOGO_H}" height="{height}" '
             f'width="{round(height * w / LOGO_H)}" shape-rendering="crispEdges" role="img" aria-label="Parallax">'
             + DRIFT
-            + f'<style>.word{{font-family:{WORD_FONT};font-weight:600;letter-spacing:0.01em;fill:{WORD_INK["light"]}}}'
-            f'@media (prefers-color-scheme: dark){{.word{{fill:{WORD_INK["dark"]}}}}}</style>'
+            + f'<style>.word{{font-family:{WORD_FONT};font-weight:600;letter-spacing:0.01em;fill:{WORD_INK[scheme]}}}</style>'
             + logo_body()
             + f'<text class="word" x="{LOGO_W + gap}" y="{LOGO_H / 2}" dominant-baseline="central" font-size="{size}">parallax</text>'
             "</svg>")
@@ -319,7 +323,7 @@ def _turn_keyframes(name: str, start: float, end: float, total: float, prop: str
     return f"@keyframes {name}{{{''.join(frames)}}}"
 
 
-def party_animated_svg() -> str:
+def party_animated_svg(scheme: str = "light") -> str:
     """party.svg where the agents take turns, in order, the way a task moves through them: one at a
     time bobs one pixel in two steps and its glow letters pulse, then the next; a pause; repeat; and
     with prefers-reduced-motion nothing moves."""
@@ -330,7 +334,7 @@ def party_animated_svg() -> str:
         css.append(_turn_keyframes(f"glow{n}", start, end, total, "opacity", "1", ["0.45", "1"], 0.375))
         css.append(f".a{n} .bust{{animation:bob{n} {total}s steps(1,end) infinite}}.a{n} .glow{{animation:glow{n} {total}s steps(1,end) infinite}}")
     css.append("@media (prefers-reduced-motion: reduce){.bust,.glow{animation:none}}")
-    svg = party_svg().replace("<style>", "<style>" + "".join(css), 1)
+    svg = party_svg(scheme).replace("<style>", "<style>" + "".join(css), 1)
     for n, key in enumerate(AGENTS):
         body = portrait_body(key)
         assert body in svg
@@ -340,7 +344,8 @@ def party_animated_svg() -> str:
 
 ASSETS = {"logo.svg": lambda: logo_svg(word=True), "mark.svg": lambda: logo_svg(), "party.svg": party_svg,
           "mark-animated.svg": lambda: logo_svg(animated=True), "flow.svg": flow_svg,
-          "lockup-animated.svg": lockup_svg, "party-animated.svg": party_animated_svg}
+          "lockup-animated-light.svg": lambda: lockup_svg("light"), "lockup-animated-dark.svg": lambda: lockup_svg("dark"),
+          "party-animated-light.svg": lambda: party_animated_svg("light"), "party-animated-dark.svg": lambda: party_animated_svg("dark")}
 
 
 def write_assets(folder: Path) -> list[Path]:

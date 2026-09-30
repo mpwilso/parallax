@@ -1,4 +1,9 @@
-<p align="center"><img src="docs/brand/lockup-animated.svg" alt="Parallax" height="72"></p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/lockup-animated-dark.svg">
+    <img src="docs/brand/lockup-animated-light.svg" alt="Parallax" height="72">
+  </picture>
+</p>
 
 [![tests](https://github.com/mpwilso/parallax/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/mpwilso/parallax/actions/workflows/tests.yml)
 
@@ -23,7 +28,10 @@ A local tool that runs Claude Code agents on your repo inside a sandbox, checks 
 
 ## The agents
 
-<img src="docs/brand/party-animated.svg" alt="Focus, Maker, Second Eye and Field" width="450">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/party-animated-dark.svg">
+  <img src="docs/brand/party-animated-light.svg" alt="Focus, Maker, Second Eye and Field" width="450">
+</picture>
 
 **Focus** drafts the intent and plan. **Maker** builds in the sandbox. **Second Eye** is the blind checker: it sees only the result, never the making. **Field** is the UI tester, which uses your app in a real browser and leaves tests behind. Here they take turns the way a task moves through them; in the UI a portrait moves only while its agent is working on that task, and everything else is still.
 

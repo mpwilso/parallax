@@ -95,10 +95,13 @@ def test_the_readme_images_and_the_ui_come_from_the_same_data():
         assert bundle["agents"][key]["svg"] in brand.party_svg()
     assert set(bundle["agents"]) == set(brand.AGENTS)
     assert set(brand.ASSETS) == {"logo.svg", "mark.svg", "party.svg", "mark-animated.svg", "flow.svg",
-                                 "lockup-animated.svg", "party-animated.svg"}
+                                 "lockup-animated-light.svg", "lockup-animated-dark.svg",
+                                 "party-animated-light.svg", "party-animated-dark.svg"}
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    for used in ("docs/brand/lockup-animated.svg", "docs/brand/party-animated.svg", "docs/brand/flow.svg"):
+    for used in ("docs/brand/lockup-animated-light.svg", "docs/brand/lockup-animated-dark.svg",
+                 "docs/brand/party-animated-light.svg", "docs/brand/party-animated-dark.svg", "docs/brand/flow.svg"):
         assert used in readme, used
+    assert not (ROOT / "docs" / "brand" / "lockup-animated.svg").exists() and not (ROOT / "docs" / "brand" / "party-animated.svg").exists()
     assert "```mermaid" not in readme and "# Parallax\n" not in readme  # the lockup is the heading
     social = (ROOT / "docs" / "brand" / "social.html").read_text(encoding="utf-8")
     assert brand.logo_body() in social and "Agents do the work. You make the calls." in social
@@ -138,7 +141,7 @@ def test_the_lockup_is_the_animated_mark_with_the_uis_wordmark():
     assert brand.logo_body() in svg and brand.DRIFT in svg  # the P and its drift, exactly as mark-animated.svg
     assert "@media (prefers-reduced-motion: reduce){.l1,.l2{animation:none}}" in svg
     assert 'font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-weight:600' in svg  # app.css --mono, .word
-    assert "fill:#1c1c1a" in svg and "@media (prefers-color-scheme: dark){.word{fill:#ecebe6}}" in svg  # app.css --ink
+    assert "fill:#1c1c1a" in svg and "fill:#ecebe6" in brand.lockup_svg("dark")  # app.css --ink, one per file
     assert 'aria-label="Parallax"' in svg
     for name in ("mark.svg", "mark-animated.svg", "logo.svg"):
         assert "parallax</text>" not in (ROOT / "docs" / "brand" / name).read_text() or name == "logo.svg"
@@ -169,3 +172,19 @@ def test_the_party_takes_turns_and_only_one_agent_moves_at_a_time():
     assert svg.count('class="agent a') == 4 and all(f".a{n} .bust{{animation:bob{n}" in svg for n in range(4))
     assert "steps(1,end)" in svg
     assert brand.party_svg() != svg and all(brand.portrait_body(k) in svg for k in brand.AGENTS)
+
+
+def test_images_on_the_page_never_pick_their_color_from_the_os():
+    """An image's prefers-color-scheme follows the viewer's OS, not their GitHub theme, so a wordmark
+    or a name could land dark on a dark page. Anything on the page background ships as a light and a
+    dark file, chosen by a <picture>; the flow diagram sits on its own tile with fixed colors."""
+    for name in ("lockup-animated-light.svg", "lockup-animated-dark.svg", "party-animated-light.svg",
+                 "party-animated-dark.svg", "party.svg", "flow.svg"):
+        assert "prefers-color-scheme" not in (ROOT / "docs" / "brand" / name).read_text(encoding="utf-8"), name
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    for light, dark in (("lockup-animated-light.svg", "lockup-animated-dark.svg"), ("party-animated-light.svg", "party-animated-dark.svg")):
+        block = re.search(r"<picture>(.*?)</picture>", readme[max(0, readme.index(dark) - 200):], re.S).group(1)
+        assert f'<source media="(prefers-color-scheme: dark)" srcset="docs/brand/{dark}">' in block
+        assert f'<img src="docs/brand/{light}"' in block
+    assert "#1c1c1a" in brand.lockup_svg("light") and "#ecebe6" in brand.lockup_svg("dark")
+    assert brand.NAME_INK["light"] in brand.party_animated_svg("light") and brand.NAME_INK["dark"] in brand.party_animated_svg("dark")

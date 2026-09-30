@@ -103,8 +103,8 @@ def test_the_lockup_word_fits_the_image(measured_lockup):
 
 @pytest.fixture(scope="module")
 def measured_lockup():
-    svg = (ROOT / "docs" / "brand" / "lockup-animated.svg").read_text(encoding="utf-8")
-    assert svg == brand.lockup_svg() + "\n"
+    svg = (ROOT / "docs" / "brand" / "lockup-animated-light.svg").read_text(encoding="utf-8")
+    assert svg == brand.lockup_svg("light") + "\n"
     with sync_playwright() as p:
         try:
             b = p.chromium.launch(executable_path=os.environ.get("PARALLAX_BROWSER") or None)
