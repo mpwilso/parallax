@@ -85,8 +85,8 @@ def test_second_eye_and_reticle_are_scored_on_each_broken_version_and_the_real_f
     assert [v["second_eye"] for v in r["versions"]] == ["catch", "miss", "miss"]
     assert [v["reticle"] for v in r["versions"]] == ["miss", "catch", "miss"]  # its asked test is of add
     assert all("reticle_with_inferred" not in v for v in r["versions"])  # its inferred outcome, clamp, has no test
-    assert r["real_fix"] == {"second_eye": "right", "findings": [], "test_only": [], "reticle": "right"}
-    assert r["versions"][0]["findings"] == ["blocker: wrong cap"]  # what Second Eye said, kept with the result
+    assert r["real_fix"] == {"second_eye": "right", "findings": [], "not_counted": [], "reticle": "right"}
+    assert r["versions"][0]["findings"] == ["blocker behavior: wrong cap"]  # what Second Eye said, kept with the result
     assert r["reticle_kept"] == {"asked": 1} and r["inferred"] == ["2"]
     assert r["cost_usd"] == pytest.approx(0.08)  # the intent and Reticle; the fake checker costs nothing
     # Second Eye's exact normal input, and never the hidden tests: in its brief or in Reticle's
@@ -111,39 +111,25 @@ def test_the_seeded_run_stops_before_a_case_the_budget_cant_cover(proj, upstream
     assert json.loads((out / "run.json").read_text())["done"] == []
 
 
-# Second Eye scored on behavior: no seeded version has tests, so "a test is missing" flags nothing ----
+# Second Eye scored on behavior and scope, by the kind it gives each finding -------------------------------
 
-@pytest.mark.parametrize("finding,only", [  # the first four are Second Eye's own words on real fixes in run 9ba608
-    ("The diff has no test. Outcome 5 requires a new test in tests/test_cachedmethod.py that runs the reproduction. "
-     "Nothing covers the fix, so a regression would go unnoticed.", True),
-    ("No regression test is in the diff. Outcome item 5 requires one in test/test_regression.py covering items 1 to 4.", True),
-    ("Outcome 4 requires a regression test for the reported table with psql and exact expected output. The diff adds no test.", True),
-    ("The diff has no test for the one-item list case or the `in` check (outcome 6). Nothing would fail without the change.", True),
-    ("The diff adds no test. The outcome requires a new test for the December case, such as step=(1,0,0) from "
-     "2012-12-25. Nothing in the diff would fail without the fix.", True),  # these three from the first rerun, 2dcb3c
-    ("The diff has no test changes. The outcome requires tests for `[^...]` matching. Nothing here would fail if the "
-     "fix were reverted.", True),
-    ("No tests are in the diff. The outcome requires a regression test for 10799 in tests/test_time.py, and updates "
-     "to any floor-based tests. None are present.", True),
-    ("Outcome 4 requires a regression test in tests/test_items.py for the reported example. It should check the "
-     "dumped text and the round trip.", True),  # these two from the second rerun, 221c3e
-    ("The diff has no test for the one-item list case. Tuples and generators are also untested.", True),
-    ("No tests in the diff. The closing bracket scan is not changed, so `[^]a]` is read wrong.", False),  # behavior too
-    ("Only the maxcolwidths block is guarded. The maxheadercolwidths block has the same pattern.", False),
-    ("The diff has no CHANGELOG entry, which outcome 6 requires.", False),
-])
-def test_a_finding_that_only_says_a_test_is_missing_is_told_apart(finding, only):
-    assert seeded.test_only(finding) is only
-
-
-def test_in_the_seeded_mode_second_eye_is_scored_on_behavior_not_on_missing_tests(proj, upstream):
-    no_test = "The diff has no test. Nothing covers the fix."
-    checker = FakeChecker(reviews=[blocker(no_test, ""), blocker("wrong cap", "calc.py:6"), Review("pass"), blocker(no_test, "")])
+def test_in_the_seeded_mode_second_eye_counts_only_behavior_and_scope_findings(proj, upstream):
+    """No seeded version has tests (they're the hidden ones), so a missing test would flag every one."""
+    from parallax.agents.base import Finding
+    no_test = Finding("major", "", "The diff has no test.", "missing_test")
+    paperwork = Finding("major", "CHANGELOG.md", "No changelog entry.", "housekeeping")
+    inferred = Finding("blocker", "calc.py:6", "clamp doesn't cap", "behavior", ["outcome 2"])  # 2 is inferred
+    checker = FakeChecker(reviews=[Review("fail", [no_test, paperwork]), blocker("wrong cap", "calc.py:6"),
+                                   Review("fail", [inferred]), Review("fail", [no_test])])
     out, _ = run(proj, upstream, checker, FakeReticle(TESTS))
     r = json.loads((out / "calc-2.json").read_text())
     assert [v["second_eye"] for v in r["versions"]] == ["miss", "catch", "miss"]
-    assert r["versions"][0]["test_only"] == [f"blocker: {no_test}"] and r["versions"][0]["findings"] == []
-    assert r["real_fix"]["second_eye"] == "right" and r["real_fix"]["test_only"] == [f"blocker: {no_test}"]
+    assert r["versions"][0]["not_counted"] == ["major missing_test: The diff has no test.",
+                                               "major housekeeping: No changelog entry."]
+    assert r["versions"][1]["findings"] == ["blocker behavior: wrong cap"]
+    assert r["versions"][2]["findings"] == [] and r["versions"][2]["not_counted"] == []  # its rule, by code: a note
+    assert r["real_fix"]["second_eye"] == "right" and r["real_fix"]["not_counted"] == ["major missing_test: The diff has no test."]
+    assert not hasattr(seeded, "test_only")  # no phrase matching: the kind decides
 
 
 def test_second_eye_alone_reruns_on_the_same_versions_reusing_the_intent_and_reticles_results(proj, upstream, monkeypatch):

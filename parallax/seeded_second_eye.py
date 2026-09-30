@@ -7,7 +7,7 @@ repo is read as files (its ledger and the task's intent.md), never loaded as a p
 was written by an older Parallax and may name settings since removed. The broken
 versions are made again by code (seeded.candidates is deterministic) and picked by name, and the
 real fix is the same. Only Second Eye is called, with its exact normal input, and it's scored on
-findings about behavior (seeded.second_eye_scored). No Focus, no Reticle, no hidden tests run.
+its blocking behavior and scope findings (seeded.second_eye_scored). No Focus, no Reticle, no hidden tests run.
 """
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ def rescore_case(case, run_id: str, r: dict, checker_for, model: str) -> dict:
         diff = seeded._git(repo, "diff", "--binary", base, tree, "--", ".", ":(exclude)docs/tasks/")
         rv = checker_for(CALL, model).check(review.brief(intent, review_text, "", diff))
         cost += rv.cost_usd or 0
-        return seeded.second_eye_scored(rv.findings, blocking)
+        return seeded.second_eye_scored(rv.findings, blocking, intent)
 
     out = {**r, "second_eye_from": run_id, "reticle_from": run_id, "versions": []}
     for v in r["versions"]:
@@ -67,10 +67,10 @@ def rescore_case(case, run_id: str, r: dict, checker_for, model: str) -> dict:
             raise ParallaxError(f"{case.id}: the version \"{v['broken']}\" can't be made again")
         se = judge(made[v["broken"]])
         out["versions"].append({**v, "second_eye": "catch" if se["flags"] else "miss", "findings": se["findings"],
-                                "test_only": se["test_only"]})
+                                "not_counted": se["not_counted"]})
     se = judge(seeded.fix_files(cache, case))
     out["real_fix"] = {**r["real_fix"], "second_eye": "false alarm" if se["flags"] else "right",
-                       "findings": se["findings"], "test_only": se["test_only"]}
+                       "findings": se["findings"], "not_counted": se["not_counted"]}
     out["cost_usd"] = round(cost, 4)
     return out
 

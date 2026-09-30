@@ -280,7 +280,7 @@ def test_a_finding_resting_on_an_asked_outcome_a_constraint_or_nothing_still_blo
     from parallax.agents.base import Finding
     proj, tid = _approved_with_inferred(repo)
     maker = ScriptedAgent(steps=[("write", "README.md", "x\n")])
-    checker = FakeChecker(reviews=[Review("fail", [Finding("major", "README.md:1", "wrong", "defect", cites)])] * 4)
+    checker = FakeChecker(reviews=[Review("fail", [Finding("major", "README.md:1", "wrong", "behavior", cites)])] * 4)
     build.run_build(proj, tid, lambda left, settings: maker, preflight_runner=good_probe)
     assert _check(proj, tid, maker, checker) == "disputed"  # it stays blocking, through the 3 reworks
     assert not [e for e in proj.ledger.entries() if e["kind"] == "verdict.downgraded"]
@@ -289,7 +289,28 @@ def test_a_finding_resting_on_an_asked_outcome_a_constraint_or_nothing_still_blo
 def test_enforce_reads_the_marks_and_an_unmarked_outcome_counts_as_asked():
     from parallax.agents.base import Finding
     intent = "## Outcome\n1. asked: a\n2. inferred: b\n3. c\n\n## Constraints\nnone\n"
-    findings = [Finding("blocker", "", "b", "defect", ["outcome 2"]), Finding("minor", "", "b too", "defect", ["outcome 2"]),
-                Finding("major", "", "c", "defect", ["outcome 3"])]
+    findings = [Finding("blocker", "", "b", "behavior", ["outcome 2"]), Finding("minor", "", "b too", "behavior", ["outcome 2"]),
+                Finding("major", "", "c", "behavior", ["outcome 3"])]
     counted, lowered = review.enforce(findings, intent, ("blocker", "major"))
     assert [f.severity for f in counted] == ["minor", "minor", "major"] and [x["from"] for x in lowered] == ["blocker"]
+
+
+def test_second_eyes_answer_is_pinned_each_finding_with_its_kind_and_what_it_cites():
+    """Its structured answer: since 2026-09-30 each finding says what it cites (checked by code against
+    the marks) and its kind (seeded scoring counts only behavior and scope). Before: kind was defect or
+    scope, and there was no cites."""
+    from parallax.agents import claude
+    item = claude.BLIND_SCHEMA["properties"]["findings"]["items"]
+    assert item == {
+        "type": "object",
+        "properties": {
+            "severity": {"type": "string", "enum": ["blocker", "major", "minor", "nit"]},
+            "kind": {"type": "string", "enum": ["behavior", "missing_test", "scope", "housekeeping"]},
+            "where": {"type": "string"},
+            "text": {"type": "string"},
+            "cites": {"type": "array", "items": {"type": "string", "pattern": "^(outcome [0-9]+|constraint)$"}},
+        },
+        "required": ["severity", "kind", "where", "text", "cites"],
+        "additionalProperties": False,
+    }
+    assert set(claude.BLIND_SCHEMA["required"]) == {"verdict", "findings", "not_looked_at"}

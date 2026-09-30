@@ -67,8 +67,10 @@ outcome the change doesn't meet may be mentioned only at a severity that doesn't
 as a reason to fail. An outcome with no mark counts as asked.
 Follow REVIEW.md's passes. Give each finding one of its severities, and where it is (path:line from the
 diff, or "" for the whole change). Findings are about the diff; don't restate the rules.
-Give each finding a kind: "scope" if the problem is that the change does something the outcome or the
-constraints don't allow (or leaves out something they require); "defect" for anything else.
+Give each finding one kind: "behavior" if the code does something wrong; "missing_test" if a test the
+change needs isn't there; "scope" if the change does something the outcome or the constraints don't allow
+(or leaves out something they require); "housekeeping" for a changelog entry, docs, a version number and
+the like.
 Give each finding what it cites: "outcome <n>" for each outcome it rests on, and "constraint" if it rests
 on a constraint. Leave it empty for a problem that rests on neither, like a plain bug. Code checks it: a
 blocking finding that cites only inferred outcomes becomes a note.
@@ -89,7 +91,7 @@ BLIND_SCHEMA = {
             "type": "object",
             "properties": {
                 "severity": {"type": "string", "enum": ["blocker", "major", "minor", "nit"]},
-                "kind": {"type": "string", "enum": ["defect", "scope"]},
+                "kind": {"type": "string", "enum": ["behavior", "missing_test", "scope", "housekeeping"]},
                 "where": {"type": "string"},
                 "text": {"type": "string"},
                 "cites": {"type": "array", "items": {"type": "string", "pattern": "^(outcome [0-9]+|constraint)$"}},
@@ -321,7 +323,7 @@ class ClaudeChecker:
         data, cost = asyncio.run(_structured(self.sdk, self.model, BLIND_PROMPT, brief, BLIND_SCHEMA,
                                              CheckerError, self.max_budget_usd))
         try:
-            findings = [Finding(str(f["severity"]), str(f.get("where", "")), str(f["text"]), str(f.get("kind", "defect")),
+            findings = [Finding(str(f["severity"]), str(f.get("where", "")), str(f["text"]), str(f.get("kind", "behavior")),
                                 [str(c) for c in f.get("cites") or []])
                         for f in data.get("findings", [])]
         except (KeyError, TypeError) as err:

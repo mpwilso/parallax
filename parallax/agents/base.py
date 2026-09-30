@@ -43,7 +43,9 @@ class Finding:
     severity: str  # one of REVIEW.md's severities: blocker, major, minor, nit
     where: str     # path:line, or "" when it's about the whole change
     text: str
-    kind: str = "defect"  # defect: it's wrong. scope: it does something the outcome or constraints don't allow
+    kind: str = "behavior"  # behavior: the code does something wrong. missing_test: a test it needs isn't there.
+    # scope: it does something the outcome or constraints don't allow, or leaves out what they require.
+    # housekeeping: a changelog entry, docs, a version number. Seeded scoring counts only behavior and scope
     cites: list[str] = field(default_factory=list)  # what it rests on: "outcome 3", "constraint"; empty for neither
 
 
