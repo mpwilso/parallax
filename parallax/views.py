@@ -175,11 +175,16 @@ def _card(project: Project, task_id: str) -> dict:
         actions = {"kind": "ready"}
     else:
         actions = {"kind": "none"}
-    merge = ""
+    merge, merge_note = "", ""
     if t["status"] == "accepted":
         from .accept import merge_command
         accepted = [e for e in project.ledger.entries() if e["kind"] == "task.accepted" and e["data"]["task"] == task_id]
         merge = merge_command(accepted[-1]) if accepted else ""
+        tested = [e for e in project.ledger.entries() if e["kind"] == "merge.tested" and e["data"].get("task") == task_id]
+        if tested and tested[-1]["data"]["ok"] is False and accepted:
+            merge_note = (f"Accepted, but its tests failed on the commit it would land, so "
+                          f"{accepted[-1]['data'].get('target') or 'the base branch'} didn't move. "
+                          f"First failure: {tested[-1]['reason']}. Fix that, then merge by hand:")
     unseen = [report["not_looked_at"]]
     if re.match(r"^see (Found|Details) \(\d+\)$", report["not_looked_at"]):
         where = "Found" if "Found" in report["not_looked_at"] else "Details"
@@ -201,7 +206,7 @@ def _card(project: Project, task_id: str) -> dict:
             "redraft": report["bottom"].startswith("Ready again after your reject") or any(
                 i.startswith("you rejected the last version") for i in report["sections"].get("Changed since last time", [])),
             "details": [_cited(i) for i in report["sections"].get("Details", [])],
-            "actions": actions, "merge": merge, "files": files,
+            "actions": actions, "merge": merge, "merge_note": merge_note, "files": files,
             "live": live.line(project, task_id) if state in ("drafting", "building", "checking") else "",
             "stages": live.stages(status.attempt(entries, task_id), waiting=state not in ("drafting", "building", "checking")),
             "strip": progress.strip(project, task_id, dec), "spend": progress.spend(project, task_id),

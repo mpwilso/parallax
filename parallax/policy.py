@@ -21,6 +21,7 @@ DEFAULT_UI_TESTER = {
 }
 DEFAULT_RETICLE = {"enabled": True, "model": "", "max_usd": 0.5}  # on since the seeded eval (docs/evals.md)
 DEFAULT_ASK = {"model": "", "budget_usd": 0.25}  # the Ask box: per task, apart from its cap
+DEFAULT_MERGE = {"test_command": ""}  # Accept and merge: the project's own tests, run before the base branch moves
 DEFAULT_CHECK = {
     "model": "claude-sonnet-5-5",  # a different Claude model from the maker's; the eval measures it
     "diff_cap": 400,               # changed lines a blind review can take reliably
@@ -79,6 +80,9 @@ max_usd = 0.50                 # the most one Reticle run may spend, and what a 
 [ask]
 model = ""                     # empty: the drafters' model. the Ask box answers from one task's record, read-only
 budget_usd = 0.25              # what questions about one task may spend in all, apart from the task's cap
+
+[merge]
+test_command = ""              # Accept and merge runs this on the exact commit it would land, first; empty: no run
 """
 
 
@@ -109,7 +113,7 @@ class Policy:
     def __init__(self, limits: dict[str, int] | None = None, budget: dict[str, float] | None = None,
                  build: dict[str, str] | None = None, check: dict | None = None, launch: dict | None = None,
                  ui_tester: dict | None = None, draft: dict | None = None, reticle: dict | None = None,
-                 ask: dict | None = None):
+                 ask: dict | None = None, merge: dict | None = None):
         limits = dict(limits or {})
         unknown = set(limits) - set(DEFAULT_LIMITS)
         if unknown:
@@ -183,8 +187,14 @@ class Policy:
         v = self.ask["budget_usd"]
         if not isinstance(v, (int, float)) or isinstance(v, bool) or v <= 0:
             raise ValueError("[ask] budget_usd must be a dollar amount above 0")
+        merge = dict(merge or {})
+        if set(merge) - set(DEFAULT_MERGE):
+            raise ValueError(f"unknown [merge] settings: {sorted(set(merge) - set(DEFAULT_MERGE))}")
+        self.merge = {**DEFAULT_MERGE, **merge}
+        if not isinstance(self.merge["test_command"], str):
+            raise ValueError("[merge] test_command must be a shell command, or empty for none")
 
-    TABLES = ("limits", "budget", "build", "check", "launch", "ui_tester", "draft", "reticle", "ask")
+    TABLES = ("limits", "budget", "build", "check", "launch", "ui_tester", "draft", "reticle", "ask", "merge")
 
     @classmethod
     def from_dict(cls, data: dict) -> "Policy":

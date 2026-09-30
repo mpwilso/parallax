@@ -21,7 +21,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from . import lifecycle, lint, record, sandbox, secretscan, tree
+from . import lifecycle, lint, memcap, record, sandbox, secretscan, tree
 from .core import ParallaxError, Project, refuse_inside_task
 
 
@@ -128,10 +128,41 @@ def accept(project: Project, task_id: str, reason: str = "") -> dict:
                                  ledger_head=head, docs_moved_to=str(kept))
 
 
-def merge_now(project: Project, task_id: str) -> str:
+TEST_TIMEOUT = 3600  # seconds the project's tests may take before the merge gives up on them
+
+
+def run_tests(project: Project, commit: str, command: str) -> tuple[int, str]:
+    """The project's test command on exactly this commit: a throwaway worktree outside the repo, under
+    the memory cap. Returns (exit code, output). The worktree is removed whatever happens."""
+    folder = sandbox.data_home() / "merge-check" / commit[:12]
+    if folder.exists():
+        subprocess.run(["git", "-C", str(project.root), "worktree", "remove", "--force", str(folder)], capture_output=True)
+        shutil.rmtree(folder, ignore_errors=True)
+    folder.parent.mkdir(parents=True, exist_ok=True)
+    _git(project.root, "worktree", "add", "--detach", str(folder), commit)
+    try:
+        out = memcap.run(["bash", "-c", command], memcap.SUITE, what="the tests", timeout=TEST_TIMEOUT, capture=True, cwd=folder)
+        return out.code, out.output if not out.timed_out else out.output + f"\nthe tests ran past {TEST_TIMEOUT // 60} minutes"
+    finally:
+        subprocess.run(["git", "-C", str(project.root), "worktree", "remove", "--force", str(folder)], capture_output=True)
+
+
+TEST_RUNNER = run_tests  # tests replace this; they never run a real suite
+
+
+def first_failure(output: str, code: int) -> str:
+    """The line a person needs first: pytest's first FAILED or ERROR line, else the last line."""
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    hit = next((line for line in lines if line.startswith(("FAILED ", "ERROR "))), None)
+    return " ".join((hit or (lines[-1] if lines else f"exit {code}")).split())[:240]
+
+
+def merge_now(project: Project, task_id: str, runner=None) -> str:
     """Your click on Accept and merge, after accept: fast-forward the branch the task was based on to
-    the accepted commit, locally, and only fast-forward. Raises with one line saying why it can't:
-    then nothing changed, and the merge command is still yours to run. Never pushes."""
+    the accepted commit, locally, and only fast-forward. First, if the policy names the project's
+    test command ([merge] test_command), it runs on exactly that commit, and a failure stops here.
+    Raises with one line saying why it can't: then the base branch hasn't moved, and the merge
+    command is still yours to run. Never pushes."""
     acc = _last(project, task_id, "task.accepted")
     if acc is None:
         raise ParallaxError(f"task {task_id} isn't accepted yet")
@@ -140,6 +171,21 @@ def merge_now(project: Project, task_id: str) -> str:
                         capture_output=True, text=True).stdout.strip()
     if not d.get("target") or on != d["target"]:
         raise ParallaxError(f"can't merge from here: your checkout is on {on or 'no branch'}, not {d.get('target') or 'a branch'}")
+    if subprocess.run(["git", "-C", str(project.root), "merge-base", "--is-ancestor", "HEAD", d["commit"]],
+                      capture_output=True).returncode != 0:
+        raise ParallaxError(f"can't fast-forward {d['target']} to it: {d['target']} has moved on since the task began")
+    command = project.policy.merge["test_command"].strip()
+    if command:  # the project's own tests, on the exact commit the base branch would become
+        code, output = (runner or TEST_RUNNER)(project, d["commit"], command)
+        first = first_failure(output, code) if code else ""
+        project.ledger.append("merge.tested", "parallax", first or "passed", task=task_id, commit=d["commit"],
+                              command=command, exit=code, ok=code == 0)
+        if code:
+            raise ParallaxError(f"its tests failed on the commit it would land, so {d['target']} didn't move. "
+                                f"first failure: {first}. fix that, then merge by hand")
+    else:
+        project.ledger.append("merge.tested", "parallax", "no test command is configured", task=task_id, commit=d["commit"],
+                              command="", exit=None, ok=None)
     out = subprocess.run(["git", "-C", str(project.root), "merge", "--ff-only", "-q", d["branch"]], capture_output=True, text=True)
     if out.returncode != 0:
         why = next((line.strip() for line in (out.stderr or out.stdout).splitlines() if line.strip()), "git refused")
@@ -147,7 +193,9 @@ def merge_now(project: Project, task_id: str) -> str:
     project.ledger.append("merge.clicked", "human", "Accept and merge: fast-forward, local, nothing pushed", task=task_id,
                           commit=d["commit"], target=d["target"])
     confirm_merges(project)
-    return f"merged {task_id} into {d['target']}, fast-forward. nothing was pushed."
+    ran = f"its tests passed first ({command}); " if command else \
+        "no test command is configured ([merge] test_command), so no tests ran first; "
+    return f"merged {task_id} into {d['target']}, fast-forward: {ran}nothing was pushed."
 
 
 def merge_command(accepted: dict) -> str:

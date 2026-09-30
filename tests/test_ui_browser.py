@@ -540,7 +540,7 @@ def test_accept_and_merge_merges_with_one_click_and_says_so(page, proj):
     tid, _ = run_to_ready(proj)
     open_card(page, tid)
     page.locator("#opt-merge").click()
-    expect(page.locator("#status")).to_contain_text("fast-forward. nothing was pushed.", timeout=WAIT)
+    expect(page.locator("#status")).to_contain_text("nothing was pushed.", timeout=WAIT)
     assert proj.task(tid)["status"] == "merged"
     expect(page.locator("details.done .row")).to_contain_text("Merged", timeout=WAIT)
 

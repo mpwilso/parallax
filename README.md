@@ -57,7 +57,7 @@ You can start work from the app or the terminal, and pick it back up several way
 2. **Type the task** into the box at the top and press Enter. That's all.
 3. **Watch the list.** Waiting on you: the only part that needs you, riskiest first. Working: which agent has each task. Each row shows its stages, what it has spent against its cap, and for how long. Done: folded away, with each task's outcome, cost and touches. With no card open, the page says how it's going.
 4. **Open a card.** It shows the stages, the bottom line, the one question with its options and which one is recommended, what nobody looked at, and the evidence, with the change, the intent and the plan one click away. Ask about the task in the box on the card: a model answers from that task's record only, and can't change anything.
-5. **Accept, or accept and merge.** Accept commits the reviewed change to the task's branch and shows the merge command, which you run. Accept and merge also fast-forwards your base branch here; if it can't, it says why in one line and leaves the merge to you. Parallax never merges without your click, and never pushes.
+5. **Accept, or accept and merge.** Accept commits the reviewed change to the task's branch and shows the merge command, which you run. Accept and merge also fast-forwards your base branch here, after running your project's tests on the exact commit it would land (`[merge] test_command` in the policy; Parallax's own is `scripts/test.sh`). If they fail, or it can't fast-forward, your base branch doesn't move, and the card says why and leaves the merge to you. Parallax never merges without your click, and never pushes.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/ui-runs/final-ui/ready-dark.png">

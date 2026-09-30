@@ -100,3 +100,14 @@ def reticle_off_unless_turned_on(monkeypatch):
     assert text != SHIPPED["policy"], "the default policy's [reticle] table moved: update this fixture"
     monkeypatch.setattr(_core, "DEFAULT_POLICY", text)
     monkeypatch.setattr(_policy, "DEFAULT_RETICLE", {**SHIPPED["reticle"], "enabled": False})
+
+
+@pytest.fixture(autouse=True)
+def no_real_merge_tests(monkeypatch):
+    """Accept and merge runs the project's test command first. In a test that would be this very
+    suite, so a test fakes accept.TEST_RUNNER, or fails loudly here."""
+    from parallax import accept
+
+    def refuse(project, commit, command):
+        raise AssertionError(f"a test reached the real pre-merge test run ({command}). fake accept.TEST_RUNNER")
+    monkeypatch.setattr(accept, "TEST_RUNNER", refuse)

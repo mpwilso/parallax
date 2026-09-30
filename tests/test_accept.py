@@ -208,7 +208,8 @@ def test_accept_and_merge_fast_forwards_the_base_branch_and_never_pushes(repo, m
     out = act(proj, "/api/accept", {"task": tid, "merge": True})
     [acc] = kinds(proj, "task.accepted")
     target = acc["data"]["target"]
-    assert out == {"message": f"merged {tid} into {target}, fast-forward. nothing was pushed.", "merged": True}
+    assert out == {"message": f"merged {tid} into {target}, fast-forward: no test command is configured ([merge] "
+                              "test_command), so no tests ran first; nothing was pushed.", "merged": True}
     assert git(repo, "rev-parse", "HEAD").stdout.strip() == acc["data"]["commit"] and (repo / "README.md").read_text() == "ok\n"
     assert proj.task(tid)["status"] == "merged"
     [click] = kinds(proj, "merge.clicked")
@@ -240,3 +241,93 @@ def test_merge_now_wont_merge_into_any_branch_but_the_one_accept_recorded(repo):
     with pytest.raises(ParallaxError, match=f"can't merge from here: your checkout is on elsewhere, not {target}"):
         merge_now(proj, tid)
     assert proj.task(tid)["status"] == "accepted" and not kinds(proj, "merge.clicked")
+
+
+# Accept and merge runs the project's tests first, on the exact commit it would land ------------------------
+
+def _with_merge_tests(repo, proj, command="make test"):
+    from parallax.core import POLICY_FILE
+    policy = repo / POLICY_FILE
+    policy.write_text(policy.read_text().replace('test_command = ""              # Accept and merge',
+                                                 f'test_command = "{command}"              # Accept and merge'))
+    proj.reload_policy()
+    assert proj.policy.merge["test_command"] == command
+
+
+class Runner:
+    def __init__(self, code, output):
+        self.code, self.output, self.calls = code, output, []
+
+    def __call__(self, project, commit, command):
+        self.calls.append((commit, command))
+        return self.code, self.output
+
+
+def test_accept_and_merge_runs_the_projects_tests_on_the_commit_it_would_land_then_merges(repo, monkeypatch):
+    from parallax import accept as acc_mod
+    from parallax.ui import act
+    proj, tid, wt = ready(repo)
+    _with_merge_tests(repo, proj)
+    runner = Runner(0, "432 passed in 150s")
+    monkeypatch.setattr(acc_mod, "TEST_RUNNER", runner)
+    out = act(proj, "/api/accept", {"task": tid, "merge": True})
+    [acc] = kinds(proj, "task.accepted")
+    assert runner.calls == [(acc["data"]["commit"], "make test")]  # exactly the commit the base branch becomes
+    assert out["message"] == (f"merged {tid} into {acc['data']['target']}, fast-forward: its tests passed first "
+                              "(make test); nothing was pushed.")
+    assert proj.task(tid)["status"] == "merged"
+    [t] = kinds(proj, "merge.tested")
+    assert (t["data"]["ok"], t["data"]["exit"], t["data"]["commit"]) == (True, 0, acc["data"]["commit"])
+
+
+def test_a_failing_pre_merge_run_leaves_the_base_branch_and_the_card_says_what_failed(repo, monkeypatch):
+    from parallax import accept as acc_mod, views
+    from parallax.ui import act
+    proj, tid, wt = ready(repo)
+    _with_merge_tests(repo, proj, "scripts/test.sh")
+    before = git(repo, "rev-parse", "HEAD").stdout.strip()
+    monkeypatch.setattr(acc_mod, "TEST_RUNNER", Runner(1, "....F\nFAILED tests/test_docs.py::test_no_placeholder - "
+                                                          "AssertionError: <what>\n1 failed, 431 passed in 191s\n"))
+    out = act(proj, "/api/accept", {"task": tid, "merge": True})
+    [acc] = kinds(proj, "task.accepted")
+    target, commit = acc["data"]["target"], acc["data"]["commit"]
+    first = "FAILED tests/test_docs.py::test_no_placeholder - AssertionError: <what>"
+    assert out["message"] == (f"accepted {tid} as {commit[:7]}, but its tests failed on the commit it would land, so "
+                              f"{target} didn't move. first failure: {first}. fix that, then merge by hand. merge it yourself:")
+    assert out["merge"] == f"git merge --ff-only {proj.task(tid)['branch']}"
+    assert git(repo, "rev-parse", "HEAD").stdout.strip() == before  # the base branch didn't move
+    assert proj.task(tid)["status"] == "accepted" and not kinds(proj, "merge.clicked")  # accepted, on its own branch
+    card = views.card(proj, tid)
+    assert card["merge_note"] == (f"Accepted, but its tests failed on the commit it would land, so {target} didn't move. "
+                                  f"First failure: {first}. Fix that, then merge by hand:")
+    assert card["merge"] == out["merge"]
+    report = show_report(proj, tid)
+    assert f"but its tests failed before the merge, so {target} didn't move" in report
+    assert f"Its tests failed on that commit: {first}." in report
+
+
+def test_with_no_test_command_configured_the_merge_goes_ahead_and_says_so(repo, monkeypatch):
+    from parallax.ui import act
+    proj, tid, wt = ready(repo)  # the default policy names none; conftest refuses any real run
+    out = act(proj, "/api/accept", {"task": tid, "merge": True})
+    assert "no test command is configured ([merge] test_command), so no tests ran first" in out["message"]
+    assert proj.task(tid)["status"] == "merged"
+    assert "No test command is configured ([merge] test_command), so it merged without a test run." in show_report(proj, tid)
+
+
+def test_the_real_runner_uses_a_throwaway_worktree_at_that_commit_under_the_cap(repo):
+    """Not the suite: a command that says where it ran. The worktree is gone afterwards."""
+    from parallax import accept as acc_mod, sandbox
+    proj, tid, wt = ready(repo)
+    commit = accept(proj, tid)["data"]["commit"]
+    code, output = acc_mod.run_tests(proj, commit, 'git rev-parse HEAD; echo "cap=$PARALLAX_MEMORY_CAP"; exit 3')
+    assert code == 3 and output.splitlines()[:2] == [commit, f"cap={4 * 1024 ** 3}"]  # that commit, the memory cap on
+    assert not (sandbox.data_home() / "merge-check" / commit[:12]).exists()
+    assert "merge-check" not in git(repo, "worktree", "list").stdout
+    assert acc_mod.first_failure("a\nFAILED tests/x.py::t - boom\nb\n", 1) == "FAILED tests/x.py::t - boom"
+    assert acc_mod.first_failure("", 2) == "exit 2"
+
+
+def show_report(proj, tid):
+    from parallax import show
+    return show.report(proj, tid)

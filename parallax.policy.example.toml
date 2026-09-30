@@ -47,3 +47,6 @@ max_usd = 0.50                 # the most one Reticle run may spend, and what a 
 [ask]
 model = ""                     # empty: the drafters' model. the Ask box answers from one task's record, read-only
 budget_usd = 0.25              # what questions about one task may spend in all, apart from the task's cap
+
+[merge]
+test_command = ""              # Accept and merge runs this on the exact commit it would land, first; empty: no run

@@ -416,7 +416,7 @@ function filesTable(files) {
 function actions(c) {
   if (c.merge) {
     return el("section", { class: "decide", "aria-label": "Merge" },
-      el("p", { class: "question" }, "Accepted. Merging is yours: run this in your repo's folder."),
+      el("p", { class: "question" }, c.merge_note || "Accepted. Merging is yours: run this in your repo's folder."),
       el("div", { class: "merge" }, el("code", { id: "merge" }, c.merge),
         el("button", { "data-focus": "copy", onclick: copy }, "Copy")));
   }

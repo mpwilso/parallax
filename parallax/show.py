@@ -276,11 +276,24 @@ def report(project: Project, task_id: str) -> str:
     if status in ("accepted", "merged"):
         from .accept import merge_command
         acc = _last(entries, "task.accepted")
+        tested = _last(entries, "merge.tested")
+        ran = [] if not tested else [
+            f"Its tests passed on that commit before the merge ({tested['data']['command']}). (ledger {tested['id']})"
+            if tested["data"]["ok"] else
+            f"No test command is configured ([merge] test_command), so it merged without a test run. (ledger {tested['id']})"
+            if tested["data"]["ok"] is None else
+            f"Its tests failed on that commit: {tested['reason'].rstrip('.')}. (ledger {tested['id']})"]
         if status == "merged":
             return lint.report("FYI", f"Task {task_id} was accepted as {acc['data']['commit'][:7]} and you merged it unchanged.",
-                               "nothing", "nothing waits on you.", [f"merge confirmed (ledger {_last(entries, 'merge.confirmed')['id']})"])
+                               "nothing", "nothing waits on you.",
+                               [f"merge confirmed (ledger {_last(entries, 'merge.confirmed')['id']})"] + ran)
+        if tested and tested["data"]["ok"] is False:
+            return lint.report("Decision needed", lint.one_sentence(
+                f"Task {task_id} was accepted as {acc['data']['commit'][:7]}, but its tests failed before the merge, "
+                f"so {acc['data'].get('target') or 'the base branch'} didn't move"),
+                "nothing", f"you fix that, then run {merge_command(acc)}.", [f"accepted (ledger {acc['id']})"] + ran)
         return lint.report("Decision needed", f"Task {task_id} was accepted as {acc['data']['commit'][:7]}; merging is yours.",
-                           "nothing", f"you run {merge_command(acc)}.", [f"accepted (ledger {acc['id']})"])
+                           "nothing", f"you run {merge_command(acc)}.", [f"accepted (ledger {acc['id']})"] + ran)
     if status in ("drafting", "running", "checking", "reworking"):
         cycles = sum(e["kind"] == "rework.started" for e in entries)
         more = f" (rework {cycles} of {project.policy.check['rework_cap']})" if cycles else ""
