@@ -265,14 +265,17 @@ def test_progress_lines_are_out_as_they_happen(proj, upstream, monkeypatch):
                          "plus 10%) of the $1.00 budget.",), {"flush": True})]
 
 
-def test_both_committed_summaries_regenerate_from_their_json():
-    """The committed runs' summaries are what the summary code writes from their JSON today."""
+def test_every_run_summary_regenerates_from_its_json():
+    """Each run's summary is what the summary code for its mode writes from its JSON today. A seeded
+    run has its own summary: checking it against the do pipeline's one failed on 9ba608."""
+    from parallax import seeded
     root = Path(__file__).resolve().parents[1]
     for run_dir in sorted((root / evals.RESULTS_DIR).glob("*/run.json")):
         out = run_dir.parent
         header = json.loads(run_dir.read_text())
         results = [json.loads((out / f"{c}.json").read_text()) for c in header["done"]]
-        assert (out / "summary.md").read_text() == evals.summary(root, out, header, results), out.name
+        summary = seeded.summary if header.get("mode") == "seeded" else evals.summary
+        assert (out / "summary.md").read_text() == summary(root, out, header, results), out.name
 
 
 # the hidden tests stay hidden ------------------------------------------------------------------------
