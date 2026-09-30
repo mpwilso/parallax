@@ -184,7 +184,7 @@ FLOW_STEPS = [  # (text, portraits, side note)
     ("Intake: the UI's box, or parallax do", (), ""),
     ("Focus drafts the intent and plan", ("focus",), "misfit: redraft, up to 2"),
     ("Plan checked against the intent, by code", (), ""),
-    ("Launch rule", (), "over the limit, or crosses the boundary: asks you"),
+    ("Launch rule", (), "asks you if over the limit or crossing the boundary"),
     ("Maker builds in the sandbox", ("maker",), ""),
     ("Check: your tests, Second Eye, Field", ("second_eye", "field"), "findings: rework, up to 3"),
     ("One card: Ready, or one decision", (), ""),
@@ -218,14 +218,14 @@ def _wrap(text: str, size: float, width: float) -> list[str]:
 
 def flow_svg() -> str:
     """How a task moves, drawn: sized from the text, on the brand tile, portraits from the same data."""
-    W, size, note_size = 600, 13.5, 11
-    pad_x, box_h, gap, pic = 16, 42, 26, 24
+    W, size, note_size = 900, 16, 13   # the README column's width, and its body text size
+    pad_x, box_h, gap, pic = 18, 50, 30, 28
     widest = max(_text_width(text, size) + 2 * pad_x + len(pics) * (pic + 8) for text, pics, _ in FLOW_STEPS)
     box_w = int(widest + 0.5)
     col_x = (W - box_w) // 2
-    note_x = col_x + box_w + 14
-    note_w = W - note_x - 12
-    top = 26
+    note_x = col_x + box_w + 16
+    note_w = W - note_x - 10
+    top = 30
     parts = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {{H}}" width="{W}" height="{{H}}" '
              f'role="img" aria-label="How a task moves: from your words through Focus, the plan check, the launch rule, '
              f'Maker, the check and one card to your accept and your merge, every step on the ledger" '
@@ -262,21 +262,85 @@ def flow_svg() -> str:
     # the bracket on the left for the steps that run without you, with a short label along it
     first, last = WITHOUT_YOU
     by1, by2 = centers[first] - box_h / 2, centers[last] + box_h / 2
-    bx = col_x - 14
+    bx = col_x - 16
     parts.append(f'<path class="bracket" d="M{bx + 6} {by1} H{bx} V{by2} H{bx + 6}" fill="none" stroke="{FLOW_COLORS["line"]}" stroke-width="1.5"/>')
-    lx, ly = bx - 8, (by1 + by2) / 2
-    parts.append(f'<text class="bracket-label" x="{lx}" y="{ly:.1f}" transform="rotate(-90 {lx} {ly:.1f})" text-anchor="middle" '
-                 f'dominant-baseline="central" font-size="{note_size}" fill="{FLOW_COLORS["muted"]}">runs without you</text>')
-    ly2 = y - gap + 24
+    parts.append(f'<text class="bracket-label" x="{bx + 6}" y="{by1 - 12:.1f}" text-anchor="end" dominant-baseline="central" '
+                 f'font-size="{note_size}" fill="{FLOW_COLORS["muted"]}">runs without you</text>')
+    ly2 = y - gap + 28
     parts.append(f'<text class="ledger" x="{W / 2}" y="{ly2}" text-anchor="middle" dominant-baseline="central" font-size="{note_size + 1}" '
                  f'fill="{FLOW_COLORS["muted"]}">Every step is written to the hash-chained ledger.</text>')
-    H = int(ly2 + 22)
+    H = int(ly2 + 26)
     parts.append("</svg>")
     return "".join(parts).replace("{H}", str(H))
 
 
+# the lockup: the animated P with the word beside it, in the UI's own wordmark font and color ----------------
+
+WORD_FONT = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"  # app.css --mono, the header's .word
+WORD_INK = {"light": "#1c1c1a", "dark": "#ecebe6"}  # app.css --ink in each scheme, which .word inherits
+WORD_EM = 0.66  # a monospace advance is about 0.6em; the lockup test measures the real thing
+
+
+def lockup_svg() -> str:
+    """The animated P (as mark-animated.svg) and "parallax" beside it, centred on the P, sized from the text."""
+    size = 10.5
+    word_w = WORD_EM * size * len("parallax")
+    gap = 5
+    w = LOGO_W + gap + word_w + 2
+    height = 72
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w:.1f} {LOGO_H}" height="{height}" '
+            f'width="{round(height * w / LOGO_H)}" shape-rendering="crispEdges" role="img" aria-label="Parallax">'
+            + DRIFT
+            + f'<style>.word{{font-family:{WORD_FONT};font-weight:600;letter-spacing:0.01em;fill:{WORD_INK["light"]}}}'
+            f'@media (prefers-color-scheme: dark){{.word{{fill:{WORD_INK["dark"]}}}}}</style>'
+            + logo_body()
+            + f'<text class="word" x="{LOGO_W + gap}" y="{LOGO_H / 2}" dominant-baseline="central" font-size="{size}">parallax</text>'
+            "</svg>")
+
+
+TURN, PAUSE = 1.5, 1.5  # seconds each agent moves, and the rest with all four still
+
+
+def party_windows() -> list[tuple[float, float]]:
+    """(start, end) in seconds of each agent's turn, in order; they never overlap."""
+    return [(n * TURN, (n + 1) * TURN) for n in range(len(AGENTS))]
+
+
+def _turn_keyframes(name: str, start: float, end: float, total: float, prop: str, rest: str, moves: list[str], step: float) -> str:
+    """Keyframes that hold `rest` outside [start, end) and alternate `moves` inside it, every `step` seconds."""
+    frames, t = [f"0%{{{prop}:{rest}}}"], start
+    n = 0
+    while t < end - 1e-9:
+        frames.append(f"{t / total * 100:.3f}%{{{prop}:{moves[n % len(moves)]}}}")
+        t += step
+        n += 1
+    frames.append(f"{end / total * 100:.3f}%{{{prop}:{rest}}}")
+    frames.append(f"100%{{{prop}:{rest}}}")
+    return f"@keyframes {name}{{{''.join(frames)}}}"
+
+
+def party_animated_svg() -> str:
+    """party.svg where the agents take turns, in order, the way a task moves through them: one at a
+    time bobs one pixel in two steps and its glow letters pulse, then the next; a pause; repeat; and
+    with prefers-reduced-motion nothing moves."""
+    total = len(AGENTS) * TURN + PAUSE
+    css = []
+    for n, (start, end) in enumerate(party_windows()):
+        css.append(_turn_keyframes(f"bob{n}", start, end, total, "transform", "translateY(0)", ["translateY(-1px)", "translateY(0)"], 0.3))
+        css.append(_turn_keyframes(f"glow{n}", start, end, total, "opacity", "1", ["0.45", "1"], 0.375))
+        css.append(f".a{n} .bust{{animation:bob{n} {total}s steps(1,end) infinite}}.a{n} .glow{{animation:glow{n} {total}s steps(1,end) infinite}}")
+    css.append("@media (prefers-reduced-motion: reduce){.bust,.glow{animation:none}}")
+    svg = party_svg().replace("<style>", "<style>" + "".join(css), 1)
+    for n, key in enumerate(AGENTS):
+        body = portrait_body(key)
+        assert body in svg
+        svg = svg.replace(body, f'<g class="agent a{n}"><g class="bust">{body}</g></g>', 1)
+    return svg
+
+
 ASSETS = {"logo.svg": lambda: logo_svg(word=True), "mark.svg": lambda: logo_svg(), "party.svg": party_svg,
-          "mark-animated.svg": lambda: logo_svg(animated=True), "flow.svg": flow_svg}
+          "mark-animated.svg": lambda: logo_svg(animated=True), "flow.svg": flow_svg,
+          "lockup-animated.svg": lockup_svg, "party-animated.svg": party_animated_svg}
 
 
 def write_assets(folder: Path) -> list[Path]:

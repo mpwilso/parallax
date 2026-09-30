@@ -1,5 +1,6 @@
 """docs/brand/flow.svg, rendered in Chromium: every text fits its box with room, nothing overlaps."""
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -84,16 +85,49 @@ def test_nothing_overlaps_except_a_portrait_on_its_own_box(measured):
             assert not overlap(a, b), f"{name_a} overlaps {name_b}: {a} vs {b}"
 
 
+def test_notes_stay_on_at_most_two_lines_and_nothing_is_rotated():
+    svg = brand.flow_svg()
+    assert "rotate(" not in svg, "a label is rotated"
+    for m in re.finditer(r'<text class="note"[^>]*>(.*?)</text>', svg):
+        lines = m.group(1).count("<tspan")
+        assert lines <= 2, f"a side note wraps past two lines: {re.sub('<[^>]+>', '', m.group(1))!r}"
+    assert 'class="bracket-label"' in svg and 'text-anchor="end"' in svg
+
+
+def test_the_lockup_word_fits_the_image(measured_lockup):
+    word, image = measured_lockup["word"], measured_lockup["image"]
+    assert inside(word, image, 1), f"the word spills the lockup: {word} in {image}"
+    assert not overlap(word, measured_lockup["p"]), "the word runs into the P"
+    assert abs((word["t"] + word["b"]) / 2 - (image["t"] + image["b"]) / 2) < 4, "the word isn't centred on the P"
+
+
+@pytest.fixture(scope="module")
+def measured_lockup():
+    svg = (ROOT / "docs" / "brand" / "lockup-animated.svg").read_text(encoding="utf-8")
+    assert svg == brand.lockup_svg() + "\n"
+    with sync_playwright() as p:
+        try:
+            b = p.chromium.launch(executable_path=os.environ.get("PARALLAX_BROWSER") or None)
+        except Exception as err:
+            pytest.skip(f"Chromium can't start: {str(err).splitlines()[0]}")
+        pg = b.new_page(viewport={"width": 800, "height": 300})
+        pg.set_content(f'<html><body style="margin:0;padding:24px;background:#fff">{svg}</body></html>')
+        data = pg.evaluate("""() => { const svg = document.querySelector('svg');
+            const box = e => { const r = e.getBoundingClientRect(); return {l: r.left, t: r.top, r: r.right, b: r.bottom}; };
+            return {image: box(svg), word: box(svg.querySelector('.word')), p: box(svg.querySelector('.l1'))}; }""")
+        b.close()
+    return data
+
+
 def test_notes_sit_beside_their_boxes():
     """A side note is vertically centered on the box it belongs to, in the column to the right."""
     svg = brand.flow_svg()
-    import re
     boxes = {m.group(1): (float(m.group(2)), float(m.group(3))) for m in
              re.finditer(r'data-step="(\d+)"><rect class="box" x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"', svg)}
     for m in re.finditer(r'<text class="note" data-step="(\d+)" x="([\d.]+)" y="([\d.]+)"', svg):
         step, x, y = m.group(1), float(m.group(2)), float(m.group(3))
         bx, by = boxes[step]
-        assert x > bx + 300, "the note is right of its box"
+        assert x > bx + 400, "the note is right of its box"
         lines = svg[m.end():].split("</text>", 1)[0].count("<tspan")
-        centre = y + (lines - 1) * 11 * 1.3 / 2
-        assert abs(centre - (by + 21)) < 1.0, f"note {step} isn't centred on its box"
+        centre = y + (lines - 1) * 13 * 1.3 / 2
+        assert abs(centre - (by + 25)) < 1.0, f"note {step} isn't centred on its box"

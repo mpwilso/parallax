@@ -1,6 +1,4 @@
-<p align="center"><img src="docs/brand/mark-animated.svg" alt="" width="70" height="80"></p>
-
-# Parallax
+<p align="center"><img src="docs/brand/lockup-animated.svg" alt="Parallax" height="72"></p>
 
 [![tests](https://github.com/mpwilso/parallax/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/mpwilso/parallax/actions/workflows/tests.yml)
 
@@ -25,13 +23,13 @@ A local tool that runs Claude Code agents on your repo inside a sandbox, checks 
 
 ## The agents
 
-<img src="docs/brand/party.svg" alt="Focus, Maker, Second Eye and Field" width="450">
+<img src="docs/brand/party-animated.svg" alt="Focus, Maker, Second Eye and Field" width="450">
 
-**Focus** drafts the intent and plan. **Maker** builds in the sandbox. **Second Eye** is the blind checker: it sees only the result, never the making. **Field** is the UI tester, which uses your app in a real browser and leaves tests behind. In the UI a portrait moves only while its agent is working on that task; everything else is still.
+**Focus** drafts the intent and plan. **Maker** builds in the sandbox. **Second Eye** is the blind checker: it sees only the result, never the making. **Field** is the UI tester, which uses your app in a real browser and leaves tests behind. Here they take turns the way a task moves through them; in the UI a portrait moves only while its agent is working on that task, and everything else is still.
 
 ## How a task moves
 
-<img src="docs/brand/flow.svg" alt="How a task moves: your words go through Focus, the plan check by code, the launch rule, Maker in the sandbox and the check by your tests, Second Eye and Field, then come back as one card for your accept and your merge, with every step on the hash-chained ledger" width="600">
+<p align="center"><img src="docs/brand/flow.svg" width="900" alt="How a task moves: your words go through Focus, the plan check by code, the launch rule, Maker in the sandbox and the check by your tests, Second Eye and Field, then come back as one card for your accept and your merge, with every step on the hash-chained ledger"></p>
 
 ## Many ways in, one way through
 

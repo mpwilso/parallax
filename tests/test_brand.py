@@ -94,10 +94,12 @@ def test_the_readme_images_and_the_ui_come_from_the_same_data():
         assert bundle["agents"][key]["svg"] == brand.portrait_body(key)
         assert bundle["agents"][key]["svg"] in brand.party_svg()
     assert set(bundle["agents"]) == set(brand.AGENTS)
-    assert set(brand.ASSETS) == {"logo.svg", "mark.svg", "party.svg", "mark-animated.svg", "flow.svg"}
+    assert set(brand.ASSETS) == {"logo.svg", "mark.svg", "party.svg", "mark-animated.svg", "flow.svg",
+                                 "lockup-animated.svg", "party-animated.svg"}
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "docs/brand/mark-animated.svg" in readme and "docs/brand/party.svg" in readme and "docs/brand/flow.svg" in readme
-    assert "```mermaid" not in readme
+    for used in ("docs/brand/lockup-animated.svg", "docs/brand/party-animated.svg", "docs/brand/flow.svg"):
+        assert used in readme, used
+    assert "```mermaid" not in readme and "# Parallax\n" not in readme  # the lockup is the heading
     social = (ROOT / "docs" / "brand" / "social.html").read_text(encoding="utf-8")
     assert brand.logo_body() in social and "Agents do the work. You make the calls." in social
 
@@ -129,3 +131,41 @@ def test_stages_follow_the_ledger():
     assert [(s["agent"], s["state"]) for s in live.stages(with_field, waiting=False)][-1] == ("field", "working")
     assert live.agent_of("Maker reworking (1 of 3)") == "maker" and live.agent_of("running the plan's tests") is None
     assert not re.search(r"drafter|checker|tester", " ".join(a["name"] for a in brand.AGENTS.values()), re.I)
+
+
+def test_the_lockup_is_the_animated_mark_with_the_uis_wordmark():
+    svg = brand.lockup_svg()
+    assert brand.logo_body() in svg and brand.DRIFT in svg  # the P and its drift, exactly as mark-animated.svg
+    assert "@media (prefers-reduced-motion: reduce){.l1,.l2{animation:none}}" in svg
+    assert 'font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-weight:600' in svg  # app.css --mono, .word
+    assert "fill:#1c1c1a" in svg and "@media (prefers-color-scheme: dark){.word{fill:#ecebe6}}" in svg  # app.css --ink
+    assert 'aria-label="Parallax"' in svg
+    for name in ("mark.svg", "mark-animated.svg", "logo.svg"):
+        assert "parallax</text>" not in (ROOT / "docs" / "brand" / name).read_text() or name == "logo.svg"
+
+
+def test_the_party_takes_turns_and_only_one_agent_moves_at_a_time():
+    svg = brand.party_animated_svg()
+    assert "@media (prefers-reduced-motion: reduce){.bust,.glow{animation:none}}" in svg
+    windows = brand.party_windows()
+    assert len(windows) == 4 and all(a[1] <= b[0] for a, b in zip(windows, windows[1:]))  # in order, never overlapping
+    total = 4 * brand.TURN + brand.PAUSE
+    # from the keyframes themselves: every moment at which an agent is not at rest belongs to one agent only
+    moving: dict[int, list[float]] = {}
+    for n in range(4):
+        for prop, rest in (("bob", "translateY(0)"), ("glow", "1")):
+            block = re.search(rf"@keyframes {prop}{n}\{{(.*?)\}}(?=@keyframes|\.a|$)", svg).group(1)
+            frames = re.findall(r"([\d.]+)%\{[a-z]+:([^}]+)\}", block)
+            moving.setdefault(n, [])
+            for pct, value in frames:
+                if value != rest:
+                    moving[n].append(float(pct) / 100 * total)
+    for a in range(4):
+        for b in range(a + 1, 4):
+            assert not (set(round(x, 3) for x in moving[a]) & set(round(x, 3) for x in moving[b])), (a, b)
+        lo, hi = windows[a]
+        assert all(lo <= x < hi for x in moving[a]), f"agent {a} moves outside its turn"
+        assert moving[a], f"agent {a} never moves"
+    assert svg.count('class="agent a') == 4 and all(f".a{n} .bust{{animation:bob{n}" in svg for n in range(4))
+    assert "steps(1,end)" in svg
+    assert brand.party_svg() != svg and all(brand.portrait_body(k) in svg for k in brand.AGENTS)
