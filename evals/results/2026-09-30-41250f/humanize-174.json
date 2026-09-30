@@ -1,0 +1,26 @@
+{
+ "case": "humanize-174",
+ "pr": "https://github.com/python-humanize/humanize/pull/272",
+ "issue": "https://github.com/python-humanize/humanize/issues/174",
+ "ceiling_usd": 4.0,
+ "task": "3e8874",
+ "end": "ready",
+ "status": "ready",
+ "hidden": "fail",
+ "hidden_detail": "356 of 379 pass (exit 1)",
+ "second_eye": "miss",
+ "verdicts": [
+  {
+   "tree": "baf08fadb915c5980899ab566f11403d1b57aa4a",
+   "verdict": "pass",
+   "hidden": "fail",
+   "judgment": "miss"
+  }
+ ],
+ "cost_usd": 0.5606,
+ "seconds_to_ready": 109.0,
+ "touches": 1,
+ "decisions": [],
+ "scratch": "/home/matt/.local/share/parallax/evals/runs/41250f/humanize-174/repo",
+ "seconds": 110.4
+}

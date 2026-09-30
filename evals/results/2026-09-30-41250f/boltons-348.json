@@ -1,0 +1,26 @@
+{
+ "case": "boltons-348",
+ "pr": "https://github.com/mahmoud/boltons/pull/349",
+ "issue": "https://github.com/mahmoud/boltons/issues/348",
+ "ceiling_usd": 4.0,
+ "task": "540bb7",
+ "end": "ready",
+ "status": "ready",
+ "hidden": "pass",
+ "hidden_detail": "18 of 18 pass (exit 0)",
+ "second_eye": "right",
+ "verdicts": [
+  {
+   "tree": "f15fd66e5e8ff06f2ea3fa401e99302286d2948e",
+   "verdict": "pass",
+   "hidden": "pass",
+   "judgment": "right"
+  }
+ ],
+ "cost_usd": 0.5474,
+ "seconds_to_ready": 92.0,
+ "touches": 1,
+ "decisions": [],
+ "scratch": "/home/matt/.local/share/parallax/evals/runs/41250f/boltons-348/repo",
+ "seconds": 92.9
+}

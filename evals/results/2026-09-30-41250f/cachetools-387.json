@@ -1,0 +1,21 @@
+{
+ "case": "cachetools-387",
+ "pr": "https://github.com/tkem/cachetools/commit/57d2e4813d9801f97034559e22428bac6f7c6c9b",
+ "issue": "https://github.com/tkem/cachetools/issues/387",
+ "ceiling_usd": 4.0,
+ "task": "91e7a9",
+ "end": "needs you",
+ "status": "stuck",
+ "hidden": "pass",
+ "hidden_detail": "46 of 46 pass (exit 0)",
+ "second_eye": "did not judge the final tree",
+ "verdicts": [],
+ "cost_usd": 0.7161,
+ "seconds_to_ready": null,
+ "touches": 2,
+ "decisions": [
+  "the budget cap ran out ($0.72 of $0.70 estimated)."
+ ],
+ "scratch": "/home/matt/.local/share/parallax/evals/runs/41250f/cachetools-387/repo",
+ "seconds": 101.5
+}

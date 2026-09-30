@@ -1,0 +1,26 @@
+{
+ "case": "tabulate-180",
+ "pr": "https://github.com/astanin/python-tabulate/commit/20c6370d5da2dae89b305bfb6c7f12a0f8b7236c",
+ "issue": "https://github.com/astanin/python-tabulate/issues/180",
+ "ceiling_usd": 4.0,
+ "task": "1db983",
+ "end": "ready",
+ "status": "ready",
+ "hidden": "pass",
+ "hidden_detail": "30 of 30 pass (exit 0)",
+ "second_eye": "right",
+ "verdicts": [
+  {
+   "tree": "6ff94c6a002e51bd56564806a50c33a63fdc291b",
+   "verdict": "pass",
+   "hidden": "pass",
+   "judgment": "right"
+  }
+ ],
+ "cost_usd": 0.3787,
+ "seconds_to_ready": 84.0,
+ "touches": 1,
+ "decisions": [],
+ "scratch": "/home/matt/.local/share/parallax/evals/runs/41250f/tabulate-180/repo",
+ "seconds": 83.8
+}

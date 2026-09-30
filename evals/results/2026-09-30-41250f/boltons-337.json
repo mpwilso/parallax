@@ -1,0 +1,26 @@
+{
+ "case": "boltons-337",
+ "pr": "https://github.com/mahmoud/boltons/pull/338",
+ "issue": "https://github.com/mahmoud/boltons/issues/337",
+ "ceiling_usd": 4.0,
+ "task": "10c924",
+ "end": "ready",
+ "status": "ready",
+ "hidden": "pass",
+ "hidden_detail": "26 of 26 pass (exit 0)",
+ "second_eye": "right",
+ "verdicts": [
+  {
+   "tree": "11bad7d3d76e173cd128e3e42ffc27c6cff68e57",
+   "verdict": "pass",
+   "hidden": "pass",
+   "judgment": "right"
+  }
+ ],
+ "cost_usd": 0.5379,
+ "seconds_to_ready": 123.0,
+ "touches": 1,
+ "decisions": [],
+ "scratch": "/home/matt/.local/share/parallax/evals/runs/41250f/boltons-337/repo",
+ "seconds": 123.7
+}

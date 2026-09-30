@@ -1,0 +1,21 @@
+{
+ "case": "tomlkit-512",
+ "pr": "https://github.com/python-poetry/tomlkit/pull/514",
+ "issue": "https://github.com/python-poetry/tomlkit/issues/512",
+ "ceiling_usd": 4.0,
+ "task": "39eec1",
+ "end": "needs you",
+ "status": "stuck",
+ "hidden": "pass",
+ "hidden_detail": "80 of 80 pass (exit 0)",
+ "second_eye": "did not judge the final tree",
+ "verdicts": [],
+ "cost_usd": 0.6887,
+ "seconds_to_ready": null,
+ "touches": 2,
+ "decisions": [
+  "the budget cap ran out ($0.69 of $0.67 estimated)."
+ ],
+ "scratch": "/home/matt/.local/share/parallax/evals/runs/41250f/tomlkit-512/repo",
+ "seconds": 139.4
+}
