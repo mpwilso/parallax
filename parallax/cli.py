@@ -277,8 +277,9 @@ def _run(args) -> int:
 
 
 def _eval(proj: Project, args) -> int:
-    from . import evals
+    from . import evals, memcap
     refuse_inside_task(proj.root)
+    memcap.guard(memcap.EVAL, "the eval run")  # a case's runaway fails this run, not the machine
     if args.cases[:1] == ["check"]:
         cases = evals.load_cases(proj.root, args.cases[1:])
         unsound = 0

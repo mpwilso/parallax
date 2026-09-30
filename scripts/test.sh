@@ -12,4 +12,8 @@ if [ "${1:-}" = "browser" ]; then
     exec $PY --with "$PLAYWRIGHT" python -m playwright install --with-deps chromium
 fi
 $PY --with ruff ruff check .
-exec $PY --with pytest --with "$PLAYWRIGHT" --with-editable . python -m pytest -q -rs -p no:cacheprovider "$@"
+# under a 4 GB memory cap (parallax/memcap.py): a runaway test fails this run with a plain message
+# instead of taking the machine down. tests/test_memcap.py checks the cap is on when run from here.
+export PARALLAX_TEST_SH=1
+exec $PY --with pytest --with "$PLAYWRIGHT" --with-editable . python -m parallax.memcap 4G -- \
+    python -m pytest -q -rs -p no:cacheprovider "$@"

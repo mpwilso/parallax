@@ -74,3 +74,13 @@ def no_real_reticle(monkeypatch):
         pytest.fail("a test reached the real Reticle. fake reticle.WRITER")
 
     monkeypatch.setattr(reticle, "WRITER", refuse)
+
+
+@pytest.fixture(autouse=True)
+def memory_guards(monkeypatch):
+    """parallax eval caps its own process with a watcher thread. In a test that process is pytest,
+    so the guard is recorded here instead of started. tests/test_memcap.py runs real ones in a child."""
+    from parallax import memcap
+    calls: list[tuple] = []
+    monkeypatch.setattr(memcap, "guard", lambda *a: calls.append(a))
+    return calls

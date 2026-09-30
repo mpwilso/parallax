@@ -399,7 +399,8 @@ def test_eval_check_needs_the_hidden_tests_to_fail_at_the_base_and_pass_at_the_f
     assert evals.check_case(passing, command, plain_runner) == (False, "the hidden tests already pass at the base (1 of 1 pass)")
 
 
-def test_the_eval_command_needs_a_budget_and_stops_before_spending_past_it(proj, upstream, monkeypatch, capsys):
+def test_the_eval_command_needs_a_budget_and_stops_before_spending_past_it(proj, upstream, monkeypatch, capsys,
+                                                                           memory_guards):
     (proj.root / "evals").mkdir()
     case = case_for(upstream)
     (proj.root / evals.CASES_FILE).write_text(
@@ -412,3 +413,6 @@ def test_the_eval_command_needs_a_budget_and_stops_before_spending_past_it(proj,
     assert out.startswith("stopped before calc-1: $0.00 spent, and the next case needs up to $5.50")
     assert "results in evals/results/" in out
     assert main(["eval", "nope", "--budget", "2"]) == 1 and "no case nope" in capsys.readouterr().err
+    from parallax import memcap
+    assert set(memory_guards) == {(memcap.EVAL, "the eval run")}  # every eval run is under the 4 GB cap
+    assert memcap.EVAL == 4 * memcap.GB
