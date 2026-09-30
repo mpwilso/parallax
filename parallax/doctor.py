@@ -88,7 +88,9 @@ def check_sandbox(m: Machine) -> Check:
     missing = [name for name, binary in tools.items() if not m.which(binary)]
     if missing:
         return Check("sandbox", f"missing {', '.join(missing)}", FAIL, "see the install steps in README.md")
-    return Check("sandbox", ", ".join(tools), OK)
+    srt = m.which("srt") or ""
+    elsewhere = f" (srt at {_home(srt)})" if srt and not srt.startswith(("/usr/bin/", "/usr/local/bin/", "/bin/")) else ""
+    return Check("sandbox", ", ".join(tools) + elsewhere, OK)
 
 
 def check_login(m: Machine) -> Check:

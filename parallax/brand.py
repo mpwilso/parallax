@@ -149,12 +149,20 @@ def logo_body() -> str:
     return "".join(out)
 
 
-def logo_svg(word: bool = False, size: int = 32) -> str:
-    """The pixel P; with word, the name beside it in the monospace font."""
+DRIFT = ('<style>.l1,.l2{animation:7s steps(2) infinite}.l1{animation-name:drift1}.l2{animation-name:drift2}'
+         '@keyframes drift1{0%,86%{transform:translate(0,0)}93%{transform:translate(-1px,1px)}100%{transform:translate(0,0)}}'
+         '@keyframes drift2{0%,86%{transform:translate(0,0)}93%{transform:translate(1px,-1px)}100%{transform:translate(0,0)}}'
+         '@media (prefers-reduced-motion: reduce){.l1,.l2{animation:none}}</style>')
+
+
+def logo_svg(word: bool = False, size: int = 32, animated: bool = False) -> str:
+    """The pixel P; with word, the name beside it in the monospace font. animated: the two layers drift
+    one pixel further apart and back every few seconds, in two steps, by CSS inside the file; still
+    under prefers-reduced-motion. For the README header only; logo.svg and mark.svg stay static."""
     w = LOGO_W + (4 + 48 if word else 0)
     parts = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {LOGO_H}" height="{size}" '
              f'width="{round(size * w / LOGO_H)}" shape-rendering="crispEdges" role="img" aria-label="parallax">',
-             logo_body()]
+             DRIFT if animated else "", logo_body()]
     if word:
         parts.append(f'<text x="{LOGO_W + 4}" y="12.2" font-family="ui-monospace, Menlo, Consolas, monospace" '
                      'font-size="10.5" fill="#7c81a1">parallax</text>')
@@ -168,7 +176,8 @@ def bundle() -> dict:
                                             for key in AGENTS}}
 
 
-ASSETS = {"logo.svg": lambda: logo_svg(word=True), "mark.svg": lambda: logo_svg(), "party.svg": party_svg}
+ASSETS = {"logo.svg": lambda: logo_svg(word=True), "mark.svg": lambda: logo_svg(), "party.svg": party_svg,
+          "mark-animated.svg": lambda: logo_svg(animated=True)}
 
 
 def write_assets(folder: Path) -> list[Path]:

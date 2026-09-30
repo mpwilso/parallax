@@ -1,13 +1,19 @@
-<p align="center"><img src="docs/brand/mark.svg" alt="" width="70" height="80"></p>
+<p align="center"><img src="docs/brand/mark-animated.svg" alt="" width="70" height="80"></p>
 
 # Parallax
 
 [![tests](https://github.com/mpwilso/parallax/actions/workflows/tests.yml/badge.svg)](https://github.com/mpwilso/parallax/actions/workflows/tests.yml)
 
 **Agents do the work. You make the calls.**
+
 **The rules are the baseline. Nothing gets measured without them.**
 
 A local tool that runs Claude Code agents on your repo inside a sandbox, checks their work, and brings you one decision per task. You describe the work in plain words; Focus drafts the intent and plan, Maker builds it in a sandbox, your tests run, Second Eye reviews the result blind, Field tries the UI, and it comes back as one card. Merging is always yours.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/ui-runs/final-ui/ready-dark.png">
+  <img src="docs/ui-runs/final-ui/ready.png" alt="A Ready card: the stages with each agent's portrait, the bottom line, one question with its options and the recommended one, what wasn't looked at, and the evidence with its ledger ids" width="1280">
+</picture>
 
 ## What's distinctive
 
@@ -23,9 +29,7 @@ A local tool that runs Claude Code agents on your repo inside a sandbox, checks 
 
 **Focus** drafts the intent and plan. **Maker** builds in the sandbox. **Second Eye** is the blind checker: it sees only the result, never the making. **Field** is the UI tester, which uses your app in a real browser and leaves tests behind. In the UI a portrait moves only while its agent is working on that task; everything else is still.
 
-## Many ways in, one way through
-
-Work comes in from the UI's box or `parallax do`; a task is resumed by `parallax decide`, `approve`, `build` or `recheck`, or by a rework. Every one of those ends in the same code: a signed approval, the budget cap, a preflight of both sandbox layers, and a ledger entry, before any agent starts. One test drives every entry point and checks that.
+## How a task moves
 
 ```mermaid
 flowchart TD
@@ -45,13 +49,13 @@ flowchart TD
     inbox -. your decisions .-> ledger
 ```
 
-| What waits on you | A card |
-|---|---|
-| ![The queue: what waits on you first, riskiest on top, then each working task with the agent on it](docs/ui-runs/final-ui/queue.png) | ![A Ready card: the stages, the bottom line, one question with its options, what wasn't looked at, and the evidence](docs/ui-runs/final-ui/ready.png) |
+## Many ways in, one way through
+
+Work comes in from the UI's box or `parallax do`; a task is resumed by `parallax decide`, `approve`, `build` or `recheck`, or by a rework. Every one of those ends in the same code: a signed approval, the budget cap, a preflight of both sandbox layers, and a ledger entry, before any agent starts. One test drives every entry point and checks that.
 
 ## Day to day
 
-**Start it.** In your repo, `parallax ui` and open the link it prints (the link stays the same between runs). **Type work in** the box and press Enter; that's all. **Read the list:** Waiting on you is the only part that needs you, riskiest first; Working shows which agent has each task, for how long and what it has spent; Done is folded away. **Open a card** (click it, or `n` for the next one that waits): the stages, the bottom line, the one question with its options and which one is recommended, what nobody looked at, and the evidence, with the change, intent and plan one click away.
+**Start it.** In your repo, `parallax ui` and open the link it prints (the link stays the same between runs). **Type work in** the box and press Enter; that's all. **Read the list** ([the queue](docs/ui-runs/final-ui/queue.png)): Waiting on you is the only part that needs you, riskiest first; Working shows which agent has each task, for how long and what it has spent; Done is folded away. **Open a card** (click it, or `n` for the next one that waits): the stages, the bottom line, the one question with its options and which one is recommended, what nobody looked at, and the evidence, with the change, intent and plan one click away.
 
 **Ready** means the listed checks passed: the plan's tests ran on the exact reviewed tree, the card says for each outcome in the intent which test that ran covers it or that none does, and Second Eye found nothing blocking. It does not mean the code is bug-free. Accept commits the reviewed change to the task's branch and shows the merge command, which you run yourself. **Needs you** means one decision only you can make; the card says whose call it is and why a human. Anything that sends work back, drops it or accepts a risk asks for a one-line reason, and Focus redrafts from it.
 

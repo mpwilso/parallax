@@ -51,10 +51,12 @@ class Prepared:
 def scrubbed_env(venv: Path | None, environ: dict | None = None, path: str | None = None) -> dict[str, str]:
     """Only what a build needs: identity, locale, where Parallax keeps things, and a plain PATH.
 
-    path: keep this PATH instead (the pilot, whose setup command needs your tools)."""
+    path: keep this PATH instead (the pilot, whose setup command needs your tools). Otherwise the
+    PATH is the venv, the system folders, and wherever the sandbox tools were found before scrubbing."""
     environ = dict(os.environ if environ is None else environ)
     env = {k: v for k, v in environ.items() if k in KEEP_ENV or k.startswith("LC_")}
-    env["PATH"] = path or ((f"{venv}/bin:" if venv else "") + SYSTEM_PATH)
+    tools = [d for d in sandbox.tool_dirs(environ) if d not in SYSTEM_PATH.split(":")]
+    env["PATH"] = path or ":".join(([f"{venv}/bin"] if venv else []) + [SYSTEM_PATH] + tools)
     if venv:
         env["VIRTUAL_ENV"] = str(venv)
     env["CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"] = "1"

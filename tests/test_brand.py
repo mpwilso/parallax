@@ -79,6 +79,9 @@ def test_the_logo_is_the_p_twice_offset():
     assert 'class="layer l1" fill="#a47cf0" opacity="1.0"' in svg and 'class="layer l2" fill="#5ef2ff" opacity="0.85"' in svg
     assert '<rect x="2" y="3"' in svg and '<rect x="4" y="1"' in svg  # the first pixel of each layer, at its offset
     assert "parallax" in brand.logo_svg(word=True) and "monospace" in brand.logo_svg(word=True)
+    moving = brand.logo_svg(animated=True)
+    assert "@keyframes drift1" in moving and "@keyframes drift2" in moving and "prefers-reduced-motion" in moving
+    assert "steps(2)" in moving and "animation" not in brand.logo_svg() and "animation" not in brand.logo_svg(word=True)
 
 
 def test_the_readme_images_and_the_ui_come_from_the_same_data():
@@ -91,6 +94,9 @@ def test_the_readme_images_and_the_ui_come_from_the_same_data():
         assert bundle["agents"][key]["svg"] == brand.portrait_body(key)
         assert bundle["agents"][key]["svg"] in brand.party_svg()
     assert set(bundle["agents"]) == set(brand.AGENTS)
+    assert set(brand.ASSETS) == {"logo.svg", "mark.svg", "party.svg", "mark-animated.svg"}
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "docs/brand/mark-animated.svg" in readme and "docs/brand/party.svg" in readme
     social = (ROOT / "docs" / "brand" / "social.html").read_text(encoding="utf-8")
     assert brand.logo_body() in social and "Agents do the work. You make the calls." in social
 

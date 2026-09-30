@@ -33,6 +33,26 @@ ROOT_TARGETS = (".parallax", "parallax.policy.toml", "mission.md", "CLAUDE.md", 
                 "REVIEW.md", "docs/parallax.md", "docs/tasks", ".git")
 
 
+TOOLS = ("srt", "node", "bwrap", "socat")  # srt is a node script; bwrap and socat are what it runs
+
+
+def tool_paths(environ: dict | None = None) -> dict[str, str | None]:
+    """Where each sandbox tool is, on the PATH of the environment Parallax starts in."""
+    import shutil
+    path = (os.environ if environ is None else environ).get("PATH", "")
+    return {name: shutil.which(name, path=path) for name in TOOLS}
+
+
+def tool_dirs(environ: dict | None = None) -> list[str]:
+    """The folders those tools live in, for a scrubbed PATH. Node from nvm, npm's global folder or a
+    CI tool cache sits outside the system path, and the sandbox must still find it."""
+    out = []
+    for found in tool_paths(environ).values():
+        if found and str(Path(found).parent) not in out:
+            out.append(str(Path(found).parent))
+    return out
+
+
 def data_home() -> Path:
     return Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "parallax"
 

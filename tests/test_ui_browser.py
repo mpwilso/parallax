@@ -313,15 +313,16 @@ def test_keyboard_only(page, proj):
     page.keyboard.press("Tab")
     expect(page.locator("#work")).to_be_focused()
     page.keyboard.press("Escape")
+    expect(page.locator("#work")).not_to_be_focused()  # Escape blurred the box: keys go to the page now
     page.keyboard.press("n")
-    expect(page.locator("#card-title")).to_be_focused()
+    expect(page.locator("#card-title")).to_be_focused(timeout=WAIT)  # the card is fetched first; a slow runner takes seconds
     expect(page.locator("#card-title")).to_have_text("first thing")
     page.keyboard.press("j")
-    expect(page.locator("#card-title")).to_have_text("still working")
+    expect(page.locator("#card-title")).to_have_text("still working", timeout=WAIT)
     page.keyboard.press("Escape")
     expect(row(page, working)).to_be_focused()
     page.keyboard.press("k")
-    expect(page.locator("#card-title")).to_have_text("first thing")
+    expect(page.locator("#card-title")).to_have_text("first thing", timeout=WAIT)
     page.keyboard.press("2")
     expect(page.locator("#opt-reject")).to_be_focused()
 

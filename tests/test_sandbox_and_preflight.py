@@ -385,7 +385,7 @@ def test_the_builder_runs_the_maker_and_records_the_outcome(proj):
         return ScriptedAgent(steps=[("write", "README.md", "new\n"), ("call", lambda cwd: (cwd / ".env").touch())],
                              summary="rewrote the README", cost=0.3)
 
-    assert build.run_build(proj, tid, maker_for) == "built"
+    assert build.run_build(proj, tid, maker_for, preflight_runner=good_probe) == "built"
     assert got["left"] == 1.8 and got["settings"].endswith("settings.json")
     assert kinds(proj, "sandbox.cleaned")[0]["data"]["files"] == [".env"]
     assert lifecycle.status_line(proj, tid) == "built"
@@ -457,3 +457,36 @@ def test_no_plan_can_read_the_approval_key_or_your_login(proj, folder):
     with pytest.raises(ParallaxError, match="approval key or Claude login"):
         build.prepare(proj, tid)
     assert sandbox.refused_reads(["/opt/data"]) == []
+
+
+def test_the_sandbox_tools_are_found_wherever_node_put_them(tmp_path, monkeypatch):
+    """srt from nvm, npm's global folder or a CI tool cache isn't on the system path; the scrubbed runs
+    must still find it, and node with it, because srt is a node script."""
+    from parallax import doctor, testrun
+    bin_dir = tmp_path / "nvm" / "versions" / "node" / "v22" / "bin"
+    bin_dir.mkdir(parents=True)
+    for name in ("srt", "node"):
+        (bin_dir / name).write_text("#!/bin/sh\necho fake-$0 \"$@\"\n")
+        (bin_dir / name).chmod(0o755)
+    system = tmp_path / "system"  # a system path with no srt of its own, whatever this machine has
+    system.mkdir()
+    for name in ("sh", "echo"):
+        (system / name).symlink_to(f"/bin/{name}")
+    monkeypatch.setenv("PATH", f"{bin_dir}:{system}")
+    monkeypatch.setattr(build, "SYSTEM_PATH", str(system))
+    assert sandbox.tool_paths()["srt"] == str(bin_dir / "srt")
+    env = build.scrubbed_env(None)
+    assert env["PATH"].split(":") == [str(system), str(bin_dir)]  # the system folders first, then where the tools were
+    assert shutil.which("srt", path=env["PATH"]) == str(bin_dir / "srt")
+    code, out = testrun._srt(tmp_path / "cfg.json", tmp_path, "true", env)  # runs the fake, so it was found
+    assert code == 0 and "fake-" in out and "srt" in out
+    with_venv = build.scrubbed_env(Path("/v"))
+    assert with_venv["PATH"] == f"/v/bin:{system}:{bin_dir}"
+    (system / "srt").symlink_to(bin_dir / "srt")  # nothing to add when the tools are on the system path already
+    (system / "node").symlink_to(bin_dir / "node")
+    assert build.scrubbed_env(None, {"PATH": str(system)})["PATH"] == str(system)
+    # doctor says where it found srt when that's outside the system folders
+    m = doctor.Machine(which=lambda b: str(bin_dir / b) if b in ("bwrap", "socat", "srt") else None)
+    assert doctor.check_sandbox(m).detail == f"bubblewrap, socat, srt (srt at {bin_dir / 'srt'})"
+    m = doctor.Machine(which=lambda b: f"/usr/bin/{b}")
+    assert doctor.check_sandbox(m).detail == "bubblewrap, socat, srt"
