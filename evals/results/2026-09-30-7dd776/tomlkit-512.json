@@ -1,0 +1,47 @@
+{
+ "case": "tomlkit-512",
+ "pr": "https://github.com/python-poetry/tomlkit/pull/514",
+ "issue": "https://github.com/python-poetry/tomlkit/issues/512",
+ "ceiling_usd": 4.0,
+ "task": "6a07a2",
+ "end": "ready",
+ "status": "ready",
+ "hidden": "pass",
+ "hidden_detail": "80 of 80 pass (exit 0)",
+ "second_eye": "right",
+ "verdicts": [
+  {
+   "tree": "3449003930f06cbf0f5cd3e0c19355a48224ae8b",
+   "verdict": "no_finding",
+   "hidden": "pass",
+   "judgment": "right"
+  }
+ ],
+ "cost_usd": 1.2226,
+ "seconds_to_ready": 275.0,
+ "touches": 1,
+ "decisions": [],
+ "inferred": [
+  "4",
+  "5",
+  "6",
+  "7"
+ ],
+ "reticle": "right",
+ "reticle_verdicts": [
+  {
+   "tree": "3449003930f06cbf0f5cd3e0c19355a48224ae8b",
+   "verdict": "pass",
+   "hidden": "pass",
+   "judgment": "right"
+  }
+ ],
+ "reticle_kept": 2,
+ "reticle_weak": [
+  "it fails on UnexpectedCharError, not an assertion or a crash the request shows"
+ ],
+ "reticle_cost_usd": 0.0197,
+ "reticle_false_alarm_rework_usd": 0.0,
+ "scratch": "/home/matt/.local/share/parallax/evals/runs/7dd776/tomlkit-512/repo",
+ "seconds": 275.4
+}

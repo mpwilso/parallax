@@ -1,0 +1,45 @@
+{
+ "case": "boltons-319",
+ "pr": "https://github.com/mahmoud/boltons/commit/8ba3a7fa0d99b73f7f43c1aed82c571b941eecea",
+ "issue": "https://github.com/mahmoud/boltons/issues/319",
+ "ceiling_usd": 4.0,
+ "task": "8440d7",
+ "end": "ready",
+ "status": "ready",
+ "hidden": "pass",
+ "hidden_detail": "4 of 4 pass (exit 0)",
+ "second_eye": "right",
+ "verdicts": [
+  {
+   "tree": "30b4177868c95d2a7d2a19875747be7c41ec61c7",
+   "verdict": "pass",
+   "hidden": "pass",
+   "judgment": "right"
+  }
+ ],
+ "cost_usd": 0.3781,
+ "seconds_to_ready": 90.0,
+ "touches": 1,
+ "decisions": [],
+ "inferred": [
+  "2",
+  "3",
+  "4",
+  "5"
+ ],
+ "reticle": "right",
+ "reticle_verdicts": [
+  {
+   "tree": "30b4177868c95d2a7d2a19875747be7c41ec61c7",
+   "verdict": "pass",
+   "hidden": "pass",
+   "judgment": "right"
+  }
+ ],
+ "reticle_kept": 1,
+ "reticle_weak": [],
+ "reticle_cost_usd": 0.0161,
+ "reticle_false_alarm_rework_usd": 0.0,
+ "scratch": "/home/matt/.local/share/parallax/evals/runs/7dd776/boltons-319/repo",
+ "seconds": 90.5
+}
