@@ -42,7 +42,9 @@ budget: <only if the human's words name a budget: that amount in dollars, like 4
 
 ## Outcome
 <a numbered list, each one observable and testable, and marked: 1. asked: ..., 2. inferred: ...
-asked: the person's words state it or clearly imply it. inferred: your own addition>
+asked: the person's words state it or clearly imply it. inferred: your own addition.
+End an outcome with (not browser-testable) when what it describes happens outside the page: an OS
+notification, a permission prompt, a file dialog, anything a test browser can't drive or see>
 
 ## Constraints
 <what must not change: behavior, interfaces, compatibility, limits>
@@ -91,7 +93,7 @@ estimate, so one rework round fits; Parallax raises a cap that's short. If the i
 budget, the cap is that budget. files and tests must all be inside the intent's scope, and covers must name every
 numbered outcome in the intent with the tests or steps that prove it. user_flows lists the outcomes
 a person checks by going through the app's UI (a flow they click or type through), or [] if none:
-a UI tester uses the running app for exactly those.
+a UI tester uses the running app for exactly those. Never list an outcome marked (not browser-testable).
 Keep the header as two lines, with no blank line between them.""",
 }
 

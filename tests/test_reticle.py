@@ -80,8 +80,8 @@ def test_only_tests_that_fail_on_an_assertion_at_the_base_are_kept(proj):
         "test_outcome_1_exists": "it passes on the base, so it doesn't show the problem",
         "test_something_else": "it names no outcome in the intent"}
     stored = reticle.stored(proj, tid)
-    assert stored == proj.root / "docs" / "tasks" / tid / "reticle" / "test_reticle.py" and stored.read_text() == MIXED
-    assert rec["data"]["file"] == f"docs/tasks/{tid}/reticle/test_reticle.py"
+    assert stored == proj.root / "docs" / "tasks" / tid / "reticle" / "outcome_tests.py.txt" and stored.read_text() == MIXED
+    assert rec["data"]["file"] == f"docs/tasks/{tid}/reticle/outcome_tests.py.txt"  # a name no test runner collects
     [ran] = kinds(proj, "reticle.ran")
     assert (ran["data"]["passed"], ran["data"]["total"], ran["data"]["failed"]) == (1, 1, [])  # the fix passes it
 
@@ -415,3 +415,17 @@ def test_a_hang_counts_when_the_request_describes_one_and_a_hang_at_the_check_go
 ])
 def test_what_counts_as_a_request_that_describes_a_hang(typed, hang):
     assert reticle.hangs(typed) is hang
+
+
+def test_a_stored_reticle_file_is_never_collected_by_the_repos_own_tests_and_old_ones_still_read(proj):
+    """Real use: accepted tasks' test_reticle.py files, all with one name, stopped the repo's pytest."""
+    import fnmatch
+    tid, status = go(proj, FakeReticle(KEPT))
+    path = reticle.stored(proj, tid)
+    assert not any(fnmatch.fnmatch(path.name, pat) for pat in ("test_*.py", "*_test.py"))  # pytest's defaults
+    # a task recorded before the rename keeps its old path, and its hash still checks
+    old = path.with_name("test_reticle.py")
+    path.rename(old)
+    rec = reticle.recorded(proj, tid)
+    proj.ledger.append("reticle.recorded", "reticle", "old", **{**rec["data"], "file": old.relative_to(proj.root).as_posix()})
+    assert reticle.stored(proj, tid) == old and not reticle.tampered(proj, tid)

@@ -395,3 +395,69 @@ def test_a_tester_that_reaches_the_cap_stops_the_task_and_nothing_else_runs(proj
     assert status == "stuck" and checker.briefs == [] and not kinds(proj, "flows.recorded", tid)
     [item] = proj.inbox()
     assert item["data"]["budget"] and "while Field was using the app" in item["reason"]
+
+
+# behavior outside the page: never a flow (c08f9e: OS notifications failed every flow, rework to the cap) ------
+
+NOTIFY = "2. inferred: A desktop notification appears when it's done, and a click on it opens the app. (not browser-testable)"
+
+
+def untestable_docs(flows):
+    d = flows_docs()
+    d["intent"] = d["intent"].replace("1. asked: A new user on WSL can follow them.",
+                                      "1. asked: A new user on WSL can follow them.\n" + NOTIFY)
+    d["plan"] = d["plan"].replace('user_flows = ["1"]', f"user_flows = {json.dumps(flows)}").replace(
+        'covers = { "1" = ["tests/test_readme.py"] }', 'covers = { "1" = ["tests/test_readme.py"], "2" = ["tests/test_readme.py"] }')
+    return d
+
+
+class TwoFlowTester(FakeTester):
+    """Writes a flow for each outcome it's shown, and one for the notification whatever it's shown."""
+
+    def run(self, goal, cwd, server, allowed):
+        self.calls.append({"goal": goal})
+        (Path(cwd) / uitest.APP_UP).touch()
+        (Path(cwd) / "flows").mkdir()
+        for name in ("opens", "notify"):
+            (Path(cwd) / "flows" / f"{name}.spec.js").write_text(SPEC.replace("'opens'", f"'{name}'"))
+        reply = {"flows": [{"outcome": 1, "name": "opens", "works": True, "saw": "the page opens"},
+                           {"outcome": 2, "name": "notify", "works": False, "saw": "no notification"}],
+                 "not_looked_at": "nothing"}
+        return AgentResult("done", json.dumps(reply), 0.2)
+
+
+def run_with(proj, docs_, tester, runner, monkeypatch):
+    from parallax import pilot as p
+    monkeypatch.setattr(uitest, "TESTER", tester)
+    monkeypatch.setattr(uitest, "FLOW_RUNNER", runner)
+    tid = p.intake(proj, "fix the README")["task"]
+    maker = ScriptedAgent(steps=[("write", "README.md", "ok\n")])
+    return tid, build.run_mode(proj, tid, "pilot", FakeDrafter(docs_), lambda left, s: maker, FakeChecker(),
+                               test_runner=junit_runner(), preflight_runner=good_probe)
+
+
+def test_an_outcome_outside_the_page_is_never_a_flow_and_is_named_under_not_looked_at(proj, monkeypatch):
+    tester = TwoFlowTester()
+    tid, status = run_with(proj, untestable_docs(["1", "2"]), tester, flow_runner([[("opens", True)]]), monkeypatch)
+    assert status == "ready"  # no flow that could never pass, so no rework toward it
+    goal = tester.calls[0]["goal"]
+    assert "A new user on WSL can follow them." in goal and "desktop notification" not in goal
+    assert "can't test in a browser" in goal  # its own rule, for parts it finds outside the page
+    [rec] = kinds(proj, "uitest.recorded", tid)
+    assert list(rec["data"]["files"]) == [f"docs/tasks/{tid}/ui_flows/opens.spec.js"]  # the notification's flow dropped
+    assert [f["name"] for f in rec["data"]["flows"]] == ["opens"]
+    assert rec["data"]["not_looked_at"] == ("can't test in a browser: outcome 2 (A desktop notification appears when it's "
+                                            "done, and a click on it opens the app)")
+    assert "can't test in a browser: outcome 2" in show.report(proj, tid)
+
+
+def test_a_plan_whose_only_flows_are_outside_the_page_never_starts_field(proj, monkeypatch):
+    tid, status = run_with(proj, untestable_docs(["2"]), None, None, monkeypatch)  # a tester here would fail the test
+    assert status == "ready" and not kinds(proj, "uitest.started", tid)
+
+
+def test_focus_marks_outcomes_a_browser_cant_test_and_the_plan_leaves_them_out():
+    from parallax import lifecycle
+    intent = "## Outcome\n1. asked: a\n" + NOTIFY + "\n3. inferred: c (Not Browser-Testable).\n\n## Constraints\nnone\n"
+    assert lint.browser_untestable(intent) == {"2", "3"}
+    assert "(not browser-testable)" in lifecycle.SHAPES["intent"] and "Never list an outcome marked" in lifecycle.SHAPES["plan"]

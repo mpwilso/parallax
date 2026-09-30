@@ -70,6 +70,26 @@ WHY_HUMAN = {  # one short sentence per kind: why code stopped instead of decidi
 REJECT = Option("reject", "Focus redrafts the intent and plan from your reason", True)
 DROP = Option("drop", "ends the task; it leaves the inbox", True)
 RETRY = Option("retry", "runs it again from where it stopped")
+SEND_BACK = Option("send back", "Focus redrafts the intent and plan from your note", True)
+
+
+def failures(entry: dict) -> tuple:
+    """What one test or flow run failed, and by how much: the same tuple twice means no progress."""
+    d = entry["data"]
+    if entry["kind"] == "flows.recorded":
+        return ("app",) if d.get("app_failed") else tuple(sorted((c.get("file", ""), c.get("name", "")) for c in d.get("failed") or []))
+    per_file = tuple(sorted((f, v[0], v[1]) for f, v in (d.get("per_file") or {}).items() if v[0] < v[1]))
+    return per_file or (() if d.get("exit") in (0, None) else (("exit", d.get("exit")),))
+
+
+def stalled(entries: list[dict]) -> bool:
+    """The last check still had failing tests or flows, exactly as the check before it did: same
+    failures, same counts. Then more money buys the same result, so raising the cap isn't the advice."""
+    for kind in ("tests.recorded", "flows.recorded"):
+        runs = [e for e in entries if e["kind"] == kind]
+        if len(runs) >= 2 and failures(runs[-1]) and failures(runs[-1]) == failures(runs[-2]):
+            return True
+    return False
 
 
 def _open_item(project: Project, task_id: str) -> dict | None:
@@ -111,9 +131,12 @@ def decision(project: Project, task_id: str) -> Decision | None:
                         [RETRY, REJECT, DROP], "retry", "the rest of the build and check", item)
     if d.get("budget"):
         new = raise_to(project, task_id)
-        return Decision("cap", f"Raise the cap to ${new:.2f} so it can finish?",
-                        [Option("raise", f"raises the cap to ${new:.2f} and picks up where it stopped"), DROP],
-                        "raise", "the rest of the build and check", item, {"to": new})
+        stuck = stalled(status.attempt(project.ledger.entries(), task_id))
+        return Decision("cap", f"Raise the cap to ${new:.2f} so it can finish?" if not stuck else
+                        f"The last two checks failed the same way: send it back with a note, or raise the cap to ${new:.2f}?",
+                        [Option("raise", f"raises the cap to ${new:.2f} and picks up where it stopped"), SEND_BACK, DROP],
+                        "send back" if stuck else "raise", "the rest of the build and check", item,
+                        {"to": new, "stalled": stuck})
     if stage == "conflict" and d.get("missing"):
         return Decision("conflict", f"The plan's test file {d['missing'][0]} is missing from the change: redraft?",
                         [REJECT, DROP], "reject", "the check", item)
@@ -135,9 +158,9 @@ def decision(project: Project, task_id: str) -> Decision | None:
                          Option("reject", "the app is wrong: Focus redrafts the intent and plan from your reason", True),
                          DROP], "reject", "Ready", item)
     if stage == "check" and why.startswith("the check still fails after"):
-        return Decision("rework", "The check kept failing after every rework: redraft, or accept it as it is?",
-                        [REJECT, Option("accept", "accepts the risk and makes it Ready", True), DROP],
-                        "reject", "Ready", item)
+        return Decision("rework", "The check kept failing after every rework: send it back with a note, or accept it as it is?",
+                        [SEND_BACK, Option("accept", "accepts the risk and makes it Ready", True), DROP],
+                        "send back", "Ready", item)
     if stage == "check" and why.startswith("Second Eye error"):
         return Decision("checker", "Second Eye failed to answer, twice: try it again?",
                         [RETRY, Option("accept", "accepts it unreviewed, as a risk", True), DROP],
@@ -186,7 +209,7 @@ def apply(project: Project, task_id: str, name: str, reason: str = "", spawn: Ca
             project.resolve(dec.item["id"], False, said)
         project.ledger.append("task.rejected", "human", said, task=task_id, was=project.task(task_id)["status"])
         return f"dropped {task_id}. it's out of the inbox."
-    if name in ("reject", "intent"):
+    if name in ("reject", "intent", "send back"):  # send back is reject's twin on a cap or rework card
         if name == "intent":
             said = reason.strip() or f"the intent wins over the plan: {dec.item['reason']}"
         if dec.item:

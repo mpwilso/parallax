@@ -8,7 +8,8 @@ Once per attempt, after the plan is approved and before Maker starts:
    before its assertion, fails on another exception (an import, say), or names no outcome is
    dropped and recorded as weak. Each test has a time limit (see LIMIT): one that hangs on the base
    counts only when the request describes a hang, the way a crash counts only when it's named.
-3. The kept tests are stored under docs/tasks/<id>/reticle/, hashed in the ledger. Maker's
+3. The kept tests are stored under docs/tasks/<id>/reticle/ (as outcome_tests.py.txt, so no test
+   runner collects them there), hashed in the ledger. Maker's
    worktree never holds them, and a changed hash stops the check.
 At every check Parallax runs them on the reviewed tree. A failure goes back to Maker as a rework
 finding naming the outcome and the assertion message, never the test's code.
@@ -131,8 +132,16 @@ def kept(project: Project, task_id: str) -> list[dict]:
     return list(rec["data"].get("kept") or []) if rec and rec["kind"] == "reticle.recorded" else []
 
 
+STORED = "outcome_tests.py.txt"  # under docs/tasks: a name no test runner collects. Stored as test_reticle.py,
+# every task's file had the same name, and a repo's own pytest collected them all and stopped on the clash
+
+
 def stored(project: Project, task_id: str) -> Path:
-    return lifecycle.task_dir(project, task_id) / "reticle" / FILE
+    """Where this task's Reticle file is kept: where its record says (older tasks), else the new name."""
+    rec = recorded(project, task_id)
+    if rec and rec["kind"] == "reticle.recorded" and rec["data"].get("file"):
+        return project.root / rec["data"]["file"]
+    return lifecycle.task_dir(project, task_id) / "reticle" / STORED
 
 
 def asked(intent: str) -> list[str]:

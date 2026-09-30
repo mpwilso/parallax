@@ -149,7 +149,7 @@ def test_every_kind_of_decision_is_one_lint_clean_question(proj):
     pilot_run(proj, tid)
     cases = [
         ("disagreement.raised", {"stage": "scope"}, "extra.py changed but isn't in the plan's files", "scope", "reject"),
-        ("disagreement.raised", {"stage": "check"}, "the check still fails after 3 rework cycles: tests", "rework", "reject"),
+        ("disagreement.raised", {"stage": "check"}, "the check still fails after 3 rework cycles: tests", "rework", "send back"),
         ("disagreement.raised", {"stage": "check"}, "Second Eye error: garbled reply", "checker", "retry"),
         ("disagreement.raised", {"stage": "check"}, "the plan's tests couldn't run (exit 4): no module", "tests", "retry"),
         ("disagreement.raised", {"stage": "guard"}, "diff touches protected files: CLAUDE.md", "guard", "reject"),
@@ -217,3 +217,55 @@ def test_setup_records_how_long_it_took(proj):
     assert pilot_run(proj, tid) == "ready"
     [ran] = kinds(proj, "setup.ran")
     assert ran["data"]["exit"] == 0 and 0.2 <= ran["data"]["seconds"] < 30
+
+
+# cap and rework: honest advice, and a way to send it back (real use: rework toward flows that could never pass) --
+
+def _checked(proj, tid, runs, kind="tests.recorded"):
+    for r in runs:
+        if kind == "tests.recorded":
+            proj.ledger.append(kind, "parallax", "", task=tid, tree="t", exit=0 if r[0] == r[1] else 1,
+                               per_file={"tests/test_readme.py": [r[0], r[1], 0]}, passed=r[0], total=r[1])
+        else:
+            proj.ledger.append(kind, "parallax", "", task=tid, tree="t", ran=True, app_failed=False, passed=0, total=len(r),
+                               failed=[{"file": "a.spec.js", "name": n, "ok": False, "message": "x"} for n in r])
+    proj.ledger.append("stuck.raised", "parallax", "the budget cap ran out ($2.10 of $2.00 estimated)", task=tid, budget=True)
+
+
+@pytest.mark.parametrize("runs,kind,advice", [
+    ([(1, 3), (1, 3)], "tests.recorded", "send back"),        # the same failures, the same counts: no progress
+    ([(1, 3), (2, 3)], "tests.recorded", "raise"),            # one more passes: progress
+    ([(1, 3)], "tests.recorded", "raise"),                    # one check: nothing to compare yet
+    ([(1, 3), (3, 3)], "tests.recorded", "raise"),            # the last check passed
+    ([["notify"], ["notify"]], "flows.recorded", "send back"),  # the same flow failing twice
+    ([["notify", "open"], ["notify"]], "flows.recorded", "raise"),
+])
+def test_a_cap_card_recommends_raising_only_when_the_last_checks_made_progress(proj, runs, kind, advice):
+    tid = pilot.intake(proj, WANT)["task"]
+    _checked(proj, tid, runs, kind)
+    dec = decide.decision(proj, tid)
+    assert dec.kind == "cap" and dec.recommend == advice
+    assert [o.name for o in dec.options] == ["raise", "send back", "drop"]
+    assert dec.option("send back").needs_reason
+    if advice == "send back":
+        assert dec.question.startswith("The last two checks failed the same way: send it back with a note")
+
+
+def test_send_back_on_a_cap_card_redrafts_from_the_note_like_reject_at_ready(proj):
+    tid = pilot.intake(proj, WANT)["task"]
+    assert pilot_run(proj, tid, maker=ScriptedAgent(steps=[("write", "README.md", "ok\n")], cost=2.1)) == "stuck"
+    for _ in range(2):  # two checks, failing the same way
+        proj.ledger.append("tests.recorded", "parallax", "", task=tid, tree="t", exit=1,
+                           per_file={"tests/test_readme.py": [1, 3, 0]}, passed=1, total=3)
+    assert decide.decision(proj, tid).recommend == "send back"
+    with pytest.raises(ParallaxError, match="send back needs a reason"):
+        decide.apply(proj, tid, "send back")
+    assert decide.apply(proj, tid, "send back", "the notification can't be tested in a browser; drop that flow") == \
+        f"redrafting {tid} from your reason. it comes back to the inbox."
+    assert kinds(proj, "task.redraft")[-1]["reason"] == "the notification can't be tested in a browser; drop that flow"
+    assert proj.inbox() == []
+
+
+def test_a_rework_card_offers_send_back_first():
+    from parallax.decide import SEND_BACK
+    assert SEND_BACK.name == "send back" and SEND_BACK.needs_reason

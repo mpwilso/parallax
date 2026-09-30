@@ -88,7 +88,7 @@ def test_a_decision_card_carries_its_options(proj):
                        budget=True)
     a = views.card(proj, tid)["actions"]
     assert a["kind"] == "decide" and a["recommend"] == "raise"
-    assert [o["name"] for o in a["options"]] == ["raise", "drop"]
+    assert [o["name"] for o in a["options"]] == ["raise", "send back", "drop"]
 
 
 # the server: only the person at the page can act ------------------------------------------------------

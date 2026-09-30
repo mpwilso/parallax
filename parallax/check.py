@@ -112,7 +112,7 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
         project.ledger.append("sandbox.cleaned", "parallax", "removed empty files outside the plan's files",
                               task=task_id, files=empty)
         s = _staged(project, task_id, p, plan, settings)
-    if not s.problems and uitest.applies(project, plan) and not uitest.recorded(project, task_id):
+    if not s.problems and uitest.applies(project, plan, task_id) and not uitest.recorded(project, task_id):
         if costs.budget(project, task_id, plan)[1] <= 0:
             return costs.stop_at_cap(project, task_id, p.cap, "Field was about to use the app"), []
         try:  # the UI tester, once per attempt, before anything else is paid for

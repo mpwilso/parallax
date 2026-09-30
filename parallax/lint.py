@@ -404,6 +404,17 @@ def marked(outcomes: str) -> str:
     return re.sub(r"(?im)^(\s*\d+[.)]\s+)\**(asked|inferred)\**\s*:\s*", lambda m: f"{m.group(1)}{m.group(2).lower()}: ", outcomes)
 
 
+UNTESTABLE = re.compile(r"\(not browser-testable\)\s*\.?\s*$", re.I)
+
+
+def browser_untestable(intent: str) -> set[str]:
+    """Outcomes Focus marked "(not browser-testable)": their behavior happens outside the page (an OS
+    notification, a permission prompt, a file dialog), so no test browser can drive or see it."""
+    lines = intent.splitlines()
+    return {m.group(1) for _, line in _section_lines(lines, _sections(lines, 0), "Outcome")
+            if (m := OUTCOME_ITEM.match(line)) and UNTESTABLE.search(line)}
+
+
 def outcome_kinds(intent: str) -> dict[str, str | None]:
     """outcome number -> "asked", "inferred", or None when the outcome isn't marked (intents before 2026-09-30)."""
     lines = intent.splitlines()

@@ -13,7 +13,9 @@ const READY_OPTIONS = [
   { name: "reject", does: "Focus redrafts the intent and plan from your reason", needs_reason: true },
   { name: "drop", does: "ends the task; it leaves the inbox", needs_reason: true },
 ];
-const SEND = { reject: "Reject and redraft", drop: "Drop it", accept: "Accept the risk", intent: "Redraft to the intent", remove: "Remove the test" };
+const SEND = { reject: "Reject and redraft", "send back": "Send it back", drop: "Drop it", accept: "Accept the risk", intent: "Redraft to the intent", remove: "Remove the test" };
+const LABEL = { "send back": "Send back with a note" };  // a button's words, where its name alone says too little
+const slug = (name) => name.replace(/[^\w-]+/g, "-");  // an option's name as an id: "send back" -> "send-back"
 const LIVE_EVERY = 15000;  // working lines carry a clock: refresh them even when nothing new happened
 
 const state = {
@@ -364,11 +366,11 @@ function actions(c) {
     a.kind === "decide" && a.owner ? el("p", { class: "whose" }, `Whose call: ${a.owner}. Why a human: ${a.why_human}.`) : null,
     filesTable(c.files),
     el("ol", { class: "options" }, options.map((o, i) => el("li", {},
-      el("button", { id: "opt-" + o.name, "data-focus": "opt-" + o.name,
+      el("button", { id: "opt-" + slug(o.name), "data-focus": "opt-" + slug(o.name),
         class: (o.name === (recommend || "accept") ? "primary" : "") + (o.name === "drop" ? " danger" : "") + (p && p.option === o.name ? " picked" : ""),
-        "aria-describedby": "does-" + o.name, "aria-expanded": o.needs_reason ? String(!!(p && p.option === o.name)) : null,
-        onclick: () => choose(c, o) }, cap(o.name)),
-      el("span", { class: "does", id: "does-" + o.name },
+        "aria-describedby": "does-" + slug(o.name), "aria-expanded": o.needs_reason ? String(!!(p && p.option === o.name)) : null,
+        onclick: () => choose(c, o) }, LABEL[o.name] || cap(o.name)),
+      el("span", { class: "does", id: "does-" + slug(o.name) },
         o.does, o.needs_reason ? el("span", { class: "hint" }, " Needs a reason.") : null,
         o.name === recommend ? el("span", { class: "tag rec" }, "Recommended") : null),
       el("kbd", { "aria-hidden": "true" }, o.name === "accept" && a.kind === "ready" ? "a" : String(i + 1))))),
@@ -503,7 +505,7 @@ function cancel() {
   const option = state.pending && state.pending.option;
   state.pending = null;  // what you typed stays in drafts for next time
   renderCard();
-  const b = option && document.getElementById("opt-" + option);
+  const b = option && document.getElementById("opt-" + slug(option));
   if (b) b.focus();
 }
 
@@ -551,7 +553,7 @@ document.addEventListener("keydown", e => {
   else if (/^[1-9]$/.test(e.key) && c && (c.actions.kind === "decide" || c.actions.kind === "ready")) {
     const opts = c.actions.kind === "ready" ? READY_OPTIONS : c.actions.options;
     const o = opts[Number(e.key) - 1];
-    const b = o && document.getElementById("opt-" + o.name);
+    const b = o && document.getElementById("opt-" + slug(o.name));
     if (b) { e.preventDefault(); b.focus(); }
   }
 });

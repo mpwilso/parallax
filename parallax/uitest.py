@@ -30,7 +30,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import build, costs, installs, lifecycle, lint, memcap, sandbox, status, tree
+from . import build, costs, installs, lifecycle, lint, memcap, review, sandbox, status, tree
 from .core import ParallaxError, Project
 
 # newer MCP versions put their browser behind a Unix socket, which the sandbox refuses (Part 3 spike)
@@ -58,6 +58,11 @@ You know only what the app should do (the outcomes below) and where it runs. You
 The app: {url}
 What it should do:
 {outcomes}
+
+Test only what the page itself shows. If part of an outcome happens outside the page (an OS
+notification, a permission prompt, a file dialog, anything this browser can't drive or see), write no
+flow for that part, and name it in not_looked_at as "can't test in a browser: <what>". Never write a
+test that could only pass outside the browser.
 
 For each outcome a person could check in the browser:
 1. Walk its flow in the browser, from {url}.
@@ -125,9 +130,30 @@ def settings(project: Project) -> dict:
     return project.policy.ui_tester
 
 
-def applies(project: Project, plan: dict) -> bool:
-    """On for this project, and the plan says the task changes a flow a user goes through."""
-    return settings(project)["enabled"] and bool(plan.get("user_flows"))
+def applies(project: Project, plan: dict, task_id: str | None = None) -> bool:
+    """On for this project, and the plan says the task changes a flow a user goes through, one a
+    browser can test (with the task known: outcomes marked not browser-testable don't count)."""
+    if not settings(project)["enabled"]:
+        return False
+    return bool(flow_outcomes(project, task_id, plan) if task_id else plan.get("user_flows"))
+
+
+def flow_outcomes(project: Project, task_id: str, plan: dict | None = None) -> list[str]:
+    """The plan's user_flows, without the outcomes Focus marked not browser-testable."""
+    plan = plan if plan is not None else lifecycle.plan_data(project, task_id) or {}
+    untestable = lint.browser_untestable(lifecycle._read(project, task_id, "intent"))
+    return [str(n) for n in plan.get("user_flows", []) if str(n) not in untestable]
+
+
+def untestable_note(project: Project, task_id: str) -> str:
+    """The outcomes no browser can test, for Not looked at: "can't test in a browser: outcome 3 ...". """
+    intent = lifecycle._read(project, task_id, "intent")
+    wanted = {str(n) for n in (lifecycle.plan_data(project, task_id) or {}).get("user_flows", [])}
+    marked = lint.browser_untestable(intent)
+    lines = {m.group(1): lint.UNTESTABLE.sub("", m.group(2)).strip() for m in
+             re.finditer(r"^\s*(\d+)[.)]\s+(.*)$", lint.unmark(review.section(intent, "Outcome")), re.M)}
+    picked = [f"outcome {n} ({lines.get(n, '').rstrip('.')})" for n in sorted(marked, key=int) if n in wanted or not wanted]
+    return f"can't test in a browser: {'; '.join(picked)}" if picked else ""
 
 
 def recorded(project: Project, task_id: str) -> dict | None:
@@ -312,10 +338,10 @@ def outcomes(project: Project, task_id: str) -> str:
     intent = lifecycle._read(project, task_id, "intent")
     m = re.search(r"^#+\s*Outcomes?\s*$(.*?)(?=^#+\s|\Z)", intent, re.M | re.S)
     section = lint.unmark(m.group(1).strip()) if m else ""  # the outcome as stated, not whose it is
-    wanted = {str(n) for n in (lifecycle.plan_data(project, task_id) or {}).get("user_flows", [])}
+    wanted = set(flow_outcomes(project, task_id))
     items = re.findall(r"^\s*(\d+)[.)]\s+(.*)$", section, re.M)
     picked = [f"{n}. {text.strip()}" for n, text in items if n in wanted]
-    return "\n".join(picked) or section or "(the intent lists no outcomes)"
+    return "\n".join(picked) or "(the intent lists no outcome a browser can test)"
 
 
 def allowed(tool: str, tool_input: dict, work: Path) -> bool:
@@ -377,6 +403,9 @@ def test(project: Project, task_id: str, p, tester_for) -> tuple[str, str]:
         if log.strip():
             return "app", "the app didn't start for Field: " + lint.one_sentence(" ".join(log.strip().splitlines()[-3:]))
         return "you", "Field (the UI tester) never reached the app: its browser server didn't start"
+    untestable = lint.browser_untestable(lifecycle._read(project, task_id, "intent"))
+    outside = {str(f.get("name")) for f in reply.get("flows", []) if isinstance(f, dict) and str(f.get("outcome")) in untestable}
+    written = [f for f in written if f.name.removesuffix(".spec.js") not in outside]  # never a failing flow
     if written:  # Parallax runs them once, on the build the tester just used, before trusting any
         said = {str(f.get("name")): bool(f.get("works")) for f in reply.get("flows", []) if isinstance(f, dict)}
         check = _run_specs(project, tools, home / "validate", copy, work / "flows", p.venv, FLOW_RUNNER)
@@ -409,9 +438,16 @@ def test(project: Project, task_id: str, p, tester_for) -> tuple[str, str]:
         pngs.append(name)
     project.ledger.append("uitest.recorded", "ui tester", lint.one_sentence(
         f"{len(files)} flow tests written; {sum(1 for f in reply.get('flows', []) if f.get('works'))} flows worked"),
-        files=files, shots=pngs, flows=reply.get("flows", []),
-        not_looked_at=str(reply.get("not_looked_at") or "nothing"), **common)
+        files=files, shots=pngs, flows=[f for f in reply.get("flows", []) if str(f.get("name")) not in outside],
+        not_looked_at=_not_looked_at(str(reply.get("not_looked_at") or "nothing"), untestable_note(project, task_id)),
+        **common)
     return "ok", ""
+
+
+def _not_looked_at(said: str, parallax: str) -> str:
+    """Field's own Not looked at, with the outcomes no browser can test added by Parallax."""
+    parts = [x for x in (said.strip() if said.strip().rstrip(".").lower() != "nothing" else "", parallax) if x]
+    return "; ".join(parts) or "nothing"
 
 
 def _default_tester(limit: float, model: str):
