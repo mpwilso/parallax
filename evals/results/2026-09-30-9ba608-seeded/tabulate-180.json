@@ -1,0 +1,46 @@
+{
+ "case": "tabulate-180",
+ "mode": "seeded",
+ "pr": "https://github.com/astanin/python-tabulate/commit/20c6370d5da2dae89b305bfb6c7f12a0f8b7236c",
+ "issue": "https://github.com/astanin/python-tabulate/issues/180",
+ "inferred": [
+  "3",
+  "4",
+  "5"
+ ],
+ "reticle_kept": {
+  "asked": 3,
+  "inferred": 2
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "change 0 to 1 at tabulate/__init__.py:1507",
+   "hidden": "29 of 30 pass",
+   "second_eye": "catch",
+   "reticle": "miss",
+   "reticle_with_inferred": "catch"
+  },
+  {
+   "broken": "undo the hunk at tabulate/__init__.py:1506",
+   "hidden": "29 of 30 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch"
+  },
+  {
+   "broken": "undo the hunk at tabulate/__init__.py:2069",
+   "hidden": "29 of 30 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "false alarm",
+  "reticle": "right",
+  "inferred_notes": 1
+ },
+ "cost_usd": 0.1423,
+ "seconds": 56.3
+}

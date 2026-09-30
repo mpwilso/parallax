@@ -1,0 +1,46 @@
+{
+ "case": "tabulate-231",
+ "mode": "seeded",
+ "pr": "https://github.com/astanin/python-tabulate/pull/232",
+ "issue": "https://github.com/astanin/python-tabulate/issues/231",
+ "inferred": [
+  "2",
+  "3",
+  "4"
+ ],
+ "reticle_kept": {
+  "asked": 2,
+  "inferred": 4
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "flip == to != at tabulate/__init__.py:105",
+   "hidden": "55 of 159 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch"
+  },
+  {
+   "broken": "change 1 to 2 at tabulate/__init__.py:111",
+   "hidden": "155 of 159 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch"
+  },
+  {
+   "broken": "undo the hunk at tabulate/__init__.py:104",
+   "hidden": "5 of 159 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "false alarm",
+  "reticle": "false alarm",
+  "inferred_notes": 1
+ },
+ "cost_usd": 0.2708,
+ "seconds": 80.6
+}

@@ -1,0 +1,41 @@
+{
+ "case": "tomlkit-512",
+ "mode": "seeded",
+ "pr": "https://github.com/python-poetry/tomlkit/pull/514",
+ "issue": "https://github.com/python-poetry/tomlkit/issues/512",
+ "inferred": [
+  "3",
+  "4"
+ ],
+ "reticle_kept": {
+  "asked": 1,
+  "inferred": 1
+ },
+ "reticle_weak": [
+  "it fails on UnexpectedCharError, not an assertion or a crash the request shows",
+  "it passes on the base, so it doesn't show the problem"
+ ],
+ "versions": [
+  {
+   "broken": "undo the hunk at tomlkit/items.py:2120",
+   "hidden": "79 of 80 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch"
+  },
+  {
+   "broken": "undo the hunk at tomlkit/items.py:2138",
+   "hidden": "78 of 80 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "false alarm",
+  "reticle": "right",
+  "inferred_notes": 0
+ },
+ "cost_usd": 0.1347,
+ "seconds": 48.5
+}

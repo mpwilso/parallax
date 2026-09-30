@@ -1,0 +1,35 @@
+{
+ "case": "pathspec-77",
+ "mode": "seeded",
+ "pr": "https://github.com/cpburnz/python-pathspec/commit/9302492483b06ca1613aa8b11cf08cef93930b12",
+ "issue": "https://github.com/cpburnz/python-pathspec/issues/77",
+ "inferred": [
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8"
+ ],
+ "reticle_kept": {
+  "asked": 2,
+  "inferred": 1
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "undo the hunk at pathspec/patterns/gitwildmatch.py:316",
+   "hidden": "43 of 45 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "false alarm",
+  "reticle": "right",
+  "inferred_notes": 1
+ },
+ "cost_usd": 0.1122,
+ "seconds": 55.7
+}

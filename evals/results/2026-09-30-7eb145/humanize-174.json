@@ -1,0 +1,48 @@
+{
+ "case": "humanize-174",
+ "pr": "https://github.com/python-humanize/humanize/pull/272",
+ "issue": "https://github.com/python-humanize/humanize/issues/174",
+ "ceiling_usd": 3.0,
+ "task": "a1b65a",
+ "end": "ready",
+ "status": "ready",
+ "hidden": "fail",
+ "hidden_detail": "366 of 379 pass (exit 1)",
+ "second_eye": "miss",
+ "verdicts": [
+  {
+   "tree": "4886a2bd93a86eae0a5d91322297bfb96dfbd2b3",
+   "verdict": "pass",
+   "hidden": "fail",
+   "judgment": "miss"
+  }
+ ],
+ "cost_usd": 1.2174,
+ "seconds_to_ready": 200.0,
+ "touches": 1,
+ "decisions": [],
+ "inferred": [
+  "3",
+  "4",
+  "5",
+  "6"
+ ],
+ "reticle": "miss",
+ "reticle_verdicts": [
+  {
+   "tree": "4886a2bd93a86eae0a5d91322297bfb96dfbd2b3",
+   "verdict": "pass",
+   "hidden": "fail",
+   "judgment": "miss"
+  }
+ ],
+ "reticle_kept": 2,
+ "reticle_weak": [],
+ "reticle_cost_usd": 0.03,
+ "reticle_false_alarm_rework_usd": 0.0,
+ "inferred_notes": [],
+ "notes_flag_bug": false,
+ "notes_noise": 0,
+ "scratch": "/home/matt/.local/share/parallax/evals/runs/7eb145/humanize-174/repo",
+ "seconds": 201.6
+}

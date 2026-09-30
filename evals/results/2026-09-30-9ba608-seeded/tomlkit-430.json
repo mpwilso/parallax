@@ -1,0 +1,48 @@
+{
+ "case": "tomlkit-430",
+ "mode": "seeded",
+ "pr": "https://github.com/python-poetry/tomlkit/pull/520",
+ "issue": "https://github.com/python-poetry/tomlkit/issues/430",
+ "inferred": [
+  "4",
+  "5",
+  "6"
+ ],
+ "reticle_kept": {
+  "asked": 2,
+  "inferred": 2
+ },
+ "reticle_weak": [
+  "it passes on the base, so it doesn't show the problem"
+ ],
+ "versions": [
+  {
+   "broken": "flip == to != at tomlkit/api.py:266",
+   "hidden": "150 of 152 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch"
+  },
+  {
+   "broken": "change 1 to 2 at tomlkit/api.py:266",
+   "hidden": "150 of 152 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch"
+  },
+  {
+   "broken": "change 0 to 1 at tomlkit/api.py:267",
+   "hidden": "151 of 152 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "false alarm",
+  "reticle": "right",
+  "inferred_notes": 0
+ },
+ "cost_usd": 0.1342,
+ "seconds": 47.5
+}

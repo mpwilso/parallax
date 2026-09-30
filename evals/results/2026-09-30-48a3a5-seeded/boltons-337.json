@@ -1,0 +1,66 @@
+{
+ "case": "boltons-337",
+ "mode": "seeded",
+ "pr": "https://github.com/mahmoud/boltons/pull/338",
+ "issue": "https://github.com/mahmoud/boltons/issues/337",
+ "inferred": [
+  "3",
+  "4",
+  "5"
+ ],
+ "reticle_kept": {
+  "asked": 1,
+  "inferred": 4
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "undo the hunk at boltons/dictutils.py:74",
+   "hidden": "0 of 1 pass",
+   "second_eye": "catch",
+   "findings": [
+    "major: No regression test was added. The outcome requires tests for the empty, single-value and multi-value cases, and the diff does not touch tests/test_dictutils.py.",
+    "blocker: PY3 is only assigned as False in the except ImportError branch. No visible assignment sets it in the success path. If it is not defined elsewhere, `if PY3:` in the class body raises NameError on import on every Python 3. That would break th",
+    "major: __setstate__ breaks loading pickles made by earlier versions. Those pickles carry a __dict__ state with _map and _headerlink. The new code passes that dict to update_extend, which treats it as key/value data and corrupts the object or fails"
+   ],
+   "reticle": "catch",
+   "reticle_with_inferred": "catch"
+  },
+  {
+   "broken": "undo the hunk at boltons/dictutils.py:178",
+   "hidden": "7 of 26 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker: The change removes `self._clear_ll()` from `__init__`. A plain `OrderedMultiDict()` or `OMD({})` now never creates `_map` or `_ll`, so `add`, iteration and similar calls on it will raise AttributeError. That breaks code that never pickles.",
+    "major: The fix probably doesn't work. `OrderedMultiDict` is a dict subclass, so pickle still emits the dict items and replays them through `__setitem__` on an object made without `__init__`. That happens before `__setstate__` runs, so `_map` is st",
+    "major: No regression test is in the diff. The outcome requires tests for the empty, single-value and multi-value cases, plus checks of `add`, `pop` and `popall` on a loaded object.",
+    "major: `__setstate__` treats the state as a list of pairs. Pickles from earlier versions stored a dict state. `update_extend` on that dict would give wrong results or fail. The constraint to keep old pickles loadable is not met."
+   ],
+   "reticle": "catch",
+   "reticle_with_inferred": "catch"
+  },
+  {
+   "broken": "undo the hunk at boltons/dictutils.py:194",
+   "hidden": "25 of 26 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker: Moving _clear_ll into __new__ only stops the crash. Pickle still rebuilds a dict subclass by calling obj[k]=v for each item from the overridden items(), which gives one value per key. A multi-value OMD([('a',1),('b',2),('a',3)]) most likely",
+    "major: Pickle protocols 0 and 1 rebuild through copyreg._reconstructor, which calls dict.__new__ directly and skips OrderedMultiDict.__new__. The linked list would still be uninitialized for those protocols, so the crash remains there.",
+    "major: No regression test was added. The outcome requires tests for the empty, single-value and multi-value cases, and the constraints allow editing this file."
+   ],
+   "reticle": "miss",
+   "reticle_with_inferred": "catch"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "false alarm",
+  "findings": [
+   "major: The diff has no regression test. The outcome requires tests for the empty, single-value and multi-value cases, and for add/pop/popall on the loaded object. None were added.",
+   "major: __setstate__ assumes the state is a list of pairs. Pickles from earlier versions carry the instance __dict__ as state. update_extend would treat that dict as data and add bogus keys such as _map, instead of loading or failing cleanly. The c"
+  ],
+  "reticle": "right",
+  "inferred_notes": 1
+ },
+ "cost_usd": 0.1771,
+ "seconds": 86.1
+}

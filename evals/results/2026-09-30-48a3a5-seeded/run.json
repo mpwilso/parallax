@@ -1,0 +1,42 @@
+{
+ "run": "48a3a5",
+ "mode": "seeded",
+ "started": "2026-09-30T18:53:40+00:00",
+ "parallax": "1aa96dc",
+ "budget_usd": 1.9,
+ "per_case_usd": 1.0,
+ "cases": [
+  "boltons-319",
+  "boltons-337",
+  "boltons-348",
+  "humanize-174"
+ ],
+ "fingerprint": {
+  "parallax.policy.toml": "0ee0e33c2ca057b59f6f7f185afac8ccdbf99f45ce58ff0fdbbe8b9b947c8935",
+  "parallax/agents/claude.py (DRAFT_PROMPT)": "aa4e07d8db2e22f0e0363fe27cf9f55bd163396d7b9bd6b851d5618c057420e7",
+  "parallax/agents/claude.py (MAKER_PROMPT)": "6c03001cbf16ae3c3a8a4d1b4498e36c92093bd5c8a22846cb9e67a8836b191b",
+  "parallax/agents/claude.py (BLIND_PROMPT)": "30ff80347e728226d6e836a3a260a21b4ec1d506cb365ffef4bbc5c4d0c4f5ae",
+  "parallax/agents/claude.py (BLIND_SCHEMA)": "787263564334862a013b2644b21fa81652ad72f2264d34afdab55ec4d209fd3f",
+  "parallax/lifecycle.py (SHAPES)": "1e1078e9f56be214ec08c79c592e67ff65a6ca8ae12e93a39c89e4ac39d92d52",
+  "parallax/lifecycle.py (the drafting request)": "fdefa06e1f0ab1e415f769d48da87cc1d180bd65ee9f3bbf04e00de6ac2daa0d",
+  "parallax/build.py (MAKER_GOAL)": "77a34835cf2d6edb5171c880ac8a25fabff86381bda6887145bc082ac8b0e46b",
+  "parallax/check.py (REWORK)": "21cc566665f35d54fbc869ccd5616c03caca428dd58240cceae4db282edd540c",
+  "parallax/review.py (the checker's brief)": "35202a7830a8e913ae4a7399e35d16f3c6c8df7610a3100f72dbf7ba4fb32f51",
+  "parallax/review.py (TEMPLATE)": "16df79dcfe45c1b80abe85004794c477967bfbb82361a4bcf848b9ae8a87a493",
+  "parallax/agents/claude.py (RETICLE_PROMPT)": "ab59e5bec1c9260c5eb3b6bfb957d056f8b0cab79361aba0ccdc2d268a4af64b",
+  "parallax/reticle.py (REQUEST)": "8998fc2bd5900faa67cbe6d974ea1ca7318b3789b3375671d4316531ad937a93",
+  "Focus's model": "claude-sonnet-5-5",
+  "Maker's model": "claude-opus-5",
+  "Second Eye's model": "claude-sonnet-5-5",
+  "Reticle's model": "claude-sonnet-5-5"
+ },
+ "finished": "2026-09-30T18:58:16+00:00",
+ "spent_usd": 0.6684,
+ "done": [
+  "boltons-319",
+  "boltons-337",
+  "boltons-348",
+  "humanize-174"
+ ],
+ "stopped": null
+}

@@ -1,0 +1,74 @@
+{
+ "case": "humanize-174",
+ "mode": "seeded",
+ "pr": "https://github.com/python-humanize/humanize/pull/272",
+ "issue": "https://github.com/python-humanize/humanize/issues/174",
+ "inferred": [
+  "3",
+  "4",
+  "5",
+  "6"
+ ],
+ "reticle_kept": {
+  "asked": 1,
+  "inferred": 3
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "flip == to != at src/humanize/time.py:162",
+   "hidden": "208 of 379 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker: The condition `if not years and days < 1:` was changed to `if years != 0 and days < 1:`. This inverts the logic. For normal sub-day values (years == 0, days == 0) the seconds/minutes/hours branch is now skipped and the code falls into the `",
+    "major: Python's round() uses banker's rounding, so half an hour does not always round up. For example 9000 s (2.5 h) gives 2 hours, and 90 s gives 2 minutes. The outcome requires half to round up.",
+    "major: Minute rounding was changed (e.g. 90 s went from 'a minute' to '2 minutes'; 3570 s or more now gives 'an hour'). The constraints say results below one hour must stay the same.",
+    "major: Month and year rounding (round(days / 30.5), new 'a year' and year+1 cases) was changed. The outcome only asks for hour rounding, and this changes day, month and year outputs without being asked. It also risks other tests.",
+    "major: No tests were added or updated. The diff has no regression test for 10799, no test for the 86399 edge case, and no test showing the naturaltime shift. The outcome requires all of these."
+   ],
+   "reticle": "catch",
+   "reticle_with_inferred": "catch"
+  },
+  {
+   "broken": "change 0 to 1 at src/humanize/time.py:162",
+   "hidden": "209 of 379 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker: The condition changed from `not years and days < 1` to `years == 1 and days < 1`. Sub-day deltas (years == 0) no longer enter the seconds/minutes/hours block. They fall into the `elif years == 0` days branch and give day-style output, so na",
+    "major: Python round() uses banker's rounding, so exact halves go to the even number. 9000s is 2.5 hours and rounds to 2, not 3. The outcome requires half an hour to round up. Use floor(x + 0.5) or integer arithmetic instead.",
+    "major: Minutes are now rounded too. 90s gives '2 minutes' (was 'a minute') and 119s gives '2 minutes'. The constraint says results below one hour stay the same unless the change is explicitly extended to minutes, and it is not.",
+    "major: Month and year rounding changed (round(days/30.5), new 12-month and 'a year' branches, year incrementing). The outcome only asks for hour rounding. This changes the output of days, months and years, which was not requested.",
+    "major: The diff has no tests. There is no regression test for 10799, no test for the 86399 top-of-range choice, and no updated existing tests or naturaltime tests showing the shifts. The outcome requires all of these."
+   ],
+   "reticle": "catch",
+   "reticle_with_inferred": "catch"
+  },
+  {
+   "broken": "flip < to <= at src/humanize/time.py:162",
+   "hidden": "364 of 379 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker: Changing `days < 1` to `days <= 1` sends deltas of one day or more into the sub-day branch. Exactly 86400 seconds has delta.seconds == 0 and now returns the zero-seconds/'a moment' text instead of 'a day'. One day plus 5 hours returns '5 ho",
+    "major: Python's round() uses banker's rounding, so half an hour does not round up. 9000 seconds (2.5h) gives '2 hours' and 16200 gives '4 hours'. The outcome requires half to round up.",
+    "major: Minute rounding was added, which the constraints forbid unless explicitly requested. 90 to 119 seconds now gives '2 minutes' instead of 'a minute', and 3570+ seconds gives 'an hour'. Results below one hour must stay the same.",
+    "major: Month rounding (round(days/30.5)), new 'a year' and year-rollover branches change day, month and year outputs. The outcome only asked for hours. This shifts existing behavior without being asked for.",
+    "major: No tests in the diff. There is no regression test for 10799, no test for the 86399 top-of-range choice, no plural check, and no updated naturaltime expectations. Existing tests that assumed floor behavior are not updated. The required commi"
+   ],
+   "reticle": "miss",
+   "reticle_with_inferred": "catch"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "false alarm",
+  "findings": [
+   "blocker: Python round() uses banker's rounding, so half hours round to even. 9000 seconds (2.5 h) gives 2 hours, not 3. The outcome requires half an hour to round up. The same applies to round(delta.seconds / 60) for minutes.",
+   "major: No tests in the diff. The outcome requires a regression test for 10799, 10800 and 7300, a test for the 86399 top-of-range choice, and updates to floor-assuming tests (including naturaltime shifts). Existing tests probably break, for example",
+   "major: The minutes branch now rounds. 119 seconds changes from 'a minute' to '2 minutes', and 3599 seconds becomes 'an hour'. The constraints say results below one hour must stay the same.",
+   "major: Month rounding changes (round(days/30.5)) along with new 'a year' and year-increment branches. The outcome only asked for hours, so day and month outputs shift without being asked for, and there is no test for them."
+  ],
+  "reticle": "right",
+  "inferred_notes": 1
+ },
+ "cost_usd": 0.1907,
+ "seconds": 81.1
+}
