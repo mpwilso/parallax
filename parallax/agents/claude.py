@@ -60,6 +60,11 @@ BLIND_PROMPT = """\
 You are the blind checker for one change. You see the outcome it must achieve, its constraints, the
 review rules (REVIEW.md), and the diff. Nothing else, on purpose: not the author's reasoning, plan, or
 notes. Judge the change on its merits.
+Each outcome is marked "asked" (the person's own words state it or clearly imply it) or "inferred" (an
+addition by whoever drafted the outcome). A finding that fails the change (a severity REVIEW.md makes
+blocking) or any finding of kind "scope" may rest only on an asked outcome or a constraint. An inferred
+outcome the change doesn't meet may be mentioned only at a severity that doesn't block, as a note, never
+as a reason to fail. An outcome with no mark counts as asked.
 Follow REVIEW.md's passes. Give each finding one of its severities, and where it is (path:line from the
 diff, or "" for the whole change). Findings are about the diff; don't restate the rules.
 Give each finding a kind: "scope" if the problem is that the change does something the outcome or the

@@ -398,6 +398,12 @@ def unmark(outcomes: str) -> str:
     return re.sub(r"(?im)^(\s*\d+[.)]\s+)\**(?:asked|inferred)\**\s*:\s*", r"\1", outcomes)
 
 
+def marked(outcomes: str) -> str:
+    """Outcome lines with Focus's mark in one plain form, "1. asked: ..." or "1. inferred: ...", however
+    it was written (bold, capitals). For Second Eye, which may fail a change only on an asked outcome."""
+    return re.sub(r"(?im)^(\s*\d+[.)]\s+)\**(asked|inferred)\**\s*:\s*", lambda m: f"{m.group(1)}{m.group(2).lower()}: ", outcomes)
+
+
 def outcome_kinds(intent: str) -> dict[str, str | None]:
     """outcome number -> "asked", "inferred", or None when the outcome isn't marked (intents before 2026-09-30)."""
     lines = intent.splitlines()

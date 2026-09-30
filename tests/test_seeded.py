@@ -90,7 +90,8 @@ def test_second_eye_and_reticle_are_scored_on_each_broken_version_and_the_real_f
     assert r["reticle_kept"] == {"asked": 1} and r["inferred"] == ["2"]
     assert r["cost_usd"] == pytest.approx(0.08)  # the intent and Reticle; the fake checker costs nothing
     # Second Eye's exact normal input, and never the hidden tests: in its brief or in Reticle's
-    assert len(checker.briefs) == 4 and all(b.startswith("Outcome:\n1. add returns the sum") for b in checker.briefs)
+    assert len(checker.briefs) == 4 and all(b.startswith("Outcome:\n1. asked: add returns the sum") for b in checker.briefs)
+    assert all("2. inferred: clamp caps values above 10 at 10." in b for b in checker.briefs)
     assert not any(HIDDEN in b or "test_calc.py" in b for b in checker.briefs) and HIDDEN not in writer.goals[0]
     text = (out / "summary.md").read_text()
     assert text.splitlines()[1] == "Bottom line: Of 3 broken versions, Second Eye caught 1 and Reticle 1."
@@ -160,7 +161,7 @@ def test_second_eye_alone_reruns_on_the_same_versions_reusing_the_intent_and_ret
     assert [v["second_eye"] for v in r["versions"]] == ["catch", "miss", "miss"]
     assert [v["reticle"] for v in r["versions"]] == [v["reticle"] for v in before["versions"]]  # Reticle's results as they were
     assert r["real_fix"]["reticle"] == before["real_fix"]["reticle"] and r["second_eye_from"] == first.name.split("-")[3]
-    assert len(checker.briefs) == 4 and all(b.startswith("Outcome:\n1. add returns the sum") for b in checker.briefs)
+    assert len(checker.briefs) == 4 and all(b.startswith("Outcome:\n1. asked: add returns the sum") for b in checker.briefs)
     assert not any(HIDDEN in b or "test_calc.py" in b for b in checker.briefs)
     header = json.loads((out / "run.json").read_text())
     assert header["second_eye_only"] and header["done"] == ["calc-2"]

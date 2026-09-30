@@ -102,7 +102,8 @@ def _new_file_diff(path: str, content: str) -> str:
 
 
 def test_checker_is_blind_to_maker_explanation(repo):
-    """The pin: the checker gets exactly its brief, on the first review and on re-review."""
+    """The pin: the checker gets exactly its brief, on the first review and on re-review. Each outcome
+    keeps its asked or inferred mark (since 2026-09-30; before, the marks were removed)."""
     proj, tid = _approved(repo, tightening="check the WSL steps")
     maker = ScriptedAgent(steps=[("write", "README.md", "first\n"),
                                  ("shell", ["git", "add", "README.md"]),
@@ -116,7 +117,7 @@ def test_checker_is_blind_to_maker_explanation(repo):
 
     review_md = review.TEMPLATE.rstrip() + "\n\n## This task only\n\ncheck the WSL steps"
     expected = [
-        f"Outcome:\n1. A new user on WSL can follow them.\n\nConstraints:\nKeep the macOS steps.\n\n"
+        f"Outcome:\n1. asked: A new user on WSL can follow them.\n\nConstraints:\nKeep the macOS steps.\n\n"
         f"REVIEW.md:\n{review_md}\n\nDiff:\n{_new_file_diff('README.md', content)}\n"
         for content in ("first\n", "second\n")
     ]
@@ -225,3 +226,19 @@ def test_sdk_tools_map_to_parallax_actions(repo):
     assert action == "tool.Task"
     proj, tid, wt = setup(repo)
     assert not gated(proj, tid, wt)(action, "spawn a helper", []).allowed  # not routine, not in the plan
+
+
+def test_second_eye_sees_each_outcomes_mark_and_may_fail_a_change_only_on_an_asked_one():
+    """In the seeded eval, correct maintainers' fixes failed on outcomes Focus had inferred."""
+    from parallax import lint
+    from parallax.agents import claude
+    intent = ("## Outcome\n1. **Asked**: add sums.\n2. inferred: add accepts any number of arguments.\n3. add is fast.\n\n"
+              "## Constraints\nKeep the name.\n")
+    b = review.brief(intent, "rules", "", "a diff")
+    assert b == ("Outcome:\n1. asked: add sums.\n2. inferred: add accepts any number of arguments.\n3. add is fast.\n\n"
+                 "Constraints:\nKeep the name.\n\nREVIEW.md:\nrules\n\nDiff:\na diff\n")
+    assert lint.unmark(lint.marked(intent)) == lint.unmark(intent)  # the same outcomes, only the marks' form differs
+    rule = " ".join(claude.BLIND_PROMPT.split())
+    assert ('A finding that fails the change (a severity REVIEW.md makes blocking) or any finding of kind "scope" '
+            "may rest only on an asked outcome or a constraint.") in rule
+    assert "never as a reason to fail" in rule and "An outcome with no mark counts as asked." in rule

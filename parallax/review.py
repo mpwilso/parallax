@@ -66,13 +66,15 @@ def section(text: str, name: str) -> str:
 
 
 def brief(intent: str, review_text: str, tightening: str, diff: str) -> str:
-    """Exactly what the checker sees, and nothing else. Each outcome as stated, without Focus's mark of
-    whose it is (asked or inferred): the checker judges the change against the outcome, not its source."""
+    """Exactly what the checker sees, and nothing else. Each outcome keeps Focus's mark of whose it is:
+    asked (the person's words) or inferred (Focus's own addition). Second Eye may fail a change only on
+    an asked outcome or a constraint; an inferred one is at most a note (its rules, agents/claude.py).
+    Before 2026-09-30 the marks were removed here, and correct fixes failed on inferred outcomes."""
     review_part = review_text.rstrip()
     if tightening.strip():
         review_part += f"\n\n## This task only\n\n{tightening.strip()}"
-    from .lint import unmark
-    return (f"Outcome:\n{unmark(section(intent, 'Outcome'))}\n\n"
+    from .lint import marked
+    return (f"Outcome:\n{marked(section(intent, 'Outcome'))}\n\n"
             f"Constraints:\n{section(intent, 'Constraints')}\n\n"
             f"REVIEW.md:\n{review_part}\n\n"
             f"Diff:\n{diff or '(empty)'}\n")
