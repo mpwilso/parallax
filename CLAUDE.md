@@ -25,7 +25,8 @@ Search the repo for an existing helper, test fixture, or pattern first. Reuse be
 ## Code
 
 - Python 3.11+, stdlib only in `parallax/` unless there's a strong reason (discuss first). `claude-agent-sdk` is allowed in `parallax/agents/` only, behind an adapter. The checker is another Claude model, so no other vendor SDK. The sandbox runtime (`srt`) and git are called as programs, not imported.
-- Tests in `tests/`, pytest. Tests never call a model. Run `pytest -q` before calling anything done. New behavior gets a test.
+- Tests in `tests/`, pytest. Tests never call a model. Run `scripts/test.sh` before calling anything done: it runs ruff and the full suite exactly as CI does, with the Playwright version pinned in it. New behavior gets a test.
+- When CI fails, the report says "reproduced" or "not reproduced". A fix is never claimed without a reproduction that failed and then passed; without one, only capture more evidence for the next run.
 - Keep modules small. New milestones get new modules, not bigger old ones.
 - The ledger holds who decided what, plus the hash of every approved file. Files in `docs/tasks/` hold the work. A hash mismatch blocks accept. Derive views (inbox, task status) from the ledger.
 

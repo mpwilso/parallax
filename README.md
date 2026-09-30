@@ -2,7 +2,7 @@
 
 # Parallax
 
-[![tests](https://github.com/mpwilso/parallax/actions/workflows/tests.yml/badge.svg)](https://github.com/mpwilso/parallax/actions/workflows/tests.yml)
+[![tests](https://github.com/mpwilso/parallax/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/mpwilso/parallax/actions/workflows/tests.yml)
 
 **Agents do the work. You make the calls.**
 
@@ -123,4 +123,4 @@ Linux, or Windows through WSL2. On Windows, make the distro first: [docs/wsl.md]
 
 **Stop and remove.** `Ctrl+C` in the terminal running `parallax ui` stops the page; `parallax stop` ends every running build now and records it. To remove Parallax: `uv tool uninstall parallax`, then delete `~/.local/share/parallax` (worktrees, task folders, Field's tools) and `~/.config/parallax` (the approval key and UI links). A repo keeps only `parallax.policy.toml`, `REVIEW.md`, its ledger in `.parallax/` and the `docs/tasks/` it accepted; delete those to leave no trace.
 
-The tests never call a model: `uv run --python 3.12 --with pytest --with playwright --with-editable . python -m pytest -q`. The browser tests need `python -m playwright install --with-deps chromium` once.
+The tests never call a model. `scripts/test.sh` runs ruff and the whole suite exactly as CI does, with the browser tests; `scripts/test.sh browser` fetches the pinned Chromium once.

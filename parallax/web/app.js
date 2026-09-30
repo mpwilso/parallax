@@ -439,6 +439,15 @@ function nextWaiting(after) {
   return w.length ? w[0].task : null;
 }
 
+// n opens the next task that waits on you. The page's copy of the board can be up to a poll behind
+// the ledger (a task that just went Ready still sits under Working here), so when it shows nothing
+// waiting, fetch the board first and look again, rather than dropping the key.
+async function openNext() {
+  let t = nextWaiting(state.open);
+  if (!t) { await refresh(); t = nextWaiting(state.open); }
+  if (t) openCard(t, true);
+}
+
 async function run(path, body) {
   if (state.busy) return false;
   state.busy = true;
@@ -535,7 +544,7 @@ document.addEventListener("keydown", e => {
     const to = at < 0 ? 0 : e.key === "j" ? Math.min(at + 1, tasks.length - 1) : Math.max(at - 1, 0);
     openCard(tasks[to].task, true);
   }
-  else if (e.key === "n") { const t = nextWaiting(state.open); if (t) openCard(t, true); }
+  else if (e.key === "n") openNext();
   else if (e.key === "a" && c && c.actions.kind === "ready") { const b = document.getElementById("opt-accept"); if (b) { e.preventDefault(); b.focus(); } }
   else if (e.key === "r" && c && c.actions.kind === "ready") { e.preventDefault(); choose(c, READY_OPTIONS[1]); }
   else if (e.key === "d" && c && c.has_change) toggleDoc("diff");

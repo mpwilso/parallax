@@ -6,6 +6,7 @@ with the reason, where Playwright or Chromium isn't installed (inside a task's s
 import os
 import re
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -54,14 +55,28 @@ def server(proj):
     app.close()
 
 
+TRACES = os.environ.get("PARALLAX_BROWSER_TRACES")  # a folder: failed tests leave a trace and console log there (CI uploads it)
+
+
 @pytest.fixture
-def page(browser, server):
+def page(browser, server, request):
     ctx = browser.new_context(viewport={"width": 1280, "height": 860})
     pg = ctx.new_page()
-    errors = []
+    errors, console = [], []
     pg.on("pageerror", lambda e: errors.append(str(e)))
+    pg.on("console", lambda m: console.append(f"{m.type}: {m.text}"))
+    if TRACES:
+        ctx.tracing.start(screenshots=True, snapshots=True, sources=True)
     pg.goto(server.url)
     yield pg
+    failed = getattr(getattr(request.node, "rep_call", None), "failed", False)
+    if TRACES:
+        folder = Path(TRACES)
+        folder.mkdir(parents=True, exist_ok=True)
+        name = re.sub(r"[^\w.-]", "_", request.node.name)
+        ctx.tracing.stop(path=str(folder / f"{name}.trace.zip") if failed else None)
+        if failed:
+            (folder / f"{name}.console.txt").write_text("\n".join(console + [f"pageerror: {e}" for e in errors]) + "\n")
     ctx.close()
     assert errors == [], errors  # no script errors in any flow
 
@@ -309,7 +324,10 @@ def test_after_a_decision_the_next_waiting_card_opens(page, proj):
 def test_keyboard_only(page, proj):
     ready, _ = run_to_ready(proj, "first thing")
     working = launched(proj, "still working")
-    expect(row(page, ready)).to_be_visible(timeout=WAIT)
+    # the page polls every two seconds: wait until it shows both tasks as they are in the ledger, the first one
+    # Ready and the second under Working, before a key is pressed. A row alone can be a stale copy (CI, twice).
+    expect(row(page, ready).locator(".tag.good")).to_be_visible(timeout=WAIT)
+    expect(row(page, working)).to_be_visible(timeout=WAIT)
     page.keyboard.press("Tab")
     expect(page.locator("#work")).to_be_focused()
     page.keyboard.press("Escape")
@@ -457,3 +475,17 @@ def test_reduced_motion_keeps_every_portrait_still(browser, server, proj):
     assert pg.evaluate("getComputedStyle(document.querySelector('.portrait.working .bust')).animationName") == "none"
     assert pg.evaluate("getComputedStyle(document.querySelector('.portrait.working .glow')).animationName") == "none"
     ctx.close()
+
+
+def test_n_opens_a_task_that_went_ready_since_the_pages_last_poll(page, proj):
+    """The cause behind a flaky keyboard run: the page polls every two seconds, so right after a task
+    goes Ready its row can still sit under Working in the page's copy of the board. n must fetch the
+    board and open the card, not drop the key."""
+    working = launched(proj, "still working")
+    expect(row(page, working)).to_be_visible(timeout=WAIT)
+    page.evaluate("clearTimeout; state.board.waiting = []; state.board.count = 0; renderQueue()")  # the stale copy: nothing waits
+    ready, _ = run_to_ready(proj, "first thing")  # the ledger moves on; the page hasn't polled yet
+    assert page.evaluate("state.board.waiting.length") == 0
+    page.keyboard.press("n")
+    expect(page.locator("#card-title")).to_be_focused(timeout=WAIT)
+    expect(page.locator("#card-title")).to_have_text("first thing")

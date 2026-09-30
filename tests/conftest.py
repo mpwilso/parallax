@@ -4,6 +4,13 @@ from pathlib import Path
 import pytest
 
 
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """The outcome, on the item, so a fixture's teardown can keep a trace when the test failed."""
+    outcome = yield
+    setattr(item, "rep_" + outcome.get_result().when, outcome.get_result())
+
+
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)

@@ -1,6 +1,9 @@
 name: tests
 
-on: [push, pull_request]
+on:
+  push:
+    branches: ['**']
+  pull_request:
 
 permissions:
   contents: read
@@ -21,9 +24,16 @@ jobs:
           sudo apt-get update && sudo apt-get install -y bubblewrap socat ripgrep
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           npm install -g @anthropic-ai/sandbox-runtime
-      - name: Lint
-        run: uv run --no-project --python 3.12 --with ruff ruff check .
-      - name: Chromium for the browser tests
-        run: uv run --no-project --python 3.12 --with playwright python -m playwright install --with-deps chromium
-      - name: The full suite, browser tests included. No test calls a model.
-        run: uv run --no-project --python 3.12 --with pytest --with playwright --with-editable . python -m pytest -q -rs -p no:cacheprovider
+      - name: Chromium for the browser tests, the version scripts/test.sh pins
+        run: scripts/test.sh browser
+      - name: Lint and the full suite, browser tests included, as scripts/test.sh runs them. No test calls a model.
+        run: scripts/test.sh
+        env:
+          PARALLAX_BROWSER_TRACES: browser-traces   # each failed browser test leaves a Playwright trace and its console log here
+      - name: Traces and console logs of failed browser tests
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: browser-traces
+          path: browser-traces/
+          if-no-files-found: ignore
