@@ -1,0 +1,41 @@
+{
+ "case": "cachetools-387",
+ "pr": "https://github.com/tkem/cachetools/commit/57d2e4813d9801f97034559e22428bac6f7c6c9b",
+ "issue": "https://github.com/tkem/cachetools/issues/387",
+ "ceiling_usd": 4.0,
+ "task": "c12b8a",
+ "end": "ready",
+ "status": "ready",
+ "hidden": "pass",
+ "hidden_detail": "46 of 46 pass (exit 0)",
+ "second_eye": "right",
+ "verdicts": [
+  {
+   "tree": "d9e60a5cb3565caa1353e9e21982d89b0fa1f075",
+   "verdict": "pass",
+   "hidden": "pass",
+   "judgment": "right"
+  }
+ ],
+ "cost_usd": 1.151,
+ "seconds_to_ready": 212.0,
+ "touches": 1,
+ "decisions": [],
+ "reticle": "right",
+ "reticle_verdicts": [
+  {
+   "tree": "d9e60a5cb3565caa1353e9e21982d89b0fa1f075",
+   "verdict": "pass",
+   "hidden": "pass",
+   "judgment": "right"
+  }
+ ],
+ "reticle_kept": 5,
+ "reticle_weak": [
+  "it passes on the base, so it doesn't show the problem"
+ ],
+ "reticle_cost_usd": 0.0664,
+ "reticle_false_alarm_rework_usd": 0.0,
+ "scratch": "/home/matt/.local/share/parallax/evals/runs/492eaf/cachetools-387/repo",
+ "seconds": 216.1
+}

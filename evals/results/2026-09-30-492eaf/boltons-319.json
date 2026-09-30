@@ -1,0 +1,53 @@
+{
+ "case": "boltons-319",
+ "pr": "https://github.com/mahmoud/boltons/commit/8ba3a7fa0d99b73f7f43c1aed82c571b941eecea",
+ "issue": "https://github.com/mahmoud/boltons/issues/319",
+ "ceiling_usd": 4.0,
+ "task": "84dcc0",
+ "end": "needs you",
+ "status": "stuck",
+ "hidden": "pass",
+ "hidden_detail": "4 of 4 pass (exit 0)",
+ "second_eye": "right",
+ "verdicts": [
+  {
+   "tree": "7bf49b920164a2767ac5df127be0d52446dae9c1",
+   "verdict": "pass",
+   "hidden": "pass",
+   "judgment": "right"
+  },
+  {
+   "tree": "bc0b9d4be1f0253feaf69faad98d5f80dd12eb0c",
+   "verdict": "pass",
+   "hidden": "pass",
+   "judgment": "right"
+  }
+ ],
+ "cost_usd": 2.6762,
+ "seconds_to_ready": null,
+ "touches": 2,
+ "decisions": [
+  "the budget cap ran out ($2.68 of $2.60 estimated) while rework was fixing blocker: a test of outcome 4 that you can't see fails: assert [datetime.dat...2017, 12, 25)] == [datetime.dat...2018, 12, 25)]."
+ ],
+ "reticle": "false alarm",
+ "reticle_verdicts": [
+  {
+   "tree": "7bf49b920164a2767ac5df127be0d52446dae9c1",
+   "verdict": "fail",
+   "hidden": "pass",
+   "judgment": "false alarm"
+  },
+  {
+   "tree": "bc0b9d4be1f0253feaf69faad98d5f80dd12eb0c",
+   "verdict": "fail",
+   "hidden": "pass",
+   "judgment": "false alarm"
+  }
+ ],
+ "reticle_kept": 5,
+ "reticle_weak": [],
+ "reticle_cost_usd": 0.0425,
+ "reticle_false_alarm_rework_usd": 2.0427,
+ "scratch": "/home/matt/.local/share/parallax/evals/runs/492eaf/boltons-319/repo",
+ "seconds": 969.5
+}

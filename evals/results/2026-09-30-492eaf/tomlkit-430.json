@@ -1,0 +1,53 @@
+{
+ "case": "tomlkit-430",
+ "pr": "https://github.com/python-poetry/tomlkit/pull/520",
+ "issue": "https://github.com/python-poetry/tomlkit/issues/430",
+ "ceiling_usd": 4.0,
+ "task": "958526",
+ "end": "ready",
+ "status": "ready",
+ "hidden": "pass",
+ "hidden_detail": "152 of 152 pass (exit 0)",
+ "second_eye": "right",
+ "verdicts": [
+  {
+   "tree": "bfaf0d9befff19a5dd990e52e3a8d99423f6feac",
+   "verdict": "pass",
+   "hidden": "pass",
+   "judgment": "right"
+  },
+  {
+   "tree": "ae734ed7a7478fdfdaae0b7be66bc9127a78c84d",
+   "verdict": "pass",
+   "hidden": "pass",
+   "judgment": "right"
+  }
+ ],
+ "cost_usd": 0.8046,
+ "seconds_to_ready": 159.0,
+ "touches": 1,
+ "decisions": [],
+ "reticle": "right",
+ "reticle_verdicts": [
+  {
+   "tree": "bfaf0d9befff19a5dd990e52e3a8d99423f6feac",
+   "verdict": "fail",
+   "hidden": "pass",
+   "judgment": "false alarm"
+  },
+  {
+   "tree": "ae734ed7a7478fdfdaae0b7be66bc9127a78c84d",
+   "verdict": "pass",
+   "hidden": "pass",
+   "judgment": "right"
+  }
+ ],
+ "reticle_kept": 6,
+ "reticle_weak": [
+  "it passes on the base, so it doesn't show the problem"
+ ],
+ "reticle_cost_usd": 0.0339,
+ "reticle_false_alarm_rework_usd": 0.2468,
+ "scratch": "/home/matt/.local/share/parallax/evals/runs/492eaf/tomlkit-430/repo",
+ "seconds": 162.7
+}

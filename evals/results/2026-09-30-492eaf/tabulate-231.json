@@ -1,0 +1,41 @@
+{
+ "case": "tabulate-231",
+ "pr": "https://github.com/astanin/python-tabulate/pull/232",
+ "issue": "https://github.com/astanin/python-tabulate/issues/231",
+ "ceiling_usd": 4.0,
+ "task": "6918b9",
+ "end": "needs you",
+ "status": "stuck",
+ "hidden": "pass",
+ "hidden_detail": "159 of 159 pass (exit 0)",
+ "second_eye": "right",
+ "verdicts": [
+  {
+   "tree": "3705819b907cb6c6e51a00437b5081e1102d4a25",
+   "verdict": "no_finding",
+   "hidden": "pass",
+   "judgment": "right"
+  }
+ ],
+ "cost_usd": 2.8043,
+ "seconds_to_ready": null,
+ "touches": 2,
+ "decisions": [
+  "the budget cap ran out ($2.80 of $2.80 estimated) while rework was fixing blocker: a test of outcome 2 that you can't see fails: AssertionError: assert 4 == 3 and 1 more findings."
+ ],
+ "reticle": "false alarm",
+ "reticle_verdicts": [
+  {
+   "tree": "3705819b907cb6c6e51a00437b5081e1102d4a25",
+   "verdict": "fail",
+   "hidden": "pass",
+   "judgment": "false alarm"
+  }
+ ],
+ "reticle_kept": 14,
+ "reticle_weak": [],
+ "reticle_cost_usd": 0.0657,
+ "reticle_false_alarm_rework_usd": 1.0895,
+ "scratch": "/home/matt/.local/share/parallax/evals/runs/492eaf/tabulate-231/repo",
+ "seconds": 577.4
+}

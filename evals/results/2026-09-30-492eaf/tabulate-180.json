@@ -1,0 +1,37 @@
+{
+ "case": "tabulate-180",
+ "pr": "https://github.com/astanin/python-tabulate/commit/20c6370d5da2dae89b305bfb6c7f12a0f8b7236c",
+ "issue": "https://github.com/astanin/python-tabulate/issues/180",
+ "ceiling_usd": 4.0,
+ "task": "0fcde1",
+ "end": "ready",
+ "status": "ready",
+ "hidden": "pass",
+ "hidden_detail": "30 of 30 pass (exit 0)",
+ "second_eye": "right",
+ "verdicts": [
+  {
+   "tree": "6fd29aa2b8d206ea08a83fe8c5b136980d1fb515",
+   "verdict": "pass",
+   "hidden": "pass",
+   "judgment": "right"
+  }
+ ],
+ "cost_usd": 0.4662,
+ "seconds_to_ready": 109.0,
+ "touches": 1,
+ "decisions": [],
+ "reticle": "no test kept",
+ "reticle_verdicts": [],
+ "reticle_kept": 0,
+ "reticle_weak": [
+  "it fails on IndexError, not an assertion",
+  "it fails on IndexError, not an assertion",
+  "it fails on IndexError, not an assertion",
+  "it fails on IndexError, not an assertion"
+ ],
+ "reticle_cost_usd": 0.0282,
+ "reticle_false_alarm_rework_usd": 0.0,
+ "scratch": "/home/matt/.local/share/parallax/evals/runs/492eaf/tabulate-180/repo",
+ "seconds": 111.4
+}
