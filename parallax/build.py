@@ -383,6 +383,9 @@ def run_mode(project: Project, task_id: str, mode: str, drafter_for, maker_for, 
             status = run(project, task_id, drafter_for, maker_for, checker_for,
                          test_runner=test_runner, preflight_runner=preflight_runner)
         else:
+            if mode == "build":  # a resumed build: Reticle writes its tests first if it hasn't this attempt
+                from . import reticle
+                reticle.write(project, task_id, prepare(project, task_id, setup=False, launching=False), runner=test_runner)
             status = run_build(project, task_id, maker_for, preflight_runner=preflight_runner) if mode == "build" else "built"
             if status == "built":
                 status = run_check(project, task_id, checker_for, maker_for,

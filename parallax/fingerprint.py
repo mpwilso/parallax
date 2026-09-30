@@ -21,7 +21,7 @@ def _sha(data: str | bytes) -> str:
 
 def prompts() -> dict[str, str]:
     """Every text an agent is given besides the task's own files: label -> the text."""
-    from . import build, check, lifecycle, review
+    from . import build, check, lifecycle, reticle, review
     from .agents import claude
     out = {f"parallax/agents/claude.py ({name})": getattr(claude, name)
            for name in ("DRAFT_PROMPT", "MAKER_PROMPT", "BLIND_PROMPT")}
@@ -32,6 +32,8 @@ def prompts() -> dict[str, str]:
     out["parallax/check.py (REWORK)"] = check.REWORK
     out["parallax/review.py (the checker's brief)"] = inspect.getsource(review.brief)
     out["parallax/review.py (TEMPLATE)"] = review.TEMPLATE  # the REVIEW.md every eval repo gets
+    out["parallax/agents/claude.py (RETICLE_PROMPT)"] = claude.RETICLE_PROMPT
+    out["parallax/reticle.py (REQUEST)"] = reticle.REQUEST
     return out
 
 
@@ -39,7 +41,8 @@ def models(policy) -> dict[str, str]:
     """The model of each agent an eval runs. Field is off in evals, so it isn't here."""
     from .agents.claude import DEFAULT_MODEL
     return {"Focus's model": policy.draft["model"], "Maker's model": DEFAULT_MODEL,
-            "Second Eye's model": policy.check["model"]}
+            "Second Eye's model": policy.check["model"],
+            "Reticle's model": policy.reticle["model"] or policy.draft["model"]}
 
 
 def current(root: Path, policy) -> dict[str, str]:

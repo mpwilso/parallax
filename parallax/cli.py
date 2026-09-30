@@ -16,7 +16,8 @@ GUIDE = """\
 parallax: agents do the work. you make the calls.
 
 the agents: Focus drafts the intent and plan. Maker builds in the sandbox. Second Eye checks blind,
-seeing only the result. Field tests the UI. which one runs next is decided by code, never by a model.
+seeing only the result. Field tests the UI. Reticle, off until the evals say, writes tests of
+the outcome before the build. which one runs next is decided by code, never by a model.
 
 start here:
   parallax do "the work"                describe it once. drafting, building and checking run without you
@@ -60,6 +61,7 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument("cases", nargs="*", help="case ids, all by default. `parallax eval check` checks the cases instead, with no model")
     ev.add_argument("--budget", type=float, help="the most the whole run may spend, in estimated dollars. needed for a run")
     ev.add_argument("--per-case", type=float, help="each case's ceiling, in estimated dollars. default: your small_cap_usd")
+    ev.add_argument("--reticle", action="store_true", help="run with Reticle on: tests of the outcomes, written before the build")
     ln = sub.add_parser("lint", help="check a file against the output shape")
     ln.add_argument("file")
 
@@ -287,7 +289,7 @@ def _eval(proj: Project, args) -> int:
         return 1 if unsound else 0
     if args.budget is None or args.budget <= 0:
         raise ParallaxError("an eval run needs --budget: the most it may spend, in estimated dollars")
-    out = evals.run(proj, evals.load_cases(proj.root, args.cases), args.budget, args.per_case)
+    out = evals.run(proj, evals.load_cases(proj.root, args.cases), args.budget, args.per_case, reticle=args.reticle)
     print(f"results in {out.relative_to(proj.root)}. the summary is summary.md there.")
     return 0
 

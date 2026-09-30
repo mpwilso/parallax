@@ -110,10 +110,37 @@ def _outcomes(project: Project, task_id: str, tests: dict | None) -> list[str]:
     covers = {str(k): v for k, v in plan.get("covers", {}).items()}
     cite = f"(ledger {tests['id']})" if tests else f"(docs/tasks/{task_id}/plan.md:1)"
     out = []
+    said = _reticle(project, task_id)
     for n in lint.outcomes_of(intent):
         files = sorted({c.split("::", 1)[0] for c in covers.get(n, []) if c.split("::", 1)[0] in ran})
-        out.append(f"outcome {n}: {', '.join(files)} {cite}" if files else f"outcome {n}: no test exercises this outcome {cite}")
+        line = f"outcome {n}: {', '.join(files)}" if files else f"outcome {n}: no test exercises this outcome"
+        out.append(f"{line}{said(n)} {cite}")
     return out
+
+
+def _reticle(project: Project, task_id: str):
+    """outcome -> "; Reticle: ..." for this attempt: its test passed or failed, or why there's none."""
+    from . import reticle
+    rec = reticle.recorded(project, task_id)
+    if rec is None:
+        return lambda n: ""
+    ran = _last(_attempt([e for e in project.ledger.entries() if e["data"].get("task") == task_id], task_id), "reticle.ran")
+    kept = reticle.kept(project, task_id)
+    failed = {t["outcome"]: t["message"] for t in (ran["data"]["failed"] if ran else [])}
+
+    def said(n: str) -> str:
+        cite = f" (ledger {(ran or rec)['id']})"
+        if rec["kind"] == "reticle.failed":
+            return f"; Reticle wrote no test: it failed{cite}"
+        if any(t["outcome"] == n for t in kept):
+            if n in failed:
+                return f"; Reticle's test failed: {' '.join(failed[n].split())[:80]}{cite}"
+            return f"; Reticle's test passed{cite}" if ran else f"; Reticle's test hasn't run{cite}"
+        mine = [w["why"] for w in rec["data"].get("weak") or [] if w.get("name", "").startswith(f"test_outcome_{n}_")]
+        whole = [w["why"] for w in rec["data"].get("weak") or [] if not reticle.NAME.match(w.get("name", ""))]
+        why = (mine or ([] if kept else whole) or ["it wrote none for this outcome"])[0]
+        return f"; no Reticle test: {' '.join(why.split())[:80]}{cite}"
+    return said
 
 
 def _rails(entries: list[dict], tests: dict | None) -> list[str]:

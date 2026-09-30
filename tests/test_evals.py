@@ -338,7 +338,7 @@ def test_stats_says_when_the_evals_are_older_than_what_steers_the_agents(proj, u
         'model = "claude-sonnet-5-5"    # the drafters', 'model = "claude-opus-5"    # the drafters'))
     proj.reload_policy()
     assert stats.report(proj)[-1].startswith("evals are older than parallax.policy.toml, parallax/agents/claude.py "
-                                             "(BLIND_PROMPT), parallax/review.py (TEMPLATE), Focus's model. ")
+                                             "(BLIND_PROMPT), parallax/review.py (TEMPLATE), Focus's model, Reticle's model. ")  # it follows Focus's
 
 
 def test_a_run_that_finished_no_case_doesnt_make_the_evals_current(proj, upstream):

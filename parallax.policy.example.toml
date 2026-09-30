@@ -38,3 +38,8 @@ start = ""                     # starts the app from the built tree's folder, li
 url = ""                       # where the app answers, on this machine only, like "http://127.0.0.1:5173/"
 model = "claude-sonnet-5-5"    # the UI tester's model
 max_usd = 0.50                 # the most one tester run may spend, and what a plan's cap keeps for it
+
+[reticle]
+enabled = false                # true: before the build, an agent writes tests of the intent's outcomes that Maker never sees
+model = ""                     # empty: the drafters' model
+max_usd = 0.50                 # the most one Reticle run may spend, and what a plan's cap keeps for it

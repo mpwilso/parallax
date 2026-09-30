@@ -301,6 +301,17 @@ Built. Checking the cases found that `[build] setup` broke any install that depe
 
 The first full run stopped four cases at caps Focus set too low ($0.67 to $0.80, where Maker needed up to $2.00). A plan's cap now has a floor before approval (`parallax/capfloor.py`): Maker's 90th-percentile spend over this repo's past tasks of the same size once there are 5, else the policy's `small_floor_usd` or `large_floor_usd`, plus drafting so far. The launch rule then judges the raised cap as usual. A fix counts as passed only if it reached Ready and passed the hidden tests.
 
+#### Reticle, the behavioral verifier (2026-09-30)
+
+Second Eye passed humanize-174's bad fix: the diff looked right for the one unit it changed. Reticle writes tests of the intended outcome before the build, so a fix is judged by what it does.
+
+- After the plan is approved and before Maker starts, Reticle gets the intent's outcomes and constraints and a read-only copy of the base commit, never the plan, the diff or Maker's tests. It replies with one pytest file, one test per outcome it can test, named `test_outcome_<n>_<what>`.
+- Parallax runs the file on the base, in the sandbox. A test is kept only if it fails there on an assertion. One that passes on the base, errors, fails on another exception, or names no outcome is dropped and recorded as weak.
+- The kept tests are stored under `docs/tasks/<id>/reticle/` and hashed in the ledger. Maker's worktree never holds them; a changed hash stops the check.
+- At every check Parallax runs them on the reviewed tree, after the plan's tests. A failure goes back to Maker naming the outcome and the assertion message, never the test's code. Second Eye still judges the tree, and its input is unchanged.
+- The Ready card says per outcome whether Reticle's test passed, failed, or why there's none. Its cost counts against the cap, which keeps its `max_usd` for it.
+- Off by default: `[reticle] enabled = false`, model empty for the drafters'. `parallax eval --reticle` runs the cases with it on and scores it against the hidden tests: catch, miss, false alarm, its cost, and the rework its false alarms cause. It joins the live loop only if it catches what Second Eye misses, with fewer false alarms than Second Eye.
+
 #### Later: a knowledge layer
 
 - Project context and past decisions for the agents to draw on: what the repo is, what was decided before and why (from the ledger and `docs/tasks/`), so drafters and makers don't relearn it on every task. Read-only for agents, like everything else they're given.

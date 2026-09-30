@@ -19,6 +19,7 @@ DEFAULT_UI_TESTER = {
     "enabled": False, "start": "", "url": "",
     "model": "claude-sonnet-5-5", "max_usd": 0.5,
 }
+DEFAULT_RETICLE = {"enabled": False, "model": "", "max_usd": 0.5}  # off until the eval says so (docs/evals.md)
 DEFAULT_CHECK = {
     "model": "claude-sonnet-5-5",  # a different Claude model from the maker's; the eval measures it
     "diff_cap": 400,               # changed lines a blind review can take reliably
@@ -68,6 +69,11 @@ start = ""                     # starts the app from the built tree's folder, li
 url = ""                       # where the app answers, on this machine only, like "http://127.0.0.1:5173/"
 model = "claude-sonnet-5-5"    # the UI tester's model
 max_usd = 0.50                 # the most one tester run may spend, and what a plan's cap keeps for it
+
+[reticle]
+enabled = false                # true: before the build, an agent writes tests of the intent's outcomes that Maker never sees
+model = ""                     # empty: the drafters' model
+max_usd = 0.50                 # the most one Reticle run may spend, and what a plan's cap keeps for it
 """
 
 
@@ -97,7 +103,7 @@ def _ui_tester(cfg: dict) -> dict:
 class Policy:
     def __init__(self, limits: dict[str, int] | None = None, budget: dict[str, float] | None = None,
                  build: dict[str, str] | None = None, check: dict | None = None, launch: dict | None = None,
-                 ui_tester: dict | None = None, draft: dict | None = None):
+                 ui_tester: dict | None = None, draft: dict | None = None, reticle: dict | None = None):
         limits = dict(limits or {})
         unknown = set(limits) - set(DEFAULT_LIMITS)
         if unknown:
@@ -148,8 +154,19 @@ class Policy:
         if not isinstance(draft.get("model", "x"), str) or not draft.get("model", "x").strip():
             raise ValueError("[draft] model must be a Claude model name")
         self.draft = {**DEFAULT_DRAFT, **draft}
+        reticle = dict(reticle or {})
+        if set(reticle) - set(DEFAULT_RETICLE):
+            raise ValueError(f"unknown [reticle] settings: {sorted(set(reticle) - set(DEFAULT_RETICLE))}")
+        self.reticle = {**DEFAULT_RETICLE, **reticle}
+        if not isinstance(self.reticle["enabled"], bool):
+            raise ValueError("[reticle] enabled must be true or false")
+        if not isinstance(self.reticle["model"], str):
+            raise ValueError("[reticle] model must be a Claude model name, or empty for the drafters' model")
+        v = self.reticle["max_usd"]
+        if not isinstance(v, (int, float)) or isinstance(v, bool) or v <= 0:
+            raise ValueError("[reticle] max_usd must be a dollar amount above 0")
 
-    TABLES = ("limits", "budget", "build", "check", "launch", "ui_tester", "draft")
+    TABLES = ("limits", "budget", "build", "check", "launch", "ui_tester", "draft", "reticle")
 
     @classmethod
     def from_dict(cls, data: dict) -> "Policy":

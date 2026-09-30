@@ -126,8 +126,9 @@ def _toml(value) -> str:
     return json.dumps(value)  # strings and lists of strings: JSON's forms are valid TOML
 
 
-def eval_policy(policy, case: Case, ceiling: float) -> str:
-    """Your policy, with the case's setup, the UI tester off, and the ceiling as cap and launch rule."""
+def eval_policy(policy, case: Case, ceiling: float, reticle: bool = False) -> str:
+    """Your policy, with the case's setup, the UI tester off, and the ceiling as cap and launch rule.
+    reticle: Reticle on, with your model and limit for it."""
     tables = {
         "limits": policy.limits,
         "budget": {"drafting_usd": round(min(policy.budget["drafting_usd"], ceiling / DRAFT_SHARE), 2),
@@ -138,6 +139,7 @@ def eval_policy(policy, case: Case, ceiling: float) -> str:
         "draft": policy.draft,
         "check": {**policy.check, "no_em_dashes": False},  # Parallax's own style rule, not the case's
         "ui_tester": {"enabled": False},
+        "reticle": {**policy.reticle, "enabled": reticle},
     }
     lines = [f"# written by parallax eval for case {case.id}: your policy, run hands-free under a ${ceiling:.2f} ceiling"]
     for name, values in tables.items():
@@ -245,6 +247,7 @@ def score(project: Project, task_id: str, case: Case, cache: Path, runner=None) 
         if e["kind"] == "verdict.recorded" and e["data"].get("verdict") != "error":
             judged[e["data"]["tree"]] = e["data"]["verdict"]
     staged = [e["data"]["tree"] for e in mine if e["kind"] == "check.staged"]
+    tested = {e["data"]["tree"]: "fail" if e["data"]["failed"] else "pass" for e in mine if e["kind"] == "reticle.ran"}
     work = sandbox.task_home(project.root, task_id)
     work.mkdir(parents=True, exist_ok=True)
     final = staged[-1] if staged else tree.stage(wt, base, work / "eval.index").tree
@@ -252,10 +255,12 @@ def score(project: Project, task_id: str, case: Case, cache: Path, runner=None) 
     hidden = hidden_tests(case, cache)
     command = project.policy.check["test_command"]
     runs = {}
-    for n, treeish in enumerate(dict.fromkeys([*judged, final])):
+    for n, treeish in enumerate(dict.fromkeys([*judged, *tested, final])):
         runs[treeish] = run_hidden(wt, base, treeish, hidden, case.tests, work / f"eval-{n}", venv, command, runner)
     verdicts = [{"tree": tr, "verdict": v, "hidden": "pass" if runs[tr].ok else "fail",
                  "judgment": _judge(v, runs[tr].ok)} for tr, v in judged.items()]
+    reticle_verdicts = [{"tree": tr, "verdict": v, "hidden": "pass" if runs[tr].ok else "fail",
+                         "judgment": _judge(v, runs[tr].ok)} for tr, v in tested.items()]
     last = runs[final]
     ready = next((e["ts"] for e in mine if e["kind"] == "check.finished" and e["data"].get("status") == "ready"), None)
     raised = [e["reason"] for e in mine if e["kind"] in DECISIONS]
@@ -271,17 +276,52 @@ def score(project: Project, task_id: str, case: Case, cache: Path, runner=None) 
         "seconds_to_ready": _seconds(mine[0]["ts"], ready) if ready else None,
         "touches": len(raised) + 1,  # each Decision needed, plus the final accept or reject
         "decisions": [lint.one_sentence(r)[:300] for r in raised],
+        **_reticle_score(mine, reticle_verdicts, final),
     }
 
 
-def run_case(case: Case, where: Path, ceiling: float, policy, pipeline: Pipeline, runner=None) -> dict:
+def _reticle_score(mine: list[dict], verdicts: list[dict], final: str) -> dict:
+    """Reticle's part: its verdict on each tree it tested against the hidden tests, what it cost, and
+    the Maker rework its false alarms caused, which counts against it."""
+    rec = next((e for e in reversed(mine) if e["kind"] in ("reticle.recorded", "reticle.failed")), None)
+    if rec is None:
+        return {}
+    judged = {v["tree"]: v["judgment"] for v in verdicts}
+    alarm_usd, tree_, owed = 0.0, None, False
+    for e in mine:  # a rework sent for a Reticle false alarm: the Maker run that follows is its cost
+        if e["kind"] == "check.staged":
+            tree_ = e["data"]["tree"]
+        elif e["kind"] == "rework.started":
+            owed = "that you can't see fails" in e["reason"] and judged.get(tree_) == "false alarm"
+        elif e["kind"] == "maker.finished" and owed:
+            alarm_usd += e["data"].get("cost_usd") or 0
+            owed = False
+    kept = rec["data"].get("kept") or []
+    if rec["kind"] == "reticle.failed":
+        verdict = "failed to write tests"
+    elif not kept:
+        verdict = "no test kept"
+    else:
+        verdict = judged.get(final, "did not test the final tree")
+    return {
+        "reticle": verdict,
+        "reticle_verdicts": verdicts,
+        "reticle_kept": len(kept),
+        "reticle_weak": [w["why"] for w in rec["data"].get("weak") or []],
+        "reticle_cost_usd": round(sum(e["data"].get("cost_usd") or 0 for e in mine if e["kind"].startswith("reticle.")), 4),
+        "reticle_false_alarm_rework_usd": round(alarm_usd, 4),
+    }
+
+
+def run_case(case: Case, where: Path, ceiling: float, policy, pipeline: Pipeline, runner=None,
+             reticle: bool = False) -> dict:
     started = time.monotonic()
     r: dict = {"case": case.id, "pr": case.pr, "issue": case.issue, "ceiling_usd": ceiling}
     try:
         cache = cache_repo(case)
         repo = where / "repo"
         clone_at(cache, case.base, repo)
-        (repo / POLICY_FILE).write_text(eval_policy(policy, case, ceiling), encoding="utf-8")
+        (repo / POLICY_FILE).write_text(eval_policy(policy, case, ceiling, reticle), encoding="utf-8")
         project = Project.init(repo, actor="parallax")  # REVIEW.md: the general template, as any repo gets
         task_id = pipeline(project, case.goal.strip())
         r.update(score(project, task_id, case, cache, runner))
@@ -304,7 +344,7 @@ def say_now(text: str) -> None:
 
 def run(project: Project, cases: list[Case], budget: float, per_case: float | None = None,
         pipeline: Pipeline = live_pipeline, runner=None, say: Callable[[str], None] | None = None,
-        run_id: str | None = None) -> Path:
+        run_id: str | None = None, reticle: bool = False) -> Path:
     """Run cases in order under a hard total budget. Each case starts only if what's spent, plus its
     ceiling and the margin, fits. Every case's result is written as it finishes. Returns the run's folder."""
     say = say or say_now
@@ -319,7 +359,7 @@ def run(project: Project, cases: list[Case], budget: float, per_case: float | No
                           capture_output=True, text=True).stdout.strip()
     header = {"run": run_id, "started": now.isoformat(timespec="seconds"), "parallax": head,
               "budget_usd": budget, "per_case_usd": per_case, "cases": [c.id for c in cases],
-              "fingerprint": fingerprint.current(project.root, project.policy)}
+              "fingerprint": fingerprint.current(project.root, project.policy), "reticle": reticle}
     spent, done, stopped = 0.0, [], None
     for n, case in enumerate(cases, 1):
         if spent + need > budget:
@@ -328,12 +368,14 @@ def run(project: Project, cases: list[Case], budget: float, per_case: float | No
             say(f"stopped before {case.id}: {stopped['why']}.")
             break
         say(f"[{n}/{len(cases)}] {case.id}: running, ceiling ${per_case:.2f}")
-        r = run_case(case, scratch / case.id, per_case, project.policy, pipeline, runner)
+        r = run_case(case, scratch / case.id, per_case, project.policy, pipeline, runner, reticle)
         spent = round(spent + (r.get("cost_usd") or 0), 4)
         _write(out / f"{case.id}.json", r)
         done.append(r)
         say(f"[{n}/{len(cases)}] {case.id}: {r['end']}, hidden tests {r.get('hidden', 'not run')}, "
-            f"Second Eye {r.get('second_eye', 'did not run')}, ${r.get('cost_usd') or 0:.2f} (total ${spent:.2f})")
+            f"Second Eye {r.get('second_eye', 'did not run')}"
+            + (f", Reticle {r.get('reticle', 'did not run')}" if reticle else "")
+            + f", ${r.get('cost_usd') or 0:.2f} (total ${spent:.2f})")
     header.update({"finished": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                    "spent_usd": spent, "done": [r["case"] for r in done], "stopped": stopped})
     _write(out / "run.json", header)
@@ -390,6 +432,14 @@ def summary(root: Path, out: Path, header: dict, results: list[dict]) -> str:
     found = [f"{c['ready']} of {n} reached Ready, for ${header['spent_usd']:.2f} estimated in all ({rel}/run.json:1)",
              f"Second Eye was right {c['right']} times, caught {c['catch']} bad fixes, missed {c['miss']}, "
              f"and raised {c['false alarm']} false alarms ({rel}/run.json:1)"]
+    if header.get("reticle"):
+        rt = {k: sum(v["judgment"] == k for r in results for v in r.get("reticle_verdicts", []))
+              for k in ("right", "catch", "miss", "false alarm")}
+        cost = sum(r.get("reticle_cost_usd") or 0 for r in results)
+        owed = sum(r.get("reticle_false_alarm_rework_usd") or 0 for r in results)
+        found.append(f"Reticle was right {rt['right']} times, caught {rt['catch']} bad fixes, missed {rt['miss']}, and raised "
+                     f"{rt['false alarm']} false alarms, for ${cost:.2f} plus ${owed:.2f} of rework its false alarms caused "
+                     f"({rel}/run.json:1)")
     if stop:
         found.append(f"stopped before {stop['case']}: {stop['why']} ({rel}/run.json:1)")
     details = [f"Run {header['run']} on parallax {header['parallax']}, budget ${header['budget_usd']:.2f}, "
@@ -399,7 +449,9 @@ def summary(root: Path, out: Path, header: dict, results: list[dict]) -> str:
         judged = "never judged it" if unchecked(r) else r.get("second_eye", "did not run")
         details.append(f"{r['case']}: ended {r.get('end')}, hidden tests {r.get('hidden', 'not run')}"
                        f"{' on a tree nothing reviewed' if unchecked(r) else ''}, Second Eye {judged}, "
-                       f"${r.get('cost_usd') or 0:.2f}, {ready}, {_n(r.get('touches', 0), 'touch', 'touches')}.")
+                       + (f"Reticle {r.get('reticle', 'did not run')} (${r.get('reticle_cost_usd') or 0:.2f}), "
+                          if header.get("reticle") else "")
+                       + f"${r.get('cost_usd') or 0:.2f}, {ready}, {_n(r.get('touches', 0), 'touch', 'touches')}.")
     text = lint.shaped("FYI", bottom, gaps, _next(results, stop), found, details=details)
     return lint.fit(text, root=root)[0] + "\n"
 

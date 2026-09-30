@@ -12,6 +12,7 @@ which is not the maker's to fix, so it goes to you instead of back to the maker.
 from __future__ import annotations
 
 import json
+import re
 import shlex
 import shutil
 import subprocess
@@ -31,6 +32,7 @@ class Results:
     per_file: dict[str, list[int]] = field(default_factory=dict)  # file -> [passed, counted, skipped]
     tail: str = ""
     reported: bool = True  # the run wrote its JUnit report. without one, exit 1 may just mean no pytest
+    cases: list[dict] = field(default_factory=list)  # each test: file, name, outcome, and its message's first line
 
     @property
     def passed(self) -> int:
@@ -103,6 +105,25 @@ def parse_junit(path: Path, tests: list[str]) -> dict[str, list[int]]:
     return out
 
 
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def parse_cases(path: Path, tests: list[str]) -> list[dict]:
+    """Each test in a JUnit report: its outcome (pass, fail, error, skip) and the first line of its
+    message, colour codes stripped. A collection error is one case with outcome error."""
+    if not path.exists():
+        return []
+    out = []
+    for case in ET.parse(path).getroot().iter("testcase"):
+        found = {ch.tag: ch for ch in case}
+        tag = next((t for t in ("error", "failure", "skipped") if t in found), None)
+        outcome = {"error": "error", "failure": "fail", "skipped": "skip", None: "pass"}[tag]
+        message = ANSI.sub("", found[tag].get("message") or "") if tag else ""
+        out.append({"file": _file_of(case.get("classname", ""), case.get("file"), tests), "name": case.get("name", ""),
+                    "outcome": outcome, "message": (message.strip().splitlines() or [""])[0][:300]})
+    return out
+
+
 def run(worktree: Path, base: str, reviewed: str, plan: dict, home: Path, venv: Path | None, env: dict,
         command: str, runner=None, overlay: dict[str, bytes] | None = None) -> tuple[Results, list[str]]:
     """Run the plan's tests on a copy of the reviewed tree. Returns (results, harness files reset).
@@ -141,7 +162,8 @@ def run(worktree: Path, base: str, reviewed: str, plan: dict, home: Path, venv: 
     # the tests' TMPDIR is set inside the sandbox: srt keeps its own short one for its sockets,
     # which break on long paths (Unix socket paths top out near 108 characters)
     code, output = (runner or _srt)(cfg, copy, f"export TMPDIR={shlex.quote(str(tmp))}; {cmd}", env)
-    results = Results(code, parse_junit(junit, tests), "\n".join(output.strip().splitlines()[-15:]), junit.exists())
+    results = Results(code, parse_junit(junit, tests), "\n".join(output.strip().splitlines()[-15:]), junit.exists(),
+                      parse_cases(junit, tests))
     shutil.rmtree(copy, ignore_errors=True)
     shutil.rmtree(tmp, ignore_errors=True)
     return results, reset

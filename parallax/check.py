@@ -17,7 +17,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Callable
 
-from . import build, costs, lifecycle, lint, review, sandbox, status, testrun, tree, uitest
+from . import build, costs, lifecycle, lint, reticle, review, sandbox, status, testrun, tree, uitest
 from .agents.base import BlindChecker, Review
 from .core import ParallaxError, Project
 
@@ -121,6 +121,8 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
             return "rework", [f"blocker: {why}"]
         if outcome == "you":
             return _to_you(project, task_id, "check", why, tree=s.tree), []
+    if reticle.tampered(project, task_id):
+        return _to_you(project, task_id, "guard", "Reticle's tests changed after they were recorded", tree=s.tree), []
     changed = uitest.tampered(project, task_id)
     if changed:
         return _to_you(project, task_id, "guard", f"Field's tests changed after it wrote them: {', '.join(changed)}",
@@ -169,6 +171,19 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
                 return _to_you(project, task_id, "flows",
                                f"Field's test \"{c['name']}\" ({Path(c['file']).name}) still fails after a rework: "
                                f"{c['message']}. Either the test or the app is wrong", tree=s.tree, files=files), []
+
+    # Reticle's tests of the outcomes, on this tree. A failure goes back to Maker as a finding; Second
+    # Eye still judges the tree, so the eval can tell the two apart
+    ran = reticle.check(project, task_id, p, s.tree, test_runner)
+    if ran is not None:
+        r_results, failing = ran
+        project.ledger.append("reticle.ran", "parallax", r_results.tail, task=task_id, tree=s.tree, exit=r_results.exit,
+                              passed=len(reticle.kept(project, task_id)) - len(failing), total=len(reticle.kept(project, task_id)),
+                              failed=[{k: t[k] for k in ("name", "outcome", "message")} for t in failing])
+        if not r_results.reported:
+            return _to_you(project, task_id, "check", f"Reticle's tests couldn't run (exit {r_results.exit}): "
+                           f"{lint.one_sentence((r_results.tail.splitlines() or ['no output'])[-1])}", tree=s.tree), []
+        flow_fix = flow_fix + [reticle.finding(t) for t in failing]
 
     # code findings first: they go straight back to the maker, and the checker isn't paid to spot them.
     # The em dash rule is Parallax's own style: only a repo whose policy turns it on gets it

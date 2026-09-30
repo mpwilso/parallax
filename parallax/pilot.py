@@ -20,7 +20,7 @@ import re
 import sys
 from typing import Callable
 
-from . import build, check, costs, lifecycle, lint, planfit, sandbox, status
+from . import build, check, costs, lifecycle, lint, planfit, reticle, sandbox, status
 from .core import ParallaxError, Project, refuse_inside_task
 
 MAX_REDRAFTS = 2
@@ -73,8 +73,10 @@ def draft_until_fit(project: Project, task_id: str, drafter_for) -> str:
 
 
 def _reserve(project: Project, plan: dict) -> float:
+    """What the cap keeps for Field and Reticle when they'll run: each one's limit."""
     from . import uitest
-    return float(uitest.settings(project)["max_usd"]) if uitest.applies(project, plan) else 0.0  # its limit, reserved
+    field = float(uitest.settings(project)["max_usd"]) if uitest.applies(project, plan) else 0.0
+    return field + (float(project.policy.reticle["max_usd"]) if project.policy.reticle["enabled"] else 0.0)
 
 
 def _room_for_rework(project: Project, task_id: str, plan: dict) -> dict:
@@ -142,7 +144,8 @@ def launch_rule(project: Project, task_id: str) -> tuple[bool, str]:
 
 def go(project: Project, task_id: str, maker_for, checker_for, test_runner=None, preflight_runner=None) -> str:
     """After an approval, by the rule or by you: setup, then the build (which preflights first), then the check."""
-    build.prepare(project, task_id, setup=True, launching=False)  # the venv, once, as you
+    p = build.prepare(project, task_id, setup=True, launching=False)  # the venv, once, as you
+    reticle.write(project, task_id, p, runner=test_runner)  # tests of the outcomes, before Maker; off by default
     status = build.run_build(project, task_id, maker_for, preflight_runner=preflight_runner)
     if status == "built":
         status = check.run_check(project, task_id, checker_for, maker_for,

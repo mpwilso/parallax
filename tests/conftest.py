@@ -62,3 +62,15 @@ def no_real_ui_tester(monkeypatch):
 
     monkeypatch.setattr(uitest, "TESTER", refuse)
     monkeypatch.setattr(uitest, "ensure_tools", lambda: (_ for _ in ()).throw(AssertionError("fake uitest.ensure_tools")))
+
+
+@pytest.fixture(autouse=True)
+def no_real_reticle(monkeypatch):
+    """Reticle is a model: tests fake reticle.WRITER. pytest.fail, not an assertion: Reticle records
+    and survives an agent's errors, so an ordinary exception would pass unnoticed."""
+    from parallax import reticle
+
+    def refuse(*a, **k):
+        pytest.fail("a test reached the real Reticle. fake reticle.WRITER")
+
+    monkeypatch.setattr(reticle, "WRITER", refuse)
