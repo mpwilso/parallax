@@ -290,9 +290,9 @@ def summary(root: Path, out: Path, header: dict, results: list[dict]) -> str:
     c = rates(results)
     left = [x for x in header["cases"] if x not in header["done"]]
     crashed = [r["case"] for r in results if "error" in r]
-    bottom = (f"On {c['versions']} broken versions, Second Eye caught {c['second_eye']} and Reticle {c['reticle']}; "
-              f"on {c['real']} real fixes, Reticle raised {c['reticle_false']} false alarms.")
-    gaps = [f"{', '.join(left)}: the budget didn't reach {'it' if len(left) == 1 else 'them'}"] if left else []
+    bottom = f"Of {c['versions']} broken versions, Second Eye caught {c['second_eye']} and Reticle {c['reticle']}."
+    why = "the run stopped before " + ("it" if len(left) == 1 else "them")  # the budget, or an interruption: run.json says
+    gaps = [f"{', '.join(left)}: {why}"] if left else []
     gaps += [f"{', '.join(crashed)}: crashed"] if crashed else []
     found = [f"Second Eye caught {c['second_eye']} of {c['versions']} broken versions ({rel}/run.json:1)",
              f"Reticle's tests of asked outcomes caught {c['reticle']} of {c['versions']}; {c['reticle_tested']} had a test "

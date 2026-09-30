@@ -93,8 +93,7 @@ def test_second_eye_and_reticle_are_scored_on_each_broken_version_and_the_real_f
     assert len(checker.briefs) == 4 and all(b.startswith("Outcome:\n1. add returns the sum") for b in checker.briefs)
     assert not any(HIDDEN in b or "test_calc.py" in b for b in checker.briefs) and HIDDEN not in writer.goals[0]
     text = (out / "summary.md").read_text()
-    assert text.splitlines()[1] == ("Bottom line: On 3 broken versions, Second Eye caught 1 and Reticle 1; on 1 real "
-                                    "fixes, Reticle raised 0 false alarms.")
+    assert text.splitlines()[1] == "Bottom line: Of 3 broken versions, Second Eye caught 1 and Reticle 1."
     assert lint.lint_report(text, root=proj.root) == []
 
 
