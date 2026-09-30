@@ -104,12 +104,17 @@ def parse_junit(path: Path, tests: list[str]) -> dict[str, list[int]]:
 
 
 def run(worktree: Path, base: str, reviewed: str, plan: dict, home: Path, venv: Path | None, env: dict,
-        command: str, runner=None) -> tuple[Results, list[str]]:
-    """Run the plan's tests on a copy of the reviewed tree. Returns (results, harness files reset)."""
+        command: str, runner=None, overlay: dict[str, bytes] | None = None) -> tuple[Results, list[str]]:
+    """Run the plan's tests on a copy of the reviewed tree. Returns (results, harness files reset).
+
+    overlay: files written over the copy after the harness reset, such as an eval's hidden tests."""
     copy = home / "check-copy"
     shutil.rmtree(copy, ignore_errors=True)
     tree.export(worktree, reviewed, copy)
     reset = harness_from_base(worktree, base, reviewed, copy)
+    for rel, data in (overlay or {}).items():
+        (copy / rel).parent.mkdir(parents=True, exist_ok=True)
+        (copy / rel).write_bytes(data)
     # the tests' temp folder sits beside the copy, never inside it: a test that walks up from its
     # temp folder must not find the repo it's testing (seen in M12)
     tmp = home / "check-tmp"

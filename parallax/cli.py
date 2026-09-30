@@ -27,7 +27,7 @@ start here:
   parallax stats                        how many touches each task took. the target is 1
   parallax ui                           the same, in your browser
 
-setup: parallax doctor, init. power use: diff, stop, approve, preflight, build, recheck, lint, log, verify.
+setup: parallax doctor, init. power use: diff, stop, approve, preflight, build, recheck, lint, log, verify, eval.
 `parallax <command> -h` for details.
 """
 
@@ -56,6 +56,10 @@ def main(argv: list[str] | None = None) -> int:
     df = sub.add_parser("diff", help="the change a task made: the reviewed tree against its base")
     df.add_argument("task")
     sub.add_parser("stats", help="human touches per task, from the ledger")
+    ev = sub.add_parser("eval", help="run real merged fixes through the do pipeline, scored by hidden tests")
+    ev.add_argument("cases", nargs="*", help="case ids, all by default. `parallax eval check` checks the cases instead, with no model")
+    ev.add_argument("--budget", type=float, help="the most the whole run may spend, in estimated dollars. needed for a run")
+    ev.add_argument("--per-case", type=float, help="each case's ceiling, in estimated dollars. default: your small_cap_usd")
     ln = sub.add_parser("lint", help="check a file against the output shape")
     ln.add_argument("file")
 
@@ -159,6 +163,9 @@ def _run(args) -> int:
         print(decide.apply(proj, args.task, args.option, args.reason))
         return 0
 
+    if args.cmd == "eval":
+        return _eval(proj, args)
+
     if args.cmd == "stats":
         from . import stats
         print("\n".join(stats.report(proj)))
@@ -261,6 +268,28 @@ def _run(args) -> int:
         print(msg)
         return 0 if ok else 1
     return 1
+
+
+def _eval(proj: Project, args) -> int:
+    from . import evals
+    refuse_inside_task(proj.root)
+    if args.cases[:1] == ["check"]:
+        cases = evals.load_cases(proj.root, args.cases[1:])
+        unsound = 0
+        for case in cases:
+            try:
+                ok, seen = evals.check_case(case, proj.policy.check["test_command"])
+            except ParallaxError as err:
+                ok, seen = False, str(err)
+            unsound += not ok
+            print(f"{case.id:<16}{'sound' if ok else 'not sound'}: {seen}", flush=True)
+        print("every case is sound." if not unsound else f"{unsound} of {len(cases)} cases are not sound.")
+        return 1 if unsound else 0
+    if args.budget is None or args.budget <= 0:
+        raise ParallaxError("an eval run needs --budget: the most it may spend, in estimated dollars")
+    out = evals.run(proj, evals.load_cases(proj.root, args.cases), args.budget, args.per_case)
+    print(f"results in {out.relative_to(proj.root)}. the summary is summary.md there.")
+    return 0
 
 
 def _line(text: str, width: int = 160) -> str:

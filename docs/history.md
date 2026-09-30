@@ -20,7 +20,8 @@ How Parallax got here, milestone by milestone. The design notes behind each step
 - **M12:** hands-free: `parallax do` drafts, checks the plan against the intent, launches under the policy's rule, builds and checks, ending in one inbox item. `parallax stats` counts human touches.
 - **M13:** the one decision: every stop is one question with options and a recommendation written by code; reject at Ready redrafts from your reason.
 - **M14:** the UI as the main surface; then a UX pass (a queue, cards built for the decision) and the UI tester, a blind agent that uses the app in a real browser.
-- **Next:** M15, the light conductor (splitting work into tasks, scheduling), and M16, evals on the current pipeline and more stats.
+- **Evals (2026-09-30):** the harness returns on the current pipeline: `parallax eval` runs cases through `do`'s pipeline under a hard budget, and `parallax stats` says when the evals are older than a prompt, a model, CLAUDE.md, REVIEW.md or the policy.
+- **Next:** a first paid eval run; M15, the light conductor (splitting work into tasks, scheduling); and more stats.
 
 ## The first design (Milestones 1 to 6)
 
@@ -39,5 +40,5 @@ Latest run (2026-09-28, 11 cases from 6 projects, $12.12 in all): **10 of 11 fix
 blind checker was right 8 times, missed 1 bad fix and raised 1 false alarm. Reports:
 [67faab](../evals/results/2026-09-28-67faab.md), [73982e](../evals/results/2026-09-28-73982e.md).
 These committed results came from an earlier harness that has since been removed, with the
-old path it ran on. The cases in [evals/cases.toml](../evals/cases.toml) are kept as the case set
-for a future harness on the current pipeline (M16 in [plan.md](plan.md)).
+old path it ran on. The cases in [evals/cases.toml](../evals/cases.toml) are the case set for the
+harness on the current pipeline ("Evals" in [plan.md](plan.md)), which has no paid run yet.

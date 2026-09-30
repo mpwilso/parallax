@@ -277,6 +277,28 @@ Kept (a): the drafters' default is Sonnet 5.5, `[draft] model` in the policy. (b
 - Cases in the SWE-bench format, run through `do`'s pipeline; the test-writer in the eval only; the report shows catches, misses and false alarms with and without it, per checker model; about 10 new cases you pick. Stats add first-pass rate, rework cycles and wait time. The old path (`task new`, `run`, the policy's `[actions]`, exact rules, "ask") is cut.
 - **You confirm it:** `parallax eval check` says all cases are sound; `parallax stats` shows touches per task averaging about 1.
 
+#### Evals (2026-09-30): the harness on the current pipeline
+
+Built before M15 on purpose: the drafter model changed with no eval, and the behavioral verifier has to prove itself in one before it joins the loop.
+
+**One case** is a real merged fix to a small open-source project, in `evals/cases.toml`: the upstream repo, the base commit, the issue text as a person would type it, and the test files the maintainers' fix added or changed. Those tests are the hidden truth.
+
+**How it runs.** `parallax eval --budget <usd> [case ...]` runs each case through the same code as `parallax do`: `pilot.intake`, then the detached pilot with the scrubbed environment (Focus, the launch rule, preflight, Maker in the sandbox, the check and rework with Second Eye), until Ready or a Decision needed. Nothing answers a decision; the case ends there.
+- Each case gets a scratch clone under `~/.local/share/parallax/evals/`, never the working repo. The clone holds no history past the base, so the fix isn't in it. Its policy is yours with three changes: `[build] setup` is the case's, the UI tester is off, and `small_cap_usd` and `auto_launch_usd` are the per-case ceiling, so the launch is code's under a rule the eval command set. REVIEW.md is yours.
+- The hidden tests stay in the upstream cache, which Maker's sandbox can't read and no agent is given. After the pipeline ends, Parallax exports each tree Second Eye judged (or the last staged tree), puts the hidden tests over it, and runs them itself in the sandbox, with the same test runner as the check.
+- **Budget.** Each case gets a ceiling (default: your `small_cap_usd`). Drafting calls get a sixth of it each, and the plan's cap, which covers drafting too, can't pass it. A case starts only if what's spent plus its ceiling plus a 10 percent margin for a turn in flight fits the total. Otherwise the run stops and says what it finished.
+
+**Scoring, per case,** into `evals/results/<date>-<run>/` as one small JSON file per case, `run.json`, and `summary.md` in the output shape. Results are committed as evidence.
+- **Hidden tests:** pass or fail on the final tree.
+- **Second Eye against the truth,** for every tree it judged: pass or no finding on a tree the hidden tests pass is right, on one they fail is a miss; a fail verdict is a catch on a failing tree and a false alarm on a passing one.
+- **Cost** (the task's recorded total), **time to Ready** (task created to the Ready check), and **touches:** each Decision needed item raised, plus the final accept or reject at Ready.
+
+**Staleness.** Each run records a fingerprint of what steers the agents: the sha256 of CLAUDE.md, REVIEW.md and `parallax.policy.toml`, of every agent prompt (the drafting shapes and request, Maker's goal and rework request, Second Eye's prompt, schema and brief), and each agent's model. `parallax stats` prints "evals are older than" everything that changed since the last run that finished a case.
+
+`parallax eval check [case ...]` runs no model: the hidden tests must run and fail at the base (an import error there doesn't count: a broken setup looks the same) and pass at the fix, in the sandbox, after the same setup as a run.
+
+Built. Checking the cases found two setup gaps that real repos hit too, since `[build] setup` runs on a plain copy of the base: a version read from git tags has no `.git` (tabulate; the eval sets `SETUPTOOLS_SCM_PRETEND_VERSION`), and a `src/` package installed editable points at that deleted copy (cachetools; the eval's venv puts `./src` on the path). A file the build writes into the source tree can't be fixed that way: humanize-174 imports a `_version.py` that only its install creates, so its tests error at the base. Until setup can make it, a run should name the other cases.
+
 #### Later: a knowledge layer
 
 - Project context and past decisions for the agents to draw on: what the repo is, what was decided before and why (from the ledger and `docs/tasks/`), so drafters and makers don't relearn it on every task. Read-only for agents, like everything else they're given.

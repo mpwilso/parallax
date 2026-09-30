@@ -43,6 +43,12 @@ def partial(project: Project) -> dict[str, list[dict]]:
 
 
 def report(project: Project) -> list[str]:
+    from .evals import staleness
+    evals = staleness(project)
+    return _tasks(project) + ([evals] if evals else [])
+
+
+def _tasks(project: Project) -> list[str]:
     counts = touches(project)
     if not counts:
         return ["no tasks yet."]

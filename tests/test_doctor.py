@@ -166,7 +166,8 @@ def test_init_writes_no_mission_and_profiles_are_refused(repo):
         Project(repo)
 
 
-@pytest.mark.parametrize("cmd", ["goal", "pulse", "evidence", "check", "review", "run", "eval"])
+# eval came back on the do pipeline (docs/plan.md, "Evals"); tests/test_evals.py covers it
+@pytest.mark.parametrize("cmd", ["goal", "pulse", "evidence", "check", "review", "run"])
 def test_cut_commands_are_gone(cmd, capsys):
     with pytest.raises(SystemExit):
         main([cmd, "x"])

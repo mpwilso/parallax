@@ -31,6 +31,7 @@ from .gate import Scope, make_permission_fn
 KEEP_ENV = ("HOME", "USER", "LOGNAME", "LANG", "LANGUAGE", "TERM", "SHELL", "TZ",
             "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_RUNTIME_DIR")
 SYSTEM_PATH = "/usr/local/bin:/usr/bin:/bin"
+MAKER_GOAL = "Build this task by following its approved plan. Change only the files the plan lists."
 QUIET_BUILD = {"PYTHONDONTWRITEBYTECODE": "1", "PYTEST_ADDOPTS": "-p no:cacheprovider"}  # no byproducts in the worktree
 
 
@@ -66,7 +67,7 @@ def scrubbed_env(venv: Path | None, environ: dict | None = None, path: str | Non
 
 
 def goal(project: Project, task_id: str) -> str:
-    parts = ["Build this task by following its approved plan. Change only the files the plan lists."]
+    parts = [MAKER_GOAL]
     for doc in ("intent", "spec", "plan"):
         path = lifecycle.doc_path(project, task_id, doc)
         if path.exists():

@@ -85,7 +85,7 @@ A working prototype I use on this repo. One task it did on itself, from the type
 - **A cap can overshoot by one turn.** Every agent gets what's left of the cap as its own limit, but the SDK checks it between turns.
 - **Field's browser server is pinned** to `@playwright/mcp` 0.0.70: later versions need Unix sockets the sandbox refuses.
 - **The three real-sandbox tests need a machine that allows unprivileged user namespaces**; elsewhere they skip and say why.
-- **One person, one machine.** No splitting work into several tasks yet, and no evals on the current pipeline yet (both planned).
+- **One person, one machine.** No splitting work into several tasks yet (planned). The eval harness runs on the current pipeline, but it has no paid run yet.
 
 ## How it was built
 
@@ -93,7 +93,7 @@ I designed Parallax and directed its build; Claude Code wrote most of the code u
 
 ## What's next
 
-- Evals on the current pipeline, scored by real merged fixes.
+- A first eval run on the current pipeline, scored by real merged fixes.
 - A behavioral verifier: tests of the intended outcomes, written before the build, that Maker can't change.
 - Several parallel tasks from one request.
 - A knowledge layer that gives agents project context and past decisions to draw on.

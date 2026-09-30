@@ -21,6 +21,13 @@ from . import build, costs, lifecycle, lint, review, sandbox, status, testrun, t
 from .agents.base import BlindChecker, Review
 from .core import ParallaxError, Project
 
+REWORK = """The check found problems. Fix them, then stop:
+{fixes}
+
+If a finding can only be fixed by going against the approved plan (removing or not doing something \
+it lists), don't fix it: start your final reply with "conflict:" and name the finding. That's for the \
+human to decide."""
+
 CheckerFor = Callable[[float, str], BlindChecker]  # (budget left, model) -> checker
 
 
@@ -243,10 +250,7 @@ def run_check(project: Project, task_id: str, checker_for: CheckerFor, maker_for
         if p.left <= 0:
             return costs.stop_at_cap(project, task_id, p.cap)
         project.ledger.append("rework.started", "parallax", "\n".join(fix), task=task_id, cycle=cycles + 1)
-        extra = ("The check found problems. Fix them, then stop:\n" + "\n".join(f"- {line}" for line in fix)
-                 + "\n\nIf a finding can only be fixed by going against the approved plan (removing or not "
-                   "doing something it lists), don't fix it: start your final reply with \"conflict:\" and "
-                   "name the finding. That's for the human to decide.")
+        extra = REWORK.format(fixes="\n".join(f"- {line}" for line in fix))
         before = project.ledger.entries()
         reviewed = [e for e in before if e["kind"] == "check.staged" and e["data"].get("task") == task_id][-1]["data"]["tree"]
         status = build.run_build(project, task_id, maker_for, extra=extra, preflight_runner=preflight_runner)
