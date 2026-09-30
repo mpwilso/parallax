@@ -1,6 +1,6 @@
 """What a working task is doing right now, in one line, from the ledger.
 
-Which agent has it (Focus, Maker, Second Eye, Field, or Parallax itself running tests),
+Which agent has it (Focus, Reticle, Maker, Second Eye, Field, or Parallax itself running tests),
 for how long, and what this attempt has spent against its cap. For the UI's working list.
 """
 from __future__ import annotations
@@ -42,6 +42,10 @@ def doing(entries: list[dict]) -> tuple[str, str, str]:
             what, since = "Focus redrafting", e["ts"]
         elif k == "gate.approved":
             what, since = "preparing the build", e["ts"]
+        elif k == "reticle.started":
+            what, since = "Reticle writing tests of what you asked", e["ts"]
+        elif k in ("reticle.recorded", "reticle.failed"):
+            what, since = "preparing the build", e["ts"]
         elif k == "maker.started":
             what, since = "Maker building", e["ts"]
         elif k == "rework.started":
@@ -74,8 +78,8 @@ def line(project: Project, task_id: str, now: datetime | None = None) -> str:
     return ", ".join(parts) + (f". {why[0].upper()}{why[1:]}" if why else "")
 
 
-WHO = {"Focus": "focus", "Maker": "maker", "Second Eye": "second_eye", "Field": "field"}
-STAGES = ("focus", "maker", "second_eye", "field")
+WHO = {"Focus": "focus", "Reticle": "reticle", "Maker": "maker", "Second Eye": "second_eye", "Field": "field"}
+STAGES = ("focus", "reticle", "maker", "second_eye", "field")
 
 
 def agent_of(what: str) -> str | None:
@@ -85,7 +89,7 @@ def agent_of(what: str) -> str | None:
 
 def stages(entries: list[dict], waiting: bool) -> list[dict]:
     """Each agent's state on this attempt, in order: working, done, or waiting (not started, or the task
-    waits on you). Field appears only on a task the UI tester ran for. Motion follows from this."""
+    waits on you). Reticle and Field appear only on a task they ran for. Motion follows from this."""
     what, _, _ = doing(entries)
     working = None if waiting else agent_of(what)
     kinds = [e["kind"] for e in entries]
@@ -94,11 +98,13 @@ def stages(entries: list[dict], waiting: bool) -> list[dict]:
         "maker": "build.finished" in kinds,
         "second_eye": any(e["kind"] == "verdict.recorded" and e["data"].get("stage") == "check" for e in entries),
         "field": "uitest.recorded" in kinds or "uitest.failed" in kinds,
+        "reticle": "reticle.recorded" in kinds or "reticle.failed" in kinds,
     }
-    seen_field = "uitest.started" in kinds or working == "field"
+    seen = {"field": "uitest.started" in kinds or working == "field",
+            "reticle": "reticle.started" in kinds or working == "reticle"}
     out = []
     for key in STAGES:
-        if key == "field" and not seen_field:
+        if key in seen and not seen[key]:
             continue
         state = "working" if working == key else "done" if done[key] else "waiting"
         out.append({"agent": key, "state": state})

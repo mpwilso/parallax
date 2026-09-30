@@ -15,9 +15,9 @@ LOG_FIELDS = ("task", "action", "stage", "status", "verdict", "outcome", "why")
 GUIDE = """\
 parallax: agents do the work. you make the calls.
 
-the agents: Focus drafts the intent and plan. Maker builds in the sandbox. Second Eye checks blind,
-seeing only the result. Field tests the UI. Reticle, off until the evals say, writes tests of
-the outcome before the build. which one runs next is decided by code, never by a model.
+the agents: Focus drafts the intent and plan. Reticle writes tests of what you asked, before the
+build; Maker can't see or change them. Maker builds in the sandbox. Second Eye checks blind, seeing
+only the result. Field tests the UI. which one runs next is decided by code, never by a model.
 
 start here:
   parallax do "the work"                describe it once. drafting, building and checking run without you

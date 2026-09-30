@@ -145,7 +145,7 @@ def launch_rule(project: Project, task_id: str) -> tuple[bool, str]:
 def go(project: Project, task_id: str, maker_for, checker_for, test_runner=None, preflight_runner=None) -> str:
     """After an approval, by the rule or by you: setup, then the build (which preflights first), then the check."""
     p = build.prepare(project, task_id, setup=True, launching=False)  # the venv, once, as you
-    reticle.write(project, task_id, p, runner=test_runner)  # tests of the outcomes, before Maker; off by default
+    reticle.write(project, task_id, p, runner=test_runner)  # tests of what you asked, before Maker
     status = build.run_build(project, task_id, maker_for, preflight_runner=preflight_runner)
     if status == "built":
         status = check.run_check(project, task_id, checker_for, maker_for,

@@ -8,8 +8,10 @@ from parallax import brand, live
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_the_four_agents_have_names_and_roles_and_nothing_else_is_named():
-    assert [a["name"] for a in brand.AGENTS.values()] == ["Focus", "Maker", "Second Eye", "Field"]
+def test_the_agents_have_names_and_roles_and_nothing_else_is_named():
+    assert [a["name"] for a in brand.AGENTS.values()] == ["Focus", "Reticle", "Maker", "Second Eye", "Field"]  # a task's order
+    assert brand.label("reticle", with_role=True) == "Reticle (writes tests of what you asked, before the build; Maker can't see or change them)"
+    assert brand.names() == "Focus, Reticle, Maker, Second Eye and Field"
     assert brand.label("second_eye", with_role=True) == "Second Eye (the blind checker; sees only the result, never the making)"
     assert brand.label("field") == "Field"
     assert "scope" not in brand.AGENTS  # reserved for a future read-only investigator
@@ -108,10 +110,10 @@ def test_the_readme_images_and_the_ui_come_from_the_same_data():
 
 
 def test_the_brand_is_plain_words_and_its_own():
-    """No em dashes, and every proper noun in the brand module is one of the four agents or Parallax."""
+    """No em dashes, and every proper noun in the brand module is one of the agents or Parallax."""
     text = Path(brand.__file__).read_text(encoding="utf-8")
     assert "\u2014" not in text and "\u2014" not in (ROOT / "docs" / "brand" / "party.svg").read_text()
-    ours = {"Focus", "Maker", "Second", "Eye", "Field", "Parallax", "Scope"}
+    ours = {"Focus", "Reticle", "Maker", "Second", "Eye", "Field", "Parallax", "Scope"}
     prose = " ".join(re.findall(r'"""(.*?)"""', text, re.S)) + " ".join(re.findall(r"(?:^|\s)#\s+(.*)", text))  # comments, not #hex colors
     capitalised = {w for w in re.findall(r"(?<![.!?]\s)(?<!^)\b([A-Z][a-z]+)\b", prose, re.M)}
     common = {"The", "A", "An", "One", "Names", "Portraits", "Motion", "Any", "Both", "Claude", "Code", "Both", "Focus"}
@@ -133,6 +135,15 @@ def test_stages_follow_the_ledger():
     with_field = building + [e("build.finished", status="built"), e("check.started"), e("uitest.started")]
     assert [(s["agent"], s["state"]) for s in live.stages(with_field, waiting=False)][-1] == ("field", "working")
     assert live.agent_of("Maker reworking (1 of 3)") == "maker" and live.agent_of("running the plan's tests") is None
+    # Reticle, between Focus and Maker, on a task it ran for
+    approved = drafting + [e("draft.recorded", doc="intent"), e("draft.recorded", doc="plan"), e("gate.approved")]
+    writing = approved + [e("reticle.started", task="t")]
+    assert live.doing(writing)[0] == "Reticle writing tests of what you asked"
+    assert [(s["agent"], s["state"]) for s in live.stages(writing, waiting=False)][:3] == [
+        ("focus", "done"), ("reticle", "working"), ("maker", "waiting")]
+    built = writing + [e("reticle.recorded", task="t"), e("maker.started", stage="build")]
+    assert [(s["agent"], s["state"]) for s in live.stages(built, waiting=False)][1:3] == [("reticle", "done"), ("maker", "working")]
+    assert "reticle" not in [s["agent"] for s in live.stages(building, waiting=False)]  # off, or not run: not shown
     assert not re.search(r"drafter|checker|tester", " ".join(a["name"] for a in brand.AGENTS.values()), re.I)
 
 
@@ -151,11 +162,12 @@ def test_the_party_takes_turns_and_only_one_agent_moves_at_a_time():
     svg = brand.party_animated_svg()
     assert "@media (prefers-reduced-motion: reduce){.bust,.glow{animation:none}}" in svg
     windows = brand.party_windows()
-    assert len(windows) == 4 and all(a[1] <= b[0] for a, b in zip(windows, windows[1:]))  # in order, never overlapping
-    total = 4 * brand.TURN + brand.PAUSE
+    n_agents = len(brand.AGENTS)
+    assert len(windows) == n_agents and all(a[1] <= b[0] for a, b in zip(windows, windows[1:]))  # in order, never overlapping
+    total = n_agents * brand.TURN + brand.PAUSE
     # from the keyframes themselves: every moment at which an agent is not at rest belongs to one agent only
     moving: dict[int, list[float]] = {}
-    for n in range(4):
+    for n in range(n_agents):
         for prop, rest in (("bob", "translateY(0)"), ("glow", "1")):
             block = re.search(rf"@keyframes {prop}{n}\{{(.*?)\}}(?=@keyframes|\.a|$)", svg).group(1)
             frames = re.findall(r"([\d.]+)%\{[a-z]+:([^}]+)\}", block)
@@ -163,13 +175,14 @@ def test_the_party_takes_turns_and_only_one_agent_moves_at_a_time():
             for pct, value in frames:
                 if value != rest:
                     moving[n].append(float(pct) / 100 * total)
-    for a in range(4):
-        for b in range(a + 1, 4):
+    for a in range(n_agents):
+        for b in range(a + 1, n_agents):
             assert not (set(round(x, 3) for x in moving[a]) & set(round(x, 3) for x in moving[b])), (a, b)
         lo, hi = windows[a]
-        assert all(lo <= x < hi for x in moving[a]), f"agent {a} moves outside its turn"
+        eps = total / 100 * 0.001  # keyframes are written to three decimals of a percent
+        assert all(lo - eps <= x < hi - eps for x in moving[a]), f"agent {a} moves outside its turn"
         assert moving[a], f"agent {a} never moves"
-    assert svg.count('class="agent a') == 4 and all(f".a{n} .bust{{animation:bob{n}" in svg for n in range(4))
+    assert svg.count('class="agent a') == n_agents and all(f".a{n} .bust{{animation:bob{n}" in svg for n in range(n_agents))
     assert "steps(1,end)" in svg
     assert brand.party_svg() != svg and all(brand.portrait_body(k) in svg for k in brand.AGENTS)
 
@@ -188,3 +201,15 @@ def test_images_on_the_page_never_pick_their_color_from_the_os():
         assert f'<img src="docs/brand/{light}"' in block
     assert "#1c1c1a" in brand.lockup_svg("light") and "#ecebe6" in brand.lockup_svg("dark")
     assert brand.NAME_INK["light"] in brand.party_animated_svg("light") and brand.NAME_INK["dark"] in brand.party_animated_svg("dark")
+
+
+def test_reticles_portrait_is_a_clear_gap_until_it_is_drawn():
+    """The portrait is still to come: the tile with a dashed outline, no halo and no pixels, everywhere
+    the others appear. Filling its rows and colors and deleting "placeholder" is all it takes."""
+    body = brand.portrait_body("reticle")
+    assert 'class="gap"' in body and 'stroke-dasharray="1 1"' in body and "<circle" not in body
+    assert brand.pixels("reticle") == [] and brand.PORTRAITS["reticle"]["placeholder"] is True
+    assert brand.bundle()["agents"]["reticle"]["svg"] == body  # the UI's
+    for name in ("party.svg", "party-animated-light.svg", "flow.svg"):
+        assert body in (ROOT / "docs" / "brand" / name).read_text(), name
+    assert "Reticle" in (ROOT / "docs" / "brand" / "party.svg").read_text()

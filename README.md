@@ -26,16 +26,16 @@ AI can now write code faster than people can review it. The bottleneck has moved
 
 ## How a task moves
 
-<p align="center"><img src="docs/brand/flow.svg" width="900" alt="How a task moves: you describe it, Focus writes a plan, Parallax checks the plan and starts the build when it's small and safe, Maker builds in a sandbox, your tests, Second Eye and Field check it, and one card comes back for your accept and your merge, every step on a tamper-evident log"></p>
+<p align="center"><img src="docs/brand/flow.svg" width="900" alt="How a task moves: you describe it, Focus writes a plan, Parallax checks the plan and starts the build when it's small and safe, Reticle writes tests of what you asked, Maker builds in a sandbox, your tests, Reticle's, Second Eye and Field check it, and one card comes back for your accept and your merge, every step on a tamper-evident log"></p>
 
 ## The agents
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/brand/party-animated-dark.svg">
-  <img src="docs/brand/party-animated-light.svg" alt="Focus, Maker, Second Eye and Field" width="450">
+  <img src="docs/brand/party-animated-light.svg" alt="Focus, Reticle, Maker, Second Eye and Field" width="450">
 </picture>
 
-**Focus** drafts the intent and plan. **Maker** builds in the sandbox. **Second Eye** is the blind checker: it sees only the result, never the making. **Field** is the UI tester, which uses your app in a real browser and leaves tests behind. Here they take turns the way a task moves through them; in the UI a portrait moves only while its agent is working on that task, and everything else is still.
+**Focus** drafts the intent and plan. **Reticle** writes tests of what you asked, before the build; Maker can't see or change them. **Maker** builds in the sandbox. **Second Eye** is the blind checker: it sees only the result, never the making. **Field** is the UI tester, which uses your app in a real browser and leaves tests behind. Here they take turns the way a task moves through them; in the UI a portrait moves only while its agent is working on that task, and everything else is still.
 
 ## What's distinctive
 

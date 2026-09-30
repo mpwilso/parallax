@@ -279,6 +279,7 @@ def write(project: Project, task_id: str, p, writer=None, runner=None) -> str:
         project.ledger.append("reticle.failed", "parallax", "the intent marks no outcome as asked, so Reticle had nothing to test",
                               task=task_id)
         return "failed"
+    project.ledger.append("reticle.started", "parallax", "", task=task_id)  # the UI shows Reticle at work
     fn = make_permission_fn(project, task_id, base, read_only=True)
     try:
         res = (writer or WRITER)(limit, cfg["model"]).run(request(intent, typed), base, fn, stage="reticle",

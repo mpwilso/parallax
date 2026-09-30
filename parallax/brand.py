@@ -1,8 +1,9 @@
 """The agents' names and faces, and the logo, as data. One source for the UI and for docs/brand/.
 
 Names, with the role shown beside each the first time it appears on a screen or page:
-Focus drafts the intent and plan; Maker builds in the sandbox; Second Eye is the blind checker,
-which sees only the result, never the making; Field is the UI tester. Portraits are 16 by 16
+Focus drafts the intent and plan; Reticle writes tests of what you asked, before the build, which
+Maker can't see or change; Maker builds in the sandbox; Second Eye is the blind checker, which sees
+only the result, never the making; Field is the UI tester. Portraits are 16 by 16
 pixel busts drawn as one SVG rect per pixel. Motion means status: a portrait moves only while
 its agent is working (a one-pixel bob, glow letters pulsing), hops once when its stage finishes,
 and is still otherwise; with prefers-reduced-motion nothing moves. The mapping is `motion()`.
@@ -17,9 +18,12 @@ TILE = "#313859"
 VIOLET, CYAN = "#a47cf0", "#5ef2ff"
 BASE = {"k": "#12131f", "s": "#f0c39a", "w": "#ffffff"}  # outline, skin, eye glint
 LIGHT, DARK = 0.22, 0.25  # side light: lit from the left, shaded on the right
+GAP_INK = "#7c81a1"  # the dashed outline of a portrait still to come
 
 AGENTS = {  # role: shown beside the name the first time it appears; short: under the portrait on a card
     "focus": {"name": "Focus", "role": "drafts the intent and plan", "short": "intent and plan"},
+    "reticle": {"name": "Reticle", "role": "writes tests of what you asked, before the build; Maker can't see or change them",
+                "short": "tests what you asked"},
     "maker": {"name": "Maker", "role": "builds in the sandbox", "short": "builds"},
     "second_eye": {"name": "Second Eye", "role": "the blind checker; sees only the result, never the making", "short": "blind checker"},
     "field": {"name": "Field", "role": "the UI tester", "short": "UI tester"},
@@ -32,6 +36,9 @@ PORTRAITS = {
                        "..kggggggggggk..", "..kgssssssssgk..", "..kgsoosskwsgk..", "..kgsoosssssgk..",
                        "..kgssskksssgk..", "...kgssssssgk...", "...kggssssggk...", "..kggggxxggggk..",
                        ".kggggxxxxggggk.", "kGGGGGgxxgGGGGGk", "kGGGGGGggGGGGGGk", "kGGGGGGGGGGGGGGk"]},
+    # a gap for the portrait still to come: the tile with a dashed outline and nothing in it. To fill it,
+    # draw its rows and colors like the others and delete "placeholder"
+    "reticle": {"halo": "#6fdc8c", "glow": "", "colors": {}, "rows": ["." * 16] * 16, "placeholder": True},
     "maker": {"halo": "#ff7a3d", "glow": "ox",
               "colors": {"h": "#d06a2a", "o": "#ffb347", "a": "#7a4b32", "c": "#3b2a22", "m": "#9aa4b0", "x": "#ff7a3d"},
               "rows": ["................", ".....kkkkkk.....", "....khhhhhhk....", "...khhhhhhhhk...",
@@ -108,7 +115,12 @@ def pixels(key: str) -> list[tuple[int, int, str, bool]]:
 
 
 def portrait_body(key: str) -> str:
-    """The inner SVG of one portrait, at 16 by 16 units: tile, halo, then one rect per pixel."""
+    """The inner SVG of one portrait, at 16 by 16 units: tile, halo, then one rect per pixel. A
+    placeholder is the tile with a dashed outline where the portrait will go."""
+    if PORTRAITS[key].get("placeholder"):
+        return (f'<rect width="16" height="16" rx="2" fill="{TILE}"/>'
+                f'<rect class="gap" x="2" y="2" width="12" height="12" rx="1.5" fill="none" stroke="{GAP_INK}" '
+                f'stroke-width="0.5" stroke-dasharray="1 1"/>')
     parts = [f'<rect width="16" height="16" rx="2" fill="{TILE}"/>',
              f'<circle cx="8" cy="8.5" r="7.5" fill="{PORTRAITS[key]["halo"]}" opacity="0.16"/>']
     for x, y, fill, glow in pixels(key):
@@ -128,12 +140,12 @@ NAME_INK = {"light": "#5f6480", "dark": "#a8adc4"}  # the names under the portra
 
 
 def party_svg(scheme: str = "light") -> str:
-    """The four in a row, names under them, for the README. One fixed name color per file: an image can't
+    """The agents in a row, names under them, for the README. One fixed name color per file: an image can't
     know the page's theme, so the README picks the light or the dark file with a <picture>."""
     gap, size = 3, 16
     width = len(AGENTS) * size + (len(AGENTS) - 1) * gap
     parts = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} 22" width="{width * 6}" height="{22 * 6}" '
-             'shape-rendering="crispEdges" role="img" aria-label="Focus, Maker, Second Eye and Field">',
+             f'shape-rendering="crispEdges" role="img" aria-label="{names()}">',
              f'<style>text{{fill:{NAME_INK[scheme]}}}</style>']
     for n, key in enumerate(AGENTS):
         x = n * (size + gap)
@@ -142,6 +154,12 @@ def party_svg(scheme: str = "light") -> str:
                      f'font-size="2.6">{AGENTS[key]["name"]}</text>')
     parts.append("</svg>")
     return "".join(parts)
+
+
+def names() -> str:
+    """"Focus, Reticle, Maker, Second Eye and Field": every agent, in the order a task meets them."""
+    all_ = [a["name"] for a in AGENTS.values()]
+    return ", ".join(all_[:-1]) + " and " + all_[-1]
 
 
 def logo_body() -> str:
@@ -189,14 +207,15 @@ FLOW_STEPS = [  # (text, portraits, side note, owner)
     ("Focus writes a plan", ("focus",), "", "agents"),
     ("Checks the plan matches what you asked", (), "if not, Focus tries again, up to 2 times", "parallax"),
     ("Starts the build on its own if it's small and safe", (), "bigger or riskier: asks you first", "parallax"),
+    ("Reticle writes tests of what you asked, which Maker never sees", ("reticle",), "", "agents"),
     ("Maker builds it in a locked-down sandbox", ("maker",), "", "agents"),
-    ("Your tests run, Second Eye reviews the change blind, Field tries the app", ("second_eye", "field"),
+    ("Your tests and Reticle's run, Second Eye reviews the change blind, Field tries the app", ("second_eye", "field"),
      "problems: back to Maker, up to 3 times", "agents"),
     ("One card: ready to accept, or one question", (), "", "you"),
     ("Accept: Parallax saves exactly what was reviewed", (), "", "you"),
     ("You merge", (), "", "you"),
 ]
-WITHOUT_YOU = (1, 5)  # the steps that run without you, first and last, for the bracket
+WITHOUT_YOU = (1, 6)  # the steps that run without you, first and last, for the bracket
 OWNERS = {"you": ("You", "#5b4b8e", "#8c7ac4"), "agents": ("Agents", "#2f5d68", "#5b96a4"),
           "parallax": ("Parallax (automatic)", "#5f6f8e", "#8a98b8")}  # label, box fill, box edge; ink reads AA on each, and each fill stands apart from the tile and the others
 FLOW_COLORS = {"ink": "#f2f3fa", "muted": "#bfc4dd", "line": "#9aa1c9"}
