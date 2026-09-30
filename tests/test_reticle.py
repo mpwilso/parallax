@@ -217,7 +217,7 @@ def test_it_costs_against_the_cap_and_is_off_by_default(proj, repo):
     assert pilot._reserve(proj, lifecycle.plan_data(proj, tid)) == 0.5  # the cap keeps its limit for it
     (repo / POLICY_FILE).write_text("")
     proj.reload_policy()
-    assert proj.policy.reticle == {"enabled": False, "model": "", "max_usd": 0.5}
+    assert proj.policy.reticle == {"enabled": False, "model": "", "max_usd": 0.5, "inferred": False}
     before = len(kinds(proj, "reticle.recorded"))
     go(proj, FakeReticle(KEPT))
     assert len(kinds(proj, "reticle.recorded")) == before  # off: never runs
@@ -322,6 +322,45 @@ def test_when_the_plan_tests_fail_too_rework_goes_on_as_before(proj):
     assert status == "disputed" and len(kinds(proj, "rework.started")) == 3  # the rework cap, as ever
     assert not kinds(proj, "reticle.rework") and not kinds(proj, "reticle.disputed")
     assert all("a test of outcome 1 that you can't see fails" in e["reason"] for e in kinds(proj, "rework.started"))
+
+
+# the inferred-outcome experiment: notes on the card, never rework ---------------------------------------
+
+NOTE = KEPT.replace("sums_negatives", "sum") .replace("add(-1, 1) == 0", "add(2, 3) == 5") + \
+    "\n\ndef test_outcome_2_many():\n    assert add(-1, 1) == 0\n"  # an inferred outcome: negatives
+
+
+def test_an_inferred_outcomes_failure_is_a_note_on_the_card_never_rework(proj, repo):
+    (repo / POLICY_FILE).write_text("[reticle]\nenabled = true\ninferred = true\n")
+    proj.reload_policy()
+    writer = FakeReticle(NOTE)
+    tid, status = go_with(proj, writer, TWO.replace("add accepts any number of arguments", "add(-1, 1) is 0"),
+                          TWO_PLAN, make=maker(WRONG))  # abs(): 5 for (2, 3), but 2 for (-1, 1)
+    assert "The outcomes to test:\n1. add returns the sum" in writer.goals[0] and "2. add(-1, 1) is 0" in writer.goals[0]
+    [rec] = kinds(proj, "reticle.recorded")
+    assert [(t["outcome"], t["kind"]) for t in rec["data"]["kept"]] == [("1", "asked"), ("2", "inferred")]
+    assert status == "ready" and not kinds(proj, "rework.started")  # the note never sends Maker back
+    [ran] = kinds(proj, "reticle.ran")
+    assert [(f["outcome"], f["kind"]) for f in ran["data"]["failed"]] == [("2", "inferred")]
+    card = show.report(proj, tid)
+    assert "outcome 2 (inferred): tests/test_mine.py; Reticle's note, not sent back: its test fails: assert 2 == 0" in card
+
+
+@pytest.mark.parametrize("body,test,flags,noise", [
+    (WRONG, "from calc import add\n\n\ndef test_outcome_2_neg():\n    assert add(-1, 1) == 0\n", True, 0),  # it points at the bug
+    (FIXED, "from calc import add\n\n\ndef test_outcome_2_six():\n    assert add(2, 3) == 6\n", False, 1),   # it fails the real fix too
+])
+def test_the_eval_says_whether_a_note_flags_the_real_bug(repo, upstream, monkeypatch, body, test, flags, noise):  # noqa: F811
+    make_key()
+    proj = Project.init(repo)
+    monkeypatch.setattr(reticle, "WRITER", FakeReticle(test))
+    drafter = FakeDrafter({"intent": TWO.replace("add accepts any number of arguments", "add(-1, 1) is 0"), "plan": TWO_PLAN})
+    out = evals.run(proj, [case_for(upstream)], 20.0, 4.0, pipeline=scripted(maker(body), FakeChecker(), drafter),
+                    runner=plain_runner, say=lambda s: None, reticle=True, inferred=True)
+    r = result(out)
+    assert r["end"] == "ready" and len(r["inferred_notes"]) == 1
+    assert (r["notes_flag_bug"], r["notes_noise"]) == (flags, noise)
+    assert r["inferred_notes"][0]["on_real_fix"] == ("pass" if flags else "fail")
 
 
 # scored in the eval ---------------------------------------------------------------------------------

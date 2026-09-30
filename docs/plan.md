@@ -317,6 +317,10 @@ Changed after its first eval (run 492eaf: five false alarms on three good fixes,
 - A test also counts when it fails on an exception your request itself shows (a crash bug). Import, collection and syntax errors never count. Prose around Reticle's code is stripped.
 - When only Reticle fails (the plan's tests and Second Eye pass), Maker gets one rework for it. Still failing after that, the task goes to Ready with the disagreement on the card, and the call is yours. When anything else fails too, rework goes on as before.
 
+Measured two more ways (2026-09-30), since one bad fix in eleven can't give a catch rate:
+- `parallax eval --seeded` needs no Maker. Focus drafts the intent and Reticle writes its tests; then code breaks each maintainers' fix (flip a comparison, shift an integer, undo a hunk), keeps up to three versions that fail the hidden tests, and gives each to Second Eye with its normal input and to Reticle's tests. The real fix gets both too: anything flagged there is a false alarm.
+- `[reticle] inferred = true` (`parallax eval --reticle-inferred`): Reticle also tests the outcomes Focus inferred. Their failures are notes on the card, never rework; the eval runs each note's test on the real fix to tell a note that points at the real bug from noise.
+
 #### Later: a knowledge layer
 
 - Project context and past decisions for the agents to draw on: what the repo is, what was decided before and why (from the ledger and `docs/tasks/`), so drafters and makers don't relearn it on every task. Read-only for agents, like everything else they're given.

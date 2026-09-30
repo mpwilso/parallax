@@ -19,7 +19,7 @@ DEFAULT_UI_TESTER = {
     "enabled": False, "start": "", "url": "",
     "model": "claude-sonnet-5-5", "max_usd": 0.5,
 }
-DEFAULT_RETICLE = {"enabled": False, "model": "", "max_usd": 0.5}  # off until the eval says so (docs/evals.md)
+DEFAULT_RETICLE = {"enabled": False, "model": "", "max_usd": 0.5, "inferred": False}  # off until the eval says so (docs/evals.md)
 DEFAULT_CHECK = {
     "model": "claude-sonnet-5-5",  # a different Claude model from the maker's; the eval measures it
     "diff_cap": 400,               # changed lines a blind review can take reliably
@@ -74,6 +74,7 @@ max_usd = 0.50                 # the most one tester run may spend, and what a p
 enabled = false                # true: before the build, an agent writes tests of the intent's outcomes that Maker never sees
 model = ""                     # empty: the drafters' model
 max_usd = 0.50                 # the most one Reticle run may spend, and what a plan's cap keeps for it
+inferred = false               # true: it also tests outcomes Focus inferred; their failures are notes on the card, never rework
 """
 
 
@@ -158,8 +159,9 @@ class Policy:
         if set(reticle) - set(DEFAULT_RETICLE):
             raise ValueError(f"unknown [reticle] settings: {sorted(set(reticle) - set(DEFAULT_RETICLE))}")
         self.reticle = {**DEFAULT_RETICLE, **reticle}
-        if not isinstance(self.reticle["enabled"], bool):
-            raise ValueError("[reticle] enabled must be true or false")
+        for key in ("enabled", "inferred"):
+            if not isinstance(self.reticle[key], bool):
+                raise ValueError(f"[reticle] {key} must be true or false")
         if not isinstance(self.reticle["model"], str):
             raise ValueError("[reticle] model must be a Claude model name, or empty for the drafters' model")
         v = self.reticle["max_usd"]

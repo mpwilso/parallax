@@ -188,12 +188,13 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
         r_results, failing = ran
         project.ledger.append("reticle.ran", "parallax", r_results.tail, task=task_id, tree=s.tree, exit=r_results.exit,
                               passed=len(reticle.kept(project, task_id)) - len(failing), total=len(reticle.kept(project, task_id)),
-                              failed=[{k: t[k] for k in ("name", "outcome", "message")} for t in failing])
+                              failed=[{**{k: t[k] for k in ("name", "outcome", "message")}, "kind": t.get("kind", "asked")}
+                                      for t in failing])
         if not r_results.reported:
             return _to_you(project, task_id, "check", f"Reticle's tests couldn't run (exit {r_results.exit}): "
                            f"{lint.one_sentence((r_results.tail.splitlines() or ['no output'])[-1])}", tree=s.tree), []
-        reticle_failed = [{k: t[k] for k in ("name", "outcome", "message")} for t in failing]
-        reticle_fix = [reticle.finding(t) for t in failing]
+        reticle_failed = [{k: t[k] for k in ("name", "outcome", "message")} for t in reticle.blocking(failing)]
+        reticle_fix = [reticle.finding(t) for t in reticle.blocking(failing)]  # an inferred outcome's failure is a note only
 
     # code findings first: they go straight back to the maker, and the checker isn't paid to spot them.
     # The em dash rule is Parallax's own style: only a repo whose policy turns it on gets it

@@ -127,9 +127,9 @@ def _toml(value) -> str:
     return json.dumps(value)  # strings and lists of strings: JSON's forms are valid TOML
 
 
-def eval_policy(policy, case: Case, ceiling: float, reticle: bool = False) -> str:
+def eval_policy(policy, case: Case, ceiling: float, reticle: bool = False, inferred: bool = False) -> str:
     """Your policy, with the case's setup, the UI tester off, and the ceiling as cap and launch rule.
-    reticle: Reticle on, with your model and limit for it."""
+    reticle: Reticle on, with your model and limit for it. inferred: it tests inferred outcomes too."""
     tables = {
         "limits": policy.limits,
         "budget": {"drafting_usd": round(min(policy.budget["drafting_usd"], ceiling / DRAFT_SHARE), 2),
@@ -140,7 +140,7 @@ def eval_policy(policy, case: Case, ceiling: float, reticle: bool = False) -> st
         "draft": policy.draft,
         "check": {**policy.check, "no_em_dashes": False},  # Parallax's own style rule, not the case's
         "ui_tester": {"enabled": False},
-        "reticle": {**policy.reticle, "enabled": reticle},
+        "reticle": {**policy.reticle, "enabled": reticle, "inferred": inferred},
     }
     lines = [f"# written by parallax eval for case {case.id}: your policy, run hands-free under a ${ceiling:.2f} ceiling"]
     for name, values in tables.items():
@@ -248,7 +248,8 @@ def score(project: Project, task_id: str, case: Case, cache: Path, runner=None) 
         if e["kind"] == "verdict.recorded" and e["data"].get("verdict") != "error":
             judged[e["data"]["tree"]] = e["data"]["verdict"]
     staged = [e["data"]["tree"] for e in mine if e["kind"] == "check.staged"]
-    tested = {e["data"]["tree"]: "fail" if e["data"]["failed"] else "pass" for e in mine if e["kind"] == "reticle.ran"}
+    tested = {e["data"]["tree"]: "fail" if [t for t in e["data"]["failed"] if t.get("kind", "asked") == "asked"] else "pass"
+              for e in mine if e["kind"] == "reticle.ran"}  # its verdict: the asked outcomes; inferred ones are notes
     work = sandbox.task_home(project.root, task_id)
     work.mkdir(parents=True, exist_ok=True)
     final = staged[-1] if staged else tree.stage(wt, base, work / "eval.index").tree
@@ -280,7 +281,30 @@ def score(project: Project, task_id: str, case: Case, cache: Path, runner=None) 
         "inferred": sorted(n for n, k in lint.outcome_kinds(lifecycle._read(project, task_id, "intent")).items()
                            if k == "inferred"),
         **_reticle_score(mine, reticle_verdicts, final),
+        **_notes(project, task_id, case, cache, mine, final, last.ok, work, venv, runner),
     }
+
+
+def _notes(project: Project, task_id: str, case: Case, cache: Path, mine: list[dict], final: str, hidden_ok: bool,
+           work: Path, venv: Path | None, runner=None) -> dict:
+    """With inferred outcomes on: the notes the Ready card would show (inferred tests failing on the final
+    tree), each run on the maintainers' real fix too. A note flags the real bug when it fails on the
+    final tree, passes on the real fix, and the hidden tests fail: a note failing on both is noise."""
+    from types import SimpleNamespace
+    from . import reticle, seeded
+    ran = next((e for e in reversed(mine) if e["kind"] == "reticle.ran" and e["data"]["tree"] == final), None)
+    if not any(t.get("kind") == "inferred" for t in reticle.kept(project, task_id)):
+        return {}
+    notes = [t for t in (ran["data"]["failed"] if ran else []) if t.get("kind") == "inferred"]
+    t = project.task(task_id)
+    p = SimpleNamespace(worktree=Path(t["worktree"]), task=t, home=work, venv=venv, plan={})
+    real = seeded.tree_with(Path(t["worktree"]), t["base"], seeded.fix_files(cache, case), work / "real.index")
+    checked = reticle.check(project, task_id, p, real, runner)
+    on_real = {x["name"] for x in (checked[1] if checked else [])}
+    out = [{**n, "on_real_fix": "fail" if n["name"] in on_real else "pass"} for n in notes]
+    return {"inferred_notes": out,
+            "notes_flag_bug": any(n["on_real_fix"] == "pass" for n in out) and not hidden_ok,
+            "notes_noise": sum(n["on_real_fix"] == "fail" or hidden_ok for n in out)}
 
 
 def _reticle_score(mine: list[dict], verdicts: list[dict], final: str) -> dict:
@@ -317,14 +341,14 @@ def _reticle_score(mine: list[dict], verdicts: list[dict], final: str) -> dict:
 
 
 def run_case(case: Case, where: Path, ceiling: float, policy, pipeline: Pipeline, runner=None,
-             reticle: bool = False) -> dict:
+             reticle: bool = False, inferred: bool = False) -> dict:
     started = time.monotonic()
     r: dict = {"case": case.id, "pr": case.pr, "issue": case.issue, "ceiling_usd": ceiling}
     try:
         cache = cache_repo(case)
         repo = where / "repo"
         clone_at(cache, case.base, repo)
-        (repo / POLICY_FILE).write_text(eval_policy(policy, case, ceiling, reticle), encoding="utf-8")
+        (repo / POLICY_FILE).write_text(eval_policy(policy, case, ceiling, reticle, inferred), encoding="utf-8")
         project = Project.init(repo, actor="parallax")  # REVIEW.md: the general template, as any repo gets
         task_id = pipeline(project, case.goal.strip())
         r.update(score(project, task_id, case, cache, runner))
@@ -347,7 +371,7 @@ def say_now(text: str) -> None:
 
 def run(project: Project, cases: list[Case], budget: float, per_case: float | None = None,
         pipeline: Pipeline = live_pipeline, runner=None, say: Callable[[str], None] | None = None,
-        run_id: str | None = None, reticle: bool = False) -> Path:
+        run_id: str | None = None, reticle: bool = False, inferred: bool = False) -> Path:
     """Run cases in order under a hard total budget. Each case starts only if what's spent, plus its
     ceiling and the margin, fits. Every case's result is written as it finishes. Returns the run's folder."""
     say = say or say_now
@@ -362,7 +386,8 @@ def run(project: Project, cases: list[Case], budget: float, per_case: float | No
                           capture_output=True, text=True).stdout.strip()
     header = {"run": run_id, "started": now.isoformat(timespec="seconds"), "parallax": head,
               "budget_usd": budget, "per_case_usd": per_case, "cases": [c.id for c in cases],
-              "fingerprint": fingerprint.current(project.root, project.policy), "reticle": reticle}
+              "fingerprint": fingerprint.current(project.root, project.policy), "reticle": reticle,
+              "reticle_inferred": inferred}
     spent, done, stopped = 0.0, [], None
     for n, case in enumerate(cases, 1):
         if spent + need > budget:
@@ -371,7 +396,7 @@ def run(project: Project, cases: list[Case], budget: float, per_case: float | No
             say(f"stopped before {case.id}: {stopped['why']}.")
             break
         say(f"[{n}/{len(cases)}] {case.id}: running, ceiling ${per_case:.2f}")
-        r = run_case(case, scratch / case.id, per_case, project.policy, pipeline, runner, reticle)
+        r = run_case(case, scratch / case.id, per_case, project.policy, pipeline, runner, reticle, inferred)
         spent = round(spent + (r.get("cost_usd") or 0), 4)
         _write(out / f"{case.id}.json", r)
         done.append(r)
@@ -437,6 +462,11 @@ def summary(root: Path, out: Path, header: dict, results: list[dict]) -> str:
         found.append(f"Reticle was right {rt['right']} times, caught {rt['catch']} bad fixes, missed {rt['miss']}, and raised "
                      f"{rt['false alarm']} false alarms, for ${cost:.2f} plus ${owed:.2f} of rework its false alarms caused "
                      f"({rel}/run.json:1)")
+    if header.get("reticle_inferred"):
+        notes = [n for r in results for n in r.get("inferred_notes", [])]
+        found.append(f"inferred-outcome notes the cards would show: {len(notes)}; "
+                     f"{sum(bool(r.get('notes_flag_bug')) for r in results)} flagged a real bug, "
+                     f"{sum(r.get('notes_noise') or 0 for r in results)} were noise ({rel}/run.json:1)")
     if stop:
         found.append(f"stopped before {stop['case']}: {stop['why']} ({rel}/run.json:1)")
     details = [f"Run {header['run']} on parallax {header['parallax']}, budget ${header['budget_usd']:.2f}, "

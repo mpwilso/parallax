@@ -136,6 +136,8 @@ def _reticle(project: Project, task_id: str):
             why = lint.one_sentence(rec["reason"]).rstrip(".") if rec["actor"] == "parallax" else "it failed"
             return f"; Reticle wrote no test: {why}{cite}"
         if any(t["outcome"] == n for t in kept):
+            if n in failed and any(t["outcome"] == n and t.get("kind") == "inferred" for t in kept):
+                return f"; Reticle's note, not sent back: its test fails: {' '.join(failed[n].split())[:80]}{cite}"
             if n in failed:
                 return f"; Reticle's test failed: {' '.join(failed[n].split())[:80]}{cite}"
             return f"; Reticle's test passed{cite}" if ran else f"; Reticle's test hasn't run{cite}"
