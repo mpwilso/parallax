@@ -1,0 +1,26 @@
+{
+ "case": "boltons-319",
+ "pr": "https://github.com/mahmoud/boltons/commit/8ba3a7fa0d99b73f7f43c1aed82c571b941eecea",
+ "issue": "https://github.com/mahmoud/boltons/issues/319",
+ "ceiling_usd": 4.0,
+ "task": "820afb",
+ "end": "ready",
+ "status": "ready",
+ "hidden": "pass",
+ "hidden_detail": "4 of 4 pass (exit 0)",
+ "second_eye": "right",
+ "verdicts": [
+  {
+   "tree": "6f82dda1347c3a9bb409850770e0e7177b9d23ce",
+   "verdict": "pass",
+   "hidden": "pass",
+   "judgment": "right"
+  }
+ ],
+ "cost_usd": 0.5138,
+ "seconds_to_ready": 112.0,
+ "touches": 1,
+ "decisions": [],
+ "scratch": "/home/matt/.local/share/parallax/evals/runs/419a5e/boltons-319/repo",
+ "seconds": 111.9
+}

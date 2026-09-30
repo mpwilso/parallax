@@ -1,0 +1,36 @@
+{
+ "run": "419a5e",
+ "started": "2026-09-30T05:01:53+00:00",
+ "parallax": "0e2588e",
+ "budget_usd": 10.0,
+ "per_case_usd": 4.0,
+ "cases": [
+  "tomlkit-430",
+  "tabulate-190",
+  "boltons-319"
+ ],
+ "fingerprint": {
+  "parallax.policy.toml": "9fd7df04e91a369aa4987eafd297b6d108e290202bb6fa11d43943922acf5081",
+  "parallax/agents/claude.py (DRAFT_PROMPT)": "aa4e07d8db2e22f0e0363fe27cf9f55bd163396d7b9bd6b851d5618c057420e7",
+  "parallax/agents/claude.py (MAKER_PROMPT)": "6c03001cbf16ae3c3a8a4d1b4498e36c92093bd5c8a22846cb9e67a8836b191b",
+  "parallax/agents/claude.py (BLIND_PROMPT)": "30ff80347e728226d6e836a3a260a21b4ec1d506cb365ffef4bbc5c4d0c4f5ae",
+  "parallax/agents/claude.py (BLIND_SCHEMA)": "787263564334862a013b2644b21fa81652ad72f2264d34afdab55ec4d209fd3f",
+  "parallax/lifecycle.py (SHAPES)": "2c621b596ad1f27e158cdb93b58bb171574be3caead07649f0126e48fa94d44e",
+  "parallax/lifecycle.py (the drafting request)": "fdefa06e1f0ab1e415f769d48da87cc1d180bd65ee9f3bbf04e00de6ac2daa0d",
+  "parallax/build.py (MAKER_GOAL)": "77a34835cf2d6edb5171c880ac8a25fabff86381bda6887145bc082ac8b0e46b",
+  "parallax/check.py (REWORK)": "21cc566665f35d54fbc869ccd5616c03caca428dd58240cceae4db282edd540c",
+  "parallax/review.py (the checker's brief)": "b2b46c09f1060157a15e32475b520b494c9e2cda469fc8a0662d30a7806fa63b",
+  "parallax/review.py (TEMPLATE)": "16df79dcfe45c1b80abe85004794c477967bfbb82361a4bcf848b9ae8a87a493",
+  "Focus's model": "claude-sonnet-5-5",
+  "Maker's model": "claude-opus-5",
+  "Second Eye's model": "claude-sonnet-5-5"
+ },
+ "finished": "2026-09-30T05:07:26+00:00",
+ "spent_usd": 1.6977,
+ "done": [
+  "tomlkit-430",
+  "tabulate-190",
+  "boltons-319"
+ ],
+ "stopped": null
+}

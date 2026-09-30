@@ -1,0 +1,26 @@
+{
+ "case": "tomlkit-430",
+ "pr": "https://github.com/python-poetry/tomlkit/pull/520",
+ "issue": "https://github.com/python-poetry/tomlkit/issues/430",
+ "ceiling_usd": 4.0,
+ "task": "5f3f65",
+ "end": "ready",
+ "status": "ready",
+ "hidden": "pass",
+ "hidden_detail": "152 of 152 pass (exit 0)",
+ "second_eye": "right",
+ "verdicts": [
+  {
+   "tree": "e43633a8db3710875dcc9bb62cf4c8abe772e89b",
+   "verdict": "pass",
+   "hidden": "pass",
+   "judgment": "right"
+  }
+ ],
+ "cost_usd": 0.5366,
+ "seconds_to_ready": 90.0,
+ "touches": 1,
+ "decisions": [],
+ "scratch": "/home/matt/.local/share/parallax/evals/runs/419a5e/tomlkit-430/repo",
+ "seconds": 90.7
+}
