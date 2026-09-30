@@ -63,6 +63,26 @@ def blocking(text: str) -> tuple[str, ...]:
     return found or DEFAULT_BLOCKING
 
 
+def enforce(findings: list, intent: str, blocking: tuple[str, ...]) -> tuple[list, list[dict]]:
+    """Second Eye's asked-only rule, by code: a blocking finding that cites only inferred outcomes, and
+    no asked outcome or constraint, becomes a note at the highest severity that doesn't block.
+    Returns (findings as they count, what was lowered). A finding that cites nothing stays as it is:
+    a plain bug rests on no outcome. An unmarked outcome counts as asked."""
+    from dataclasses import replace
+    from .lint import outcome_kinds
+    kinds = outcome_kinds(intent)
+    note = next((s for s in SEVERITIES if s not in blocking), SEVERITIES[-1])
+    out, lowered = [], []
+    for f in findings:
+        cited = [c.split()[1] for c in f.cites if c.startswith("outcome ")]
+        rests = "constraint" in f.cites or any(kinds.get(n, "asked") != "inferred" for n in cited)
+        if f.severity in blocking and cited and not rests:
+            lowered.append({"text": f.text, "where": f.where, "from": f.severity, "to": note, "cites": list(f.cites)})
+            f = replace(f, severity=note)
+        out.append(f)
+    return out, lowered
+
+
 def section(text: str, name: str) -> str:
     """The body of a '## name' section, stripped."""
     m = re.search(rf"^##\s+{re.escape(name)}\s*$\n(.*?)(?=^##\s|\Z)", text, re.M | re.S)

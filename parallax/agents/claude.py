@@ -69,6 +69,9 @@ Follow REVIEW.md's passes. Give each finding one of its severities, and where it
 diff, or "" for the whole change). Findings are about the diff; don't restate the rules.
 Give each finding a kind: "scope" if the problem is that the change does something the outcome or the
 constraints don't allow (or leaves out something they require); "defect" for anything else.
+Give each finding what it cites: "outcome <n>" for each outcome it rests on, and "constraint" if it rests
+on a constraint. Leave it empty for a problem that rests on neither, like a plain bug. Code checks it: a
+blocking finding that cites only inferred outcomes becomes a note.
 - pass: it achieves the outcome within the constraints.
 - fail: it doesn't, or it has a problem.
 - no_finding: you found nothing wrong, but can't confirm the outcome from the diff alone.
@@ -89,8 +92,9 @@ BLIND_SCHEMA = {
                 "kind": {"type": "string", "enum": ["defect", "scope"]},
                 "where": {"type": "string"},
                 "text": {"type": "string"},
+                "cites": {"type": "array", "items": {"type": "string", "pattern": "^(outcome [0-9]+|constraint)$"}},
             },
-            "required": ["severity", "kind", "where", "text"],
+            "required": ["severity", "kind", "where", "text", "cites"],
             "additionalProperties": False,
         }},
         "not_looked_at": {"type": "string"},
@@ -317,7 +321,8 @@ class ClaudeChecker:
         data, cost = asyncio.run(_structured(self.sdk, self.model, BLIND_PROMPT, brief, BLIND_SCHEMA,
                                              CheckerError, self.max_budget_usd))
         try:
-            findings = [Finding(str(f["severity"]), str(f.get("where", "")), str(f["text"]), str(f.get("kind", "defect")))
+            findings = [Finding(str(f["severity"]), str(f.get("where", "")), str(f["text"]), str(f.get("kind", "defect")),
+                                [str(c) for c in f.get("cites") or []])
                         for f in data.get("findings", [])]
         except (KeyError, TypeError) as err:
             raise CheckerError(f"checker reply had the wrong shape: {err}") from err

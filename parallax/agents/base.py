@@ -44,6 +44,7 @@ class Finding:
     where: str     # path:line, or "" when it's about the whole change
     text: str
     kind: str = "defect"  # defect: it's wrong. scope: it does something the outcome or constraints don't allow
+    cites: list[str] = field(default_factory=list)  # what it rests on: "outcome 3", "constraint"; empty for neither
 
 
 @dataclass

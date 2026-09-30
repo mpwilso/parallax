@@ -227,7 +227,12 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
             return _to_you(project, task_id, "check", f"Second Eye error: {err}", tree=s.tree), []
 
     blocking = review.blocking(review_text)
-    blockers = [f for f in rv.findings if f.severity in blocking]
+    counted, lowered = review.enforce(rv.findings, intent, blocking)
+    if lowered:  # recorded: Second Eye broke its asked-only rule, and code held it to it
+        project.ledger.append("verdict.downgraded", "parallax",
+                              f"{len(lowered)} of Second Eye's blocking findings cite only inferred outcomes, so they're notes",
+                              task=task_id, tree=s.tree, lowered=lowered)
+    blockers = [f for f in counted if f.severity in blocking]
     # a scope finding on a file your approved plan lists: intent and plan disagree. that's yours,
     # never the maker's to settle, since fixing it would change approved scope
     against_plan = [f for f in blockers if f.kind == "scope" and _path(f.where) in planned_paths(plan)]
