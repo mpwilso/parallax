@@ -6,7 +6,7 @@ import subprocess
 import pytest
 
 from fakes import FakeChecker, FakeDrafter, blocker
-from parallax import evals, lint, reticle, seeded
+from parallax import evals, lint, reticle, review, seeded
 from parallax.agents.base import Review
 from parallax.core import Project
 from test_evals import _commit, plain_runner
@@ -152,6 +152,7 @@ def test_second_eye_alone_reruns_on_the_same_versions_reusing_the_intent_and_ret
     before = json.loads((first / "calc-2.json").read_text())
     monkeypatch.setattr(reticle, "WRITER", lambda *a: pytest.fail("Reticle was called again"))
     monkeypatch.setattr(seeded, "run_case", lambda *a: pytest.fail("the seeded case ran again"))
+    (evals.home() / "runs" / first.name.split("-")[3] / "calc-2" / "repo" / "REVIEW.md").write_text("OLD RULES\n")
     checker = FakeChecker(reviews=[blocker("wrong cap", "calc.py:6"), Review("pass"), Review("pass"), Review("pass", cost_usd=0.02)])
     said = []
     out = seeded_second_eye.run(proj, [upstream], 3.0, say=said.append, checker_for=checker)
@@ -162,6 +163,8 @@ def test_second_eye_alone_reruns_on_the_same_versions_reusing_the_intent_and_ret
     assert [v["reticle"] for v in r["versions"]] == [v["reticle"] for v in before["versions"]]  # Reticle's results as they were
     assert r["real_fix"]["reticle"] == before["real_fix"]["reticle"] and r["second_eye_from"] == first.name.split("-")[3]
     assert len(checker.briefs) == 4 and all(b.startswith("Outcome:\n1. asked: add returns the sum") for b in checker.briefs)
+    assert all(f"REVIEW.md:\n{review.TEMPLATE.rstrip()}\n\nDiff:" in b and "OLD RULES" not in b
+               for b in checker.briefs)  # today's template, never the one the first run had
     assert not any(HIDDEN in b or "test_calc.py" in b for b in checker.briefs)
     header = json.loads((out / "run.json").read_text())
     assert header["second_eye_only"] and header["done"] == ["calc-2"]

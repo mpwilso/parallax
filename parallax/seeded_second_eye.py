@@ -1,7 +1,8 @@
 """`parallax eval --seeded --second-eye-only`: Second Eye again on the versions a seeded run made.
 
-For each case, the newest seeded run that finished it gives what stays fixed: Focus's intent and
-the REVIEW.md from that run's scratch repo, and Reticle's results, copied as they are. The broken
+For each case, the newest seeded run that finished it gives what stays fixed: Focus's intent from
+that run's scratch repo, and Reticle's results, copied as they are. REVIEW.md is today's general
+template, the one an eval gets, so a rerun measures Second Eye's input as it is now. The broken
 versions are made again by code (seeded.candidates is deterministic) and picked by name, and the
 real fix is the same. Only Second Eye is called, with its exact normal input, and it's scored on
 findings about behavior (seeded.second_eye_scored). No Focus, no Reticle, no hidden tests run.
@@ -42,7 +43,7 @@ def rescore_case(case, run_id: str, r: dict, checker_for) -> dict:
     [tid] = list(project.tasks())
     base = project.task(tid)["base"]
     intent = lifecycle._read(project, tid, "intent")
-    review_text = review.load(repo)
+    review_text = review.TEMPLATE
     blocking = review.blocking(review_text)
     cache = evals.cache_repo(case)
     made = dict(seeded.candidates(cache, case))
