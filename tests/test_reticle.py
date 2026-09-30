@@ -205,9 +205,9 @@ def test_a_changed_hash_stops_the_check(proj):
 def test_the_card_says_per_outcome_what_reticle_found(proj):
     tid, _ = go(proj, FakeReticle(KEPT))
     card = show.report(proj, tid)
-    assert "outcome 1 (asked): tests/test_mine.py; Reticle's test passed (ledger " in card
+    assert "Outcome 1, which you asked for: tested by tests/test_mine.py; Reticle's test passed. (ledger " in card
     tid2, _ = go(proj, FakeReticle("", status="error"))
-    assert "; Reticle wrote no test: it failed (ledger " in show.report(proj, tid2)
+    assert "; Reticle wrote no test: it failed. (ledger " in show.report(proj, tid2)
 
 
 def test_it_costs_against_the_cap_and_can_be_turned_off(proj, repo):
@@ -251,8 +251,8 @@ def test_reticle_gets_the_request_and_only_the_outcomes_you_asked_for(proj):
     assert rec["data"]["weak"] == [{"name": "test_outcome_2_many",
                                     "why": "it tests an outcome Focus inferred, not one you asked for"}]
     card = show.report(proj, tid)
-    assert "outcome 1 (asked): tests/test_mine.py; Reticle's test passed" in card
-    assert "outcome 2 (inferred): tests/test_mine.py; no Reticle test: it tests an outcome Focus inferred" in card
+    assert "Outcome 1, which you asked for: tested by tests/test_mine.py; Reticle's test passed" in card
+    assert "Outcome 2, which Focus added: tested by tests/test_mine.py; no Reticle test: it tests an outcome Focus inferred" in card
 
 
 def test_with_no_asked_outcome_reticle_isnt_asked_to_write_anything(proj):

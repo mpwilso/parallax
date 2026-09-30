@@ -43,3 +43,7 @@ max_usd = 0.50                 # the most one tester run may spend, and what a p
 enabled = true                 # before the build, Reticle writes tests of what you asked, which Maker can't see or change
 model = ""                     # empty: the drafters' model
 max_usd = 0.50                 # the most one Reticle run may spend, and what a plan's cap keeps for it
+
+[ask]
+model = ""                     # empty: the drafters' model. the Ask box answers from one task's record, read-only
+budget_usd = 0.25              # what questions about one task may spend in all, apart from the task's cap

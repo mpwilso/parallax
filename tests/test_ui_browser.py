@@ -160,9 +160,9 @@ def test_empty_work_is_not_sent(page, proj):
 
 def test_a_task_moves_through_every_state_live_and_says_who_has_it(page, proj):
     tid = launched(proj, "adding a usage example")
-    expect(row(page, tid)).to_contain_text("preparing the build", timeout=WAIT)
+    expect(row(page, tid)).to_contain_text("Preparing the build.", timeout=WAIT)  # a whole sentence
     steps = [("maker.started", {"stage": "build"}, "Maker building"),
-             ("check.started", {}, "running the plan's tests"),
+             ("check.started", {}, "Running the plan's tests"),
              ("tests.recorded", {"passed": 3, "total": 3, "exit": 0, "per_file": {}, "tree": "", "harness_reset": []}, "Second Eye reviewing the change"),
              ("rework.started", {"cycle": 1}, "Maker reworking (1 of 3)")]
     for kind, data, says in steps:
@@ -203,7 +203,8 @@ def test_a_ready_card_reads_in_one_pass(page, proj):
     expect(card).not_to_contain_text("see Found")
     expect(card).not_to_contain_text("the work:")
     expect(card).not_to_contain_text("parallax accept")  # the buttons say it
-    expect(card.get_by_role("button", name="Accept")).to_have_class(re.compile("primary"))
+    expect(card.get_by_role("button", name="Accept", exact=True)).to_have_class(re.compile("primary"))
+    expect(card.get_by_role("button", name="Accept and merge")).to_be_visible()  # beside it, never instead of it
     page.keyboard.press("d")
     expect(page.locator("#doc")).to_contain_text("+A calculator.")
 
@@ -258,7 +259,7 @@ def test_accept_is_two_keys_and_shows_the_merge_command(page, proj):
     page.keyboard.press("Enter")
     expect(page.locator("#merge")).to_contain_text("git merge --ff-only", timeout=WAIT)
     assert proj.task(tid)["status"] == "accepted"
-    expect(page.locator("details.done")).to_contain_text("accepted, the merge is yours")
+    expect(page.locator("details.done")).to_contain_text("Accepted, waiting for your merge")
 
 
 def test_reject_needs_a_reason_survives_live_updates_then_redrafts_and_comes_back(page, proj):
@@ -305,7 +306,7 @@ def test_drop_ends_the_task(page, proj):
     page.locator("#opt-drop").click()
     page.locator("#reason").fill("not needed after all")
     page.get_by_role("button", name="Drop it").click()
-    expect(page.locator("details.done")).to_contain_text("dropped", timeout=WAIT)
+    expect(page.locator("details.done")).to_contain_text("Dropped", timeout=WAIT)
     assert proj.task(tid)["status"] == "rejected"
 
 
@@ -342,6 +343,8 @@ def test_keyboard_only(page, proj):
     page.keyboard.press("k")
     expect(page.locator("#card-title")).to_have_text("first thing", timeout=WAIT)
     page.keyboard.press("2")
+    expect(page.locator("#opt-merge")).to_be_focused()
+    page.keyboard.press("3")
     expect(page.locator("#opt-reject")).to_be_focused()
 
 
@@ -449,20 +452,28 @@ def test_motion_follows_state_and_portraits_only_move_while_working(page, proj):
     assert page.evaluate("getComputedStyle(document.querySelector('.portrait.working .bust')).animationName") == "bob"
     assert page.evaluate("getComputedStyle(document.querySelector('.portrait.working .glow')).animationName") == "pulse"
     open_card(page, tid)
-    stages = page.locator("#card .stages .stage")
-    expect(stages).to_have_count(3)
-    expect(stages.nth(0)).to_have_class(re.compile("done")) and expect(stages.nth(0)).to_contain_text("Focus")
-    expect(stages.nth(1)).to_have_class(re.compile("working")) and expect(stages.nth(1)).to_contain_text("Maker")
-    expect(stages.nth(2)).to_have_class(re.compile("waiting")) and expect(stages.nth(2)).to_contain_text("Second Eye")
-    assert page.evaluate("getComputedStyle(document.querySelector('.stage.waiting .bust')).animationName") == "none"
-    # the stage finishes: Maker hops once, then is still; nothing loops on a task that waits on you
+    stages = page.locator("#card .strip .st")  # one strip: Focus, Reticle, Maker, Check, Ready
+    expect(stages).to_have_count(5)
+    assert stages.evaluate_all("ls => ls.map(l => [l.dataset.stage, l.dataset.state])") == [
+        ["focus", "done"], ["reticle", "skipped"], ["maker", "working"], ["check", "skipped"], ["ready", "skipped"]]
+    tile = page.locator("#card .tile .portrait")
+    expect(tile).to_have_attribute("data-agent", "maker")  # the working stage's agent, in its square tile
+    expect(tile).to_have_class(re.compile("working"))
+    assert page.evaluate("document.querySelectorAll('#card .portrait').length") == 1  # no row of floating portraits
+    # the check starts: the tile shows Second Eye at work, and it's the only thing on the card that moves
     proj.ledger.append("build.finished", "parallax", "", task=tid, status="built")
     proj.ledger.append("check.started", "parallax", "", task=tid)
     proj.ledger.append("tests.recorded", "parallax", "", task=tid, passed=3, total=3, exit=0, per_file={}, tree="", harness_reset=[])
-    expect(page.locator("#card .stage.done .portrait").nth(1)).to_have_class(re.compile("hop|still"), timeout=WAIT)
-    expect(page.locator("#card .stage.done .portrait").nth(1)).to_have_class(re.compile("still"), timeout=WAIT)
-    expect(page.locator("#card .stage.working")).to_contain_text("Second Eye")
+    expect(tile).to_have_attribute("data-agent", "second_eye", timeout=WAIT)
+    expect(stages.nth(2)).to_have_attribute("data-state", "done")
+    expect(stages.nth(3)).to_have_attribute("data-state", "working")
     assert page.evaluate("document.querySelectorAll('#card .portrait.working').length") == 1
+    # it's Ready and waits on you: Second Eye hops once in the tile, then is still; nothing loops
+    proj.ledger.append("verdict.recorded", "checker", "", task=tid, stage="check", tree="", verdict="pass", findings=[])
+    proj.ledger.append("check.finished", "parallax", "", task=tid, status="ready", tree="")
+    expect(tile).to_have_class(re.compile("hop|still"), timeout=WAIT)
+    expect(tile).to_have_class(re.compile("still"), timeout=WAIT)
+    assert page.evaluate("document.querySelectorAll('.portrait.working').length") == 0
 
 
 def test_reduced_motion_keeps_every_portrait_still(browser, server, proj):
@@ -489,3 +500,88 @@ def test_n_opens_a_task_that_went_ready_since_the_pages_last_poll(page, proj):
     page.keyboard.press("n")
     expect(page.locator("#card-title")).to_be_focused(timeout=WAIT)
     expect(page.locator("#card-title")).to_have_text("first thing")
+
+
+# the rows, the overview, and what the card lets you do (real use, 2026-09-30) -------------------------------
+
+def test_rows_show_a_chip_the_strip_spend_and_age_and_done_rows_their_outcome(page, proj):
+    ready, _ = run_to_ready(proj, "stating supported Python versions")
+    working = launched(proj, "adding a license badge")
+    proj.ledger.append("maker.started", "parallax", "", task=working, stage="build")
+    r = row(page, ready)
+    expect(r.locator(".tag")).to_have_text("Ready", timeout=WAIT)
+    expect(r.locator(".st")).to_have_count(5)
+    expect(r.locator(".spend")).to_contain_text("of $2.20")
+    expect(r.locator(".age")).not_to_be_empty()
+    w = row(page, working)
+    expect(w.locator(".tag")).to_have_text("Working", timeout=WAIT)
+    expect(w.locator(".tile .portrait.working")).to_have_attribute("data-agent", "maker")
+    line = w.locator(".line").inner_text()
+    assert line.endswith((".", "\u2026")) and line[0].isupper()  # a whole sentence, or cut at a word with an ellipsis
+    open_card(page, ready)
+    page.locator("#opt-accept").click()
+    expect(page.locator("details.done .row")).to_contain_text("Accepted, waiting for your merge", timeout=WAIT)
+    expect(page.locator("details.done .row")).to_contain_text("$0.")
+    expect(page.locator("details.done .row")).to_contain_text("1 touch")
+
+
+def test_with_no_card_open_the_page_says_how_its_going(page, proj):
+    tid, _ = run_to_ready(proj)
+    from parallax.accept import accept
+    accept(proj, tid)
+    idle = page.locator("#idle")
+    expect(idle).to_contain_text("1 task finished. It needed you 1 time; the goal is once.", timeout=WAIT)
+    expect(idle).to_contain_text("spent on agents in the last 7 days")
+    expect(idle).to_contain_text("fixing the README: accepted, waiting for your merge on ")
+    assert idle.locator("canvas, svg, img").count() == 0  # plain words, no charts
+
+
+def test_accept_and_merge_merges_with_one_click_and_says_so(page, proj):
+    tid, _ = run_to_ready(proj)
+    open_card(page, tid)
+    page.locator("#opt-merge").click()
+    expect(page.locator("#status")).to_contain_text("fast-forward. nothing was pushed.", timeout=WAIT)
+    assert proj.task(tid)["status"] == "merged"
+    expect(page.locator("details.done .row")).to_contain_text("Merged", timeout=WAIT)
+
+
+def test_a_ledger_id_on_the_card_is_a_quiet_link_to_its_entry(page, proj):
+    tid, _ = run_to_ready(proj, review=Review("pass", [], "whether pip is on PATH"))
+    open_card(page, tid)
+    link = page.locator("#card a.cite").first
+    entry = link.inner_text().removeprefix("ledger ")
+    link.click()
+    expect(page.locator("#doc")).to_contain_text(f'"id": "{entry}"', timeout=WAIT)
+    expect(page.locator("#doc")).to_contain_text('"kind"')
+
+
+def test_the_ask_box_answers_from_the_record_and_changes_nothing(page, proj, monkeypatch):
+    from parallax import ask
+    from test_ask import FakeAsker
+    asker = FakeAsker({"answer": "All 3 plan tests passed [tests].", "sources": ["tests"]})
+    monkeypatch.setattr(ask, "ASKER", asker)
+    tid, _ = run_to_ready(proj)
+    open_card(page, tid)
+    page.locator("#ask").fill("did the tests pass?")
+    page.keyboard.press("Enter")
+    expect(page.locator(".answers")).to_contain_text("All 3 plan tests passed [tests].", timeout=WAIT)
+    expect(page.locator(".answers")).to_contain_text("From: tests")
+    expect(page.locator(".ask .hint")).to_contain_text("$0.02 of $0.25 used")
+    assert proj.task(tid)["status"] == "ready" and "## plan" in asker.calls[0][1]
+
+
+def test_a_stalled_cap_card_recommends_sending_it_back_with_a_note(page, proj):
+    tid = launched(proj, "supporting subtraction")
+    for _ in range(2):
+        proj.ledger.append("tests.recorded", "parallax", "", task=tid, tree="t", exit=1,
+                           per_file={"tests/test_readme.py": [1, 3, 0]}, passed=1, total=3, harness_reset=[])
+    stopped(proj, tid, "the budget cap ran out ($2.30 of $2.20 estimated)", budget=True)
+    expect(row(page, tid).locator(".tag")).to_have_text("Failed", timeout=WAIT)
+    open_card(page, tid)
+    expect(page.locator("#card .question")).to_contain_text("The last two checks failed the same way")
+    back = page.locator("#opt-send-back")
+    expect(back).to_have_text("Send back with a note") and expect(back).to_have_class(re.compile("primary"))
+    back.click()
+    page.locator("#reason").fill("subtraction needs its own test file first")
+    page.get_by_role("button", name="Send it back").click()
+    expect(page.locator("#status")).to_contain_text("redrafting", timeout=WAIT)

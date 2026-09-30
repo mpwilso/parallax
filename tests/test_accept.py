@@ -153,7 +153,7 @@ def test_the_record_is_generated_from_the_ledger_and_lints(repo):
                  "signed with the approval key", "Written by: Maker, which builds in the sandbox (claude-opus-5), in 1 run in the sandbox.",
                  "Verified by: Parallax ran the plan's tests in the sandbox (3 of 3 passed)",
                  f"Rollback: revert the commit whose message has Parallax-Task: {tid}",
-                 "Known risks (agent-written, from Second Eye): README.md:1 minor: could say which shell",
+                 "Known risks (agent-written, from Second Eye): Minor, at README.md:1: could say which shell.",
                  "Not looked at: Second Eye says: the rendered page."):
         assert want in text, want
 
@@ -184,3 +184,59 @@ def test_the_scan_knows_the_common_key_shapes():
     diff = "+++ b/x.py\n@@ -0,0 +1 @@\n" + "".join(f"+v = '{v}'\n" for v in keys.values())
     assert secretscan.scan_diff(diff) == [f"x.py:{n} {k}" for n, k in enumerate(keys, start=1)]
     assert secretscan.scan_diff("+++ b/x.py\n@@ -0,0 +1 @@\n+v = 'sk_live_short'\n") == []
+
+
+# Accept and merge: your click, fast-forward only, local, never pushed -----------------------------------
+
+def _pushes(monkeypatch):
+    """Every git command run from here on; a push among them fails the test."""
+    ran, real = [], subprocess.run
+
+    def spy(argv, *a, **k):
+        if argv and argv[0] == "git":
+            ran.append(argv)
+            assert "push" not in argv, "Parallax never pushes"
+        return real(argv, *a, **k)
+    monkeypatch.setattr(subprocess, "run", spy)
+    return ran
+
+
+def test_accept_and_merge_fast_forwards_the_base_branch_and_never_pushes(repo, monkeypatch):
+    from parallax.ui import act
+    proj, tid, wt = ready(repo)
+    ran = _pushes(monkeypatch)
+    out = act(proj, "/api/accept", {"task": tid, "merge": True})
+    [acc] = kinds(proj, "task.accepted")
+    target = acc["data"]["target"]
+    assert out == {"message": f"merged {tid} into {target}, fast-forward. nothing was pushed.", "merged": True}
+    assert git(repo, "rev-parse", "HEAD").stdout.strip() == acc["data"]["commit"] and (repo / "README.md").read_text() == "ok\n"
+    assert proj.task(tid)["status"] == "merged"
+    [click] = kinds(proj, "merge.clicked")
+    assert click["actor"] == "human"  # the merge is your click, recorded as yours
+    assert any(argv[-2:] == ["-q", acc["data"]["branch"]] and "--ff-only" in argv for argv in ran)
+
+
+def test_accept_and_merge_stops_in_one_line_when_it_cant_fast_forward(repo, monkeypatch):
+    from parallax.ui import act
+    proj, tid, wt = ready(repo)
+    (repo / "other.txt").write_text("moved on\n")
+    git(repo, "add", "other.txt")
+    git(repo, "commit", "-qm", "the base moved on")
+    before = git(repo, "rev-parse", "HEAD").stdout.strip()
+    _pushes(monkeypatch)
+    out = act(proj, "/api/accept", {"task": tid, "merge": True})
+    assert out["message"].startswith(f"accepted {tid} as ") and ", but can't fast-forward " in out["message"]
+    assert "\n" not in out["message"] and out["merge"] == f"git merge {proj.task(tid)['branch']}"  # yours to run
+    assert git(repo, "rev-parse", "HEAD").stdout.strip() == before  # nothing forced, nothing changed
+    assert proj.task(tid)["status"] == "accepted" and not kinds(proj, "merge.clicked")
+
+
+def test_merge_now_wont_merge_into_any_branch_but_the_one_accept_recorded(repo):
+    from parallax.accept import merge_now
+    from parallax.core import ParallaxError
+    proj, tid, wt = ready(repo)
+    target = accept(proj, tid)["data"]["target"]
+    git(repo, "switch", "-qc", "elsewhere")
+    with pytest.raises(ParallaxError, match=f"can't merge from here: your checkout is on elsewhere, not {target}"):
+        merge_now(proj, tid)
+    assert proj.task(tid)["status"] == "accepted" and not kinds(proj, "merge.clicked")

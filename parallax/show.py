@@ -28,17 +28,18 @@ def _tests(e: dict | None, staged: dict | None = None) -> list[str]:
     d, cite = e["data"], f"(ledger {e['id']})"
     failing = [f for f, (passed, counted, _) in d["per_file"].items() if passed < counted]
     skipped = sum(v[2] for v in d["per_file"].values())
-    line = f"tests: {d['passed']} of {d['total']} passed"
-    line += f", {skipped} skipped" if skipped else ""
+    line = (f"All {d['total']} plan tests passed" if d["passed"] == d["total"] and d["total"]
+            else f"{d['passed']} of {d['total']} plan tests passed")
+    line += f", and {skipped} were skipped" if skipped else ""
     if not failing:
-        return [f"{line} {cite}"]
+        return [f"{line}. {cite}"]
     names = [f.rsplit("/", 1)[-1].removesuffix(".py") for f in failing]
     more = f" and {len(names) - 5} more" if len(names) > 5 else ""
-    out = [f"{line}; failures in {', '.join(names[:5])}{more} {cite}"]
+    out = [f"{line}. Failing: {', '.join(names[:5])}{more}. {cite}"]
     changed = set(staged["data"]["files"]) if staged else set()
     touched = [f for f in failing if f in changed]
-    out.append(f"failing test files the diff changed: {', '.join(touched)} {cite}" if touched
-               else f"no failing test file is one the diff changed; they may fail without this change too {cite}")
+    out.append(f"This change edited the failing test files {', '.join(touched)}. {cite}" if touched
+               else f"This change didn't edit any failing test file, so they may fail without it too. {cite}")
     return out
 
 
@@ -48,11 +49,14 @@ def _checker(v: dict | None) -> tuple[list[str], list[str], list[tuple[str, str]
         return [], [], []
     d, cite = v["data"], f"(ledger {v['id']})"
     n = len(d.get("findings", []))
-    head = f"Second Eye, the blind checker: {d['verdict']}, {'no findings' if not n else f'{n} finding' + ('s' if n > 1 else '')} {cite}"
-    findings = [f"{f['where'] or 'the change'} {f['severity']}: {' '.join(f['text'].split())} {cite}"
-                for f in d.get("findings", [])]
+    said = {"pass": "passed it", "fail": "failed it", "no_finding": "found nothing wrong, but couldn't confirm the outcome",
+            "error": "gave no usable answer"}.get(d["verdict"], d["verdict"])
+    points = "" if not n else f", with {n} point" + ("s" if n > 1 else "") + " below"
+    head = f"Second Eye, the blind checker, {said}{points}. {cite}"
+    findings = [f"{f['severity'].capitalize()}, at {f['where'] or 'the change as a whole'}: "
+                f"{' '.join(f['text'].split()).rstrip('.')}. {cite}" for f in d.get("findings", [])]
     nla = " ".join(str(d.get("not_looked_at") or "nothing").split())
-    gaps = [] if nla.rstrip(".").lower() == "nothing" else [(f"Second Eye says: {nla}", f"Second Eye did not look at: {nla} {cite}")]
+    gaps = [] if nla.rstrip(".").lower() == "nothing" else [(f"Second Eye says: {nla}", f"Second Eye didn't check: {nla} {cite}")]
     return [head], findings, gaps
 
 
@@ -63,16 +67,17 @@ def _ui(entries: list[dict]) -> tuple[list[str], list[tuple[str, str]]]:
     if ran:
         d, cite = ran["data"], f"(ledger {ran['id']})"
         if d.get("app_failed"):
-            found.append(f"UI flows: the app didn't start {cite}")
+            found.append(f"The app didn't start for the UI flow tests. {cite}")
         else:
             bad = [c["name"] for c in d.get("failed") or []]
-            found.append(f"UI flows: {d['passed']} of {d['total']} pass" + (f"; failing: {', '.join(bad[:3])}" if bad else "") + f" {cite}")
+            found.append(f"{d['passed']} of {d['total']} UI flow tests passed" + (f". Failing: {', '.join(bad[:3])}" if bad else "")
+                         + f". {cite}")
     if rec:
         for why in rec["data"].get("dropped") or []:
-            found.append(f"Field's test dropped: {why} (ledger {rec['id']})")
+            found.append(f"Field's test was dropped: {why.rstrip('.')}. (ledger {rec['id']})")
         nla = " ".join(str(rec["data"].get("not_looked_at") or "nothing").split())
         if nla.rstrip(".").lower() != "nothing":
-            gaps.append((f"Field says: {nla}", f"Field did not look at: {nla} (ledger {rec['id']})"))
+            gaps.append((f"Field says: {nla}", f"Field didn't check: {nla} (ledger {rec['id']})"))
     return found, gaps
 
 
@@ -86,7 +91,7 @@ def _changed(project: Project, task_id: str, entries: list[dict]) -> list[str]:
     out = []
     for n, (old, new) in enumerate(zip(staged, staged[1:]), start=1):
         files = tree.changed_between(wt, old["data"]["tree"], new["data"]["tree"])
-        out.append(f"rework {n} changed {', '.join(files) or 'nothing'} (ledger {new['id']})")
+        out.append(f"Rework {n} changed {', '.join(files) or 'nothing'}. (ledger {new['id']})")
     return out
 
 
@@ -94,10 +99,11 @@ def _the_work(project: Project, task_id: str, staged: dict | None) -> list[str]:
     """What the work was, and what changed: the first two lines of a Ready card."""
     intent = lifecycle._read(project, task_id, "intent")
     what = lint.intent_fields(intent).get("title") or project.task(task_id)["goal"]
-    out = [f"the work: {' '.join(what.split())} (docs/tasks/{task_id}/intent.md:1)"]
+    out = [f"The work: {' '.join(what.split())}. (docs/tasks/{task_id}/intent.md:1)"]
     if staged:
         files = ", ".join(staged["data"]["files"]) or "nothing"
-        out.append(f"changed: {files}, {staged['data']['lines']} line{'' if staged['data']['lines'] == 1 else 's'}; parallax diff {task_id} shows it (ledger {staged['id']})")
+        n = staged["data"]["lines"]
+        out.append(f"It changes {files}, {n} line{'' if n == 1 else 's'}; parallax diff {task_id} shows it. (ledger {staged['id']})")
     return out
 
 
@@ -114,9 +120,11 @@ def _outcomes(project: Project, task_id: str, tests: dict | None) -> list[str]:
     kinds = lint.outcome_kinds(intent)
     for n in lint.outcomes_of(intent):
         files = sorted({c.split("::", 1)[0] for c in covers.get(n, []) if c.split("::", 1)[0] in ran})
-        name = f"outcome {n} ({kinds[n]})" if kinds.get(n) else f"outcome {n}"  # asked by you, or Focus's own
-        line = f"{name}: {', '.join(files)}" if files else f"{name}: no test exercises this outcome"
-        out.append(f"{line}{said(n)} {cite}")
+        whose = {"asked": ", which you asked for", "inferred": ", which Focus added"}.get(kinds.get(n) or "", "")
+        line = f"Outcome {n}{whose}: tested by {', '.join(files)}" if files else f"Outcome {n}{whose}: no test covers it"
+        extra = said(n)  # Reticle's words, with its own ledger id last
+        text, own = (extra.rsplit(" (ledger ", 1) + [""])[:2] if " (ledger " in extra else (extra, "")
+        out.append(f"{line}{text}." + (f" (ledger {own}" if own else "") + f" {cite}")
     return out
 
 
@@ -151,11 +159,11 @@ def _rails(entries: list[dict], tests: dict | None) -> list[str]:
     out = []
     pf = _last(entries, "preflight.recorded")
     if pf:
-        out.append(f"preflight: {'passed' if pf['data'].get('ok') else 'failed'} (ledger {pf['id']})")
+        out.append(f"The sandbox check before the build {'passed' if pf['data'].get('ok') else 'failed'}. (ledger {pf['id']})")
     if tests:
         reset = tests["data"].get("harness_reset") or []
-        out.append(f"harness files reset to the base commit: {', '.join(reset)} (ledger {tests['id']})" if reset
-                   else f"no harness files were reset (ledger {tests['id']})")
+        out.append(f"Maker changed how the tests run ({', '.join(reset)}), so the check put those files back first. "
+                   f"(ledger {tests['id']})" if reset else f"Maker didn't change how the tests run. (ledger {tests['id']})")
     return out
 
 
@@ -189,8 +197,8 @@ def _decision(project: Project, task_id: str, dec, found: list[str], gaps: list[
         plan = lifecycle.plan_data(project, task_id) or {}
         cap = costs.budget(project, task_id, plan)[0] if plan else 0.0
         found = _the_work(project, task_id, None) + [
-            f"cost: estimated ${float(plan.get('estimated_cost_usd', 0)):.2f}, cap ${cap:.2f} (docs/tasks/{task_id}/plan.md:1)",
-            f"why it waits: {dec.extra.get('why', '')}"
+            f"It's estimated at ${float(plan.get('estimated_cost_usd', 0)):.2f}, with a cap of ${cap:.2f}. (docs/tasks/{task_id}/plan.md:1)",
+            f"It waits because {dec.extra.get('why', '').rstrip('.')}."
             + (f" (ledger {dec.extra['asked']})" if dec.extra.get("asked") else " (Unverified)")]
         gaps = [(f"{doc}.md says: {text}", f"docs/tasks/{task_id}/{doc}.md:{n} not looked at: {text}")
                 for doc, n, text in lifecycle.gaps(project, task_id, ("intent", "plan"))]
@@ -235,7 +243,7 @@ def report(project: Project, task_id: str) -> str:
     ui_found, ui_gaps = _ui(_attempt(entries, task_id))
     gaps = gaps + ui_gaps
     found = _tests(tests, staged) + ui_found + head
-    boundary = [f"boundary change: {f} runs automatically (ledger {staged['id']})"
+    boundary = [f"{f} runs automatically once merged, so read it before you accept. (ledger {staged['id']})"
                 for f in (staged["data"]["autorun"] if staged else [])]
     lead = since.lines(project, task_id, entries)  # after your reject, what changed comes first
     changed = lead + _changed(project, task_id, _attempt(entries, task_id))

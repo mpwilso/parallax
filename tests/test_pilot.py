@@ -151,7 +151,7 @@ def test_outside_the_launch_rule_the_plan_waits_for_you(repo, monkeypatch, capsy
     assert kinds(proj, "review.requested")[0]["reason"] == why
     card = show.report(proj, tid)
     assert card.startswith("Type: Decision needed\nBottom line: The plan waits for you before it runs.")
-    assert f"why it waits: {why}" in card and "cost: estimated $0.90, cap $2.20" in card
+    assert f"It waits because {why}." in card and "It's estimated at $0.90, with a cap of $2.20." in card
 
     monkeypatch.setattr(preflight, "run_srt", good_probe)
     monkeypatch.chdir(proj.root)

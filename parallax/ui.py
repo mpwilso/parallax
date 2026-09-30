@@ -123,8 +123,18 @@ def act(project: Project, path: str, body: dict) -> dict:
         return {"task": t["task"], "message": f"task {t['task']}: on it. it comes back when it needs you."}
     if path == "/api/accept":
         e = accept(project, task, reason)
+        if body.get("merge"):  # Accept and merge: your click, fast-forward only, local, never pushed
+            from .accept import merge_now
+            try:
+                return {"message": merge_now(project, task), "merged": True}
+            except ParallaxError as err:
+                return {"message": f"accepted {task} as {e['data']['commit'][:7]}, but {err}. merge it yourself:",
+                        "merge": merge_command(e)}
         return {"message": f"accepted {task} as {e['data']['commit'][:7]}. merge it yourself:",
                 "merge": merge_command(e)}
+    if path == "/api/ask":
+        from . import ask
+        return ask.answer(project, task, str(body.get("question") or ""))
     if path == "/api/reject":
         if body.get("drop"):
             if decide.decision(project, task) is not None:
@@ -215,6 +225,8 @@ def _handler(ui: UI):
                     self._send(200, views.shot(ui.project(), parts[2], parts[4]), "image/png")
                 elif len(parts) == 5 and parts[:2] == ["api", "task"] and parts[3] == "doc":
                     self._json(200, {"text": views.document(ui.project(), parts[2], parts[4])})
+                elif len(parts) == 5 and parts[:2] == ["api", "task"] and parts[3] == "ledger":
+                    self._json(200, {"text": views.ledger_entry(ui.project(), parts[2], parts[4])})
                 else:
                     self._json(404, {"error": "not found"})
             except (ParallaxError, ValueError) as err:

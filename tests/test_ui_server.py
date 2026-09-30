@@ -184,7 +184,7 @@ def test_bad_requests_are_refused(server):
     assert call(app, "POST", "/api/do", raw="{nope")[0] == 400
     assert call(app, "POST", "/api/do", raw="[1]")[0] == 400
     assert call(app, "POST", "/api/do", {"work": "x"}, headers={"Content-Type": "text/plain"})[0] == 415
-    assert call(app, "POST", "/api/merge", {"task": "x"})[0] == 404  # there is no merge endpoint
+    assert call(app, "POST", "/api/merge", {"task": "x"})[0] == 404  # the only merge is Accept and merge, your click on /api/accept
     assert call(app, "GET", "/api/task/nope")[0] == 400
 
 

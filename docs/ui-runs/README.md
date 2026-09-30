@@ -2,7 +2,7 @@
 
 The agents have since been named: Focus drafts the intent and plan (the drafters below), Maker builds in the sandbox (the maker), Second Eye is the blind checker (the checker), and Field is the UI tester. The run write-ups keep the words the UI showed on the day.
 
-The screenshots in `final-ui/` show the current UI on the demo project (fake agents, no model): a Ready card as the README shows it (`ready.png`, `ready-dark.png`), the queue (`queue.png`), a Needs you card in the dark theme (`needs-you-dark.png`), and the queue and a Ready card at phone width (`phone-dark-queue.png`, `phone-ready.png`). The run folders below are records of real runs and keep the UI as it was on the day.
+The screenshots in `final-ui/` show the current UI on the demo project (fake agents, no model), taken by `scripts/ui_sweep.py`, which also checks keyboard use, reduced motion and phone widths: the list with the overview (`queue.png`, `queue-dark.png`), a Ready card as the README shows it (`ready.png`, `ready-dark.png`), a card stopped at its cap that recommends sending it back (`needs-you.png`, `needs-you-dark.png`), and the list and a Ready card at phone width (`phone-queue.png`, `phone-queue-dark.png`, `phone-ready.png`, `phone-ready-dark.png`). The run folders below are records of real runs and keep the UI as it was on the day.
 
 Driven through `parallax ui` by Playwright, the way a person uses it: type the work in, watch it
 move, decide from the card. Real agents (drafters, maker, checker, UI tester) in a scratch copy of

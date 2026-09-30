@@ -160,7 +160,7 @@ def test_the_tester_is_blind_sandboxed_and_its_tests_are_hashed_and_run(proj, mo
     assert (ran["passed"], ran["total"]) == (1, 1) and runner.calls
     assert costs.spent(proj, tid) >= 0.3  # its cost counts against the task's cap
     text = show.report(proj, tid)
-    assert "UI flows: 1 of 1 pass" in text and "the page on a phone" in text
+    assert "1 of 1 UI flow tests passed." in text and "the page on a phone" in text
     card = views.card(proj, tid)
     assert card["shots"] == [{"name": "opens.png", "caption": "the page opens", "works": True}]
     assert views.shot(proj, tid, "opens.png") == b"\x89PNG fake"

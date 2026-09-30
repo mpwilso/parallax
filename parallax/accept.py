@@ -1,4 +1,4 @@
-"""`parallax accept <task>`: commit exactly what was reviewed. Merging stays yours.
+"""`parallax accept <task>`: commit exactly what was reviewed. Parallax never merges without your click.
 
 Accept:
 - only at Ready;
@@ -9,7 +9,9 @@ Accept:
   (commit-tree runs no hooks), and trailers. It's signed if you've set a signing key;
 - points the task's branch at that commit, moves the untracked docs/tasks/<id>/ out of your
   checkout (git won't merge over it; the merge brings it back), and prints the merge command.
-Parallax never merges. Your next command checks whether you merged the commit unchanged.
+Parallax never merges without your click: the card's Accept and merge accepts, then fast-forwards
+the base branch locally (merge_now), and stops with one line if it can't. It never pushes, and
+nothing forces. Your next command checks whether the commit landed unchanged.
 """
 from __future__ import annotations
 
@@ -124,6 +126,28 @@ def accept(project: Project, task_id: str, reason: str = "") -> dict:
     return project.ledger.append("task.accepted", "human", reason, task=task_id, commit=commit, tree=committed_tree,
                                  reviewed=reviewed, branch=branch, target=target, ff=ff, signed=bool(key),
                                  ledger_head=head, docs_moved_to=str(kept))
+
+
+def merge_now(project: Project, task_id: str) -> str:
+    """Your click on Accept and merge, after accept: fast-forward the branch the task was based on to
+    the accepted commit, locally, and only fast-forward. Raises with one line saying why it can't:
+    then nothing changed, and the merge command is still yours to run. Never pushes."""
+    acc = _last(project, task_id, "task.accepted")
+    if acc is None:
+        raise ParallaxError(f"task {task_id} isn't accepted yet")
+    d = acc["data"]
+    on = subprocess.run(["git", "-C", str(project.root), "symbolic-ref", "--short", "-q", "HEAD"],
+                        capture_output=True, text=True).stdout.strip()
+    if not d.get("target") or on != d["target"]:
+        raise ParallaxError(f"can't merge from here: your checkout is on {on or 'no branch'}, not {d.get('target') or 'a branch'}")
+    out = subprocess.run(["git", "-C", str(project.root), "merge", "--ff-only", "-q", d["branch"]], capture_output=True, text=True)
+    if out.returncode != 0:
+        why = next((line.strip() for line in (out.stderr or out.stdout).splitlines() if line.strip()), "git refused")
+        raise ParallaxError(f"can't fast-forward {d['target']} to it: {why.removeprefix('fatal: ').rstrip('.')}")
+    project.ledger.append("merge.clicked", "human", "Accept and merge: fast-forward, local, nothing pushed", task=task_id,
+                          commit=d["commit"], target=d["target"])
+    confirm_merges(project)
+    return f"merged {task_id} into {d['target']}, fast-forward. nothing was pushed."
 
 
 def merge_command(accepted: dict) -> str:

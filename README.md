@@ -55,13 +55,13 @@ You can start work from the app or the terminal, and pick it back up several way
 
 1. **Start it.** In your repo, run `parallax ui` and open the link it prints. The link stays the same between runs.
 2. **Type the task** into the box at the top and press Enter. That's all.
-3. **Watch the list.** Waiting on you: the only part that needs you, riskiest first. Working: which agent has each task, for how long, and what it has spent. Done: folded away.
-4. **Open a card.** It shows the stages, the bottom line, the one question with its options and which one is recommended, what nobody looked at, and the evidence, with the change, the intent and the plan one click away.
-5. **Accept, then merge yourself.** Accept commits the reviewed change to the task's branch and shows the merge command, which you run.
+3. **Watch the list.** Waiting on you: the only part that needs you, riskiest first. Working: which agent has each task. Each row shows its stages, what it has spent against its cap, and for how long. Done: folded away, with each task's outcome, cost and touches. With no card open, the page says how it's going.
+4. **Open a card.** It shows the stages, the bottom line, the one question with its options and which one is recommended, what nobody looked at, and the evidence, with the change, the intent and the plan one click away. Ask about the task in the box on the card: a model answers from that task's record only, and can't change anything.
+5. **Accept, or accept and merge.** Accept commits the reviewed change to the task's branch and shows the merge command, which you run. Accept and merge also fast-forwards your base branch here; if it can't, it says why in one line and leaves the merge to you. Parallax never merges without your click, and never pushes.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/ui-runs/final-ui/ready-dark.png">
-  <img src="docs/ui-runs/final-ui/ready.png" alt="A Ready card: the stages with each agent's portrait, the bottom line, one question with its options and the recommended one, what wasn't looked at, and the evidence with its ledger ids" width="1280">
+  <img src="docs/ui-runs/final-ui/ready.png" alt="A Ready card: the stage strip with the last agent's portrait in its tile, the bottom line, one question with Accept, Accept and merge, Reject and Drop, what wasn't looked at, the evidence in plain sentences with quiet ledger links, and the Ask box" width="1280">
 </picture>
 
 **Ready** means the listed checks passed: the plan's tests ran on the exact reviewed tree, the card says for each outcome in the intent which test that ran covers it or that none does, and Second Eye found nothing blocking. It does not mean the code is bug-free. **Needs you** means one decision only you can make; the card says whose call it is and why a person has to make it. Anything that sends work back, drops it or accepts a risk asks for a one-line reason, and Focus redrafts from it.

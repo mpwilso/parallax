@@ -7,21 +7,25 @@ const KINDS = {
   cap: "Cap reached", rework: "Kept failing", checker: "Second Eye failed", tests: "Tests couldn't run", turns: "Out of turns",
   error: "Error", stuck: "Stopped", flows: "UI test or app?", drafting: "Drafting failed", launch: "Over your launch limit", review: "Plan review",
 };
-const DONE = { accepted: "accepted, the merge is yours", merged: "merged", rejected: "dropped", stopped: "stopped", closed: "closed" };
 const READY_OPTIONS = [
-  { name: "accept", does: "commits the reviewed change to its branch; merging stays yours" },
+  { name: "accept", does: "commits the reviewed change to its branch; you merge it by hand" },
+  { name: "merge", does: "accepts, then fast-forwards your base branch here; never forces, never pushes" },
   { name: "reject", does: "Focus redrafts the intent and plan from your reason", needs_reason: true },
   { name: "drop", does: "ends the task; it leaves the inbox", needs_reason: true },
 ];
 const SEND = { reject: "Reject and redraft", "send back": "Send it back", drop: "Drop it", accept: "Accept the risk", intent: "Redraft to the intent", remove: "Remove the test" };
-const LABEL = { "send back": "Send back with a note" };  // a button's words, where its name alone says too little
+const LABEL = { "send back": "Send back with a note", merge: "Accept and merge" };  // a button's words, where its name alone says too little
 const slug = (name) => name.replace(/[^\w-]+/g, "-");  // an option's name as an id: "send back" -> "send-back"
+const CHIP = { Working: "info", Ready: "good", "Needs you": "wait", Failed: "bad" };
+const MARK = { done: "\u2713", working: "\u25CF", failed: "\u2715", skipped: "\u25CB" };  // check, dot, cross, ring
+const SAID = { done: "done", working: "working", failed: "failed", skipped: "didn't run" };
 const LIVE_EVERY = 15000;  // working lines carry a clock: refresh them even when nothing new happened
 
 const state = {
   token: "", board: null, boardKey: "", open: null, card: null, cardKey: "",
   doc: null, docText: null, version: "", busy: false, pending: null, lastLive: 0,
   drafts: {},  // reasons you started typing, per task, kept until you send one
+  answers: {}, // what you asked about each task, and the answers, this session
   seen: {},    // each agent's last state per task, so a stage that just finished hops once
 };
 const brand = { logo: null, agents: {} };  // rendered by the server from one data file; the page only places it
@@ -115,17 +119,42 @@ function portrait(key, now, prev) {
   return node;
 }
 
-function stageStrip(c) {
-  if (!c.stages || !c.stages.length) return null;
-  const prev = state.seen[c.task] || {};
-  const strip = el("ol", { class: "stages", "aria-label": "Stages" }, c.stages.map(s => {
-    const a = brand.agents[s.agent] || { name: s.agent, short: "" };
-    return el("li", { class: "stage " + s.state }, portrait(s.agent, s.state, prev[s.agent]),
-      el("span", { class: "who" }, a.name), el("span", { class: "what" }, a.short),
-      el("span", { class: "vh" }, `: ${s.state}`));
-  }));
-  state.seen[c.task] = Object.fromEntries(c.stages.map(s => [s.agent, s.state]));
-  return strip;
+// One stage strip, on every row and card: Focus, Reticle, Maker, Check, Ready, each done, working,
+// failed or didn't run. The working stage's agent sits in a fixed square tile; only it moves, and a
+// stage that just finished hops once there before it goes still.
+function tile(key, stages) {
+  // who's in the tile: the agent working now; else the last one that worked, dimmed and still (it hops
+  // once if it was working the last time this view drew). key keeps a row's memory apart from the card's.
+  const prev = state.seen[key] || {};
+  const w = stages.find(s => s.state === "working" && s.agent);
+  const last = w || [...stages].reverse().find(s => s.agent && (s.state === "done" || s.state === "failed"));
+  state.seen[key] = Object.fromEntries(stages.filter(s => s.agent).map(s => [s.agent, s.state]));
+  if (!last) return el("span", { class: "tile empty" });
+  return el("span", { class: "tile" + (w ? "" : " rest") }, portrait(last.agent, w ? "working" : "done", prev[last.agent]));
+}
+
+function strip(task, stages, withTile) {
+  if (!stages || !stages.length) return null;
+  const box = el("div", { class: "strip-wrap" }, withTile ? tile("card:" + task, stages) : null,
+    el("ol", { class: "strip", "aria-label": "Stages" }, stages.map(s => el("li", { class: "st s-" + s.state, "data-stage": s.stage, "data-state": s.state },
+      el("span", { class: "mark", "aria-hidden": "true" }, MARK[s.state] || ""), el("span", { class: "name" }, s.name),
+      el("span", { class: "vh" }, `: ${SAID[s.state] || s.state}`)))));
+  return box;
+}
+
+function spendBar(sp) {
+  if (!sp) return null;
+  if (!sp.cap) return sp.spent ? el("span", { class: "spend" }, `$${sp.spent.toFixed(2)} spent`) : null;
+  return el("span", { class: "spend" + (sp.spent >= sp.cap * 0.9 ? " high" : "") },
+    el("progress", { max: String(sp.cap), value: String(Math.min(sp.spent, sp.cap)), "aria-hidden": "true" }),
+    `$${sp.spent.toFixed(2)} of $${sp.cap.toFixed(2)}`);
+}
+
+function elapsed(ts) {
+  const t = Date.parse(ts);
+  if (!ts || isNaN(t)) return "";
+  const m = Math.max(0, Math.floor((Date.now() - t) / 60000));
+  return m < 1 ? "just now" : m < 60 ? `${m}m` : m < 1440 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${Math.floor(m / 1440)}d`;
 }
 
 async function loadBrand() {
@@ -149,21 +178,21 @@ function allTasks() {
   return b ? [...b.waiting, ...b.working, ...b.done] : [];
 }
 
-function row(t, line, tag) {
+function row(t) {
   const open = state.open === t.task;
-  const who = t.agent ? portrait(t.agent, "working") : null;  // only the agent working on it right now
+  const done = !t.chip;
+  const kind = t.secret ? "Secrets file" : KINDS[t.kind] || "";
   return el("li", {},
-    el("button", { class: "row" + (open ? " open" : "") + (who ? " with-portrait" : ""), "data-task": t.task, "data-focus": "task-" + t.task,
+    el("button", { class: "row" + (open ? " open" : "") + (done ? " finished" : ""), "data-task": t.task, "data-focus": "task-" + t.task,
       "aria-current": open ? "true" : null, onclick: () => openCard(t.task, true) },
-      who,
+      done ? null : tile("row:" + t.task, t.strip || []),
       el("span", { class: "row-body" },
-        el("span", { class: "row-top" }, el("span", { class: "title" }, t.title), tag),
-        line ? el("span", { class: "line" }, line) : null)));
-}
-
-function kindTag(t) {
-  if (t.secret) return el("span", { class: "tag bad" }, "Secrets file");
-  return el("span", { class: "tag " + (t.kind === "ready" ? "good" : "wait") }, KINDS[t.kind] || "Needs you");
+        el("span", { class: "row-top" }, el("span", { class: "title" }, t.title),
+          done ? null : el("span", { class: "tag " + (t.secret ? "bad" : CHIP[t.chip] || "info"), title: kind || null }, t.secret ? "Secrets file" : t.chip)),
+        done ? el("span", { class: "line" }, [t.outcome, t.date, `$${(t.cost_usd || 0).toFixed(2)}`,
+          `${t.touches} touch${t.touches === 1 ? "" : "es"}`].filter(Boolean).join(" \u00B7 "))
+          : [t.line ? el("span", { class: "line" }, t.line) : null, strip(t.task, t.strip, false),
+             el("span", { class: "row-foot" }, spendBar(t.spend), t.started ? el("span", { class: "age" }, elapsed(t.started)) : null)])));
 }
 
 function renderQueue() {
@@ -178,16 +207,16 @@ function renderQueue() {
   document.getElementById("queue").replaceChildren(...[
     el("section", { "aria-labelledby": "h-waiting" },
       el("h2", { id: "h-waiting" }, "Waiting on you"),
-      b.waiting.length ? el("ol", {}, b.waiting.map(t => row(t, t.line, kindTag(t))))
+      b.waiting.length ? el("ol", {}, b.waiting.map(row))
         : el("p", { class: "empty" }, nothing
           ? "Nothing yet. Type the work above and press Enter. Agents draft, build and check it without you, and it comes back here when it needs a decision."
           : "Nothing waits on you.")),
     b.working.length ? el("section", { "aria-labelledby": "h-working" },
       el("h2", { id: "h-working" }, "Working"),
-      el("ol", {}, b.working.map(t => row(t, t.line, null)))) : null,
+      el("ol", {}, b.working.map(row))) : null,
     b.done.length ? el("details", { class: "done", open: b.done.some(t => t.task === state.open) || null },
       el("summary", {}, el("h2", {}, "Done")),
-      el("ol", {}, b.done.map(t => row(t, DONE[t.status] || t.status, null)))) : null].filter(Boolean));
+      el("ol", {}, b.done.map(row))) : null].filter(Boolean));
   restoreFocus(key);
   renderIdle();
 }
@@ -197,9 +226,11 @@ function renderIdle() {
   const b = state.board;
   idle.hidden = !!state.open || !b;
   if (!b) return;
-  idle.textContent = b.count ? `${b.count} waiting on you. Press n for the first one, or pick one from the list.`
-    : b.working.length ? "Nothing waits on you. The work on the left runs without you." : "";
-  if (!idle.textContent) idle.hidden = true;
+  const lead = b.count ? `${b.count} waiting on you. Press n for the first one, or pick one from the list.`
+    : b.working.length ? "Nothing waits on you. The work on the left runs without you." : "Nothing waits on you.";
+  const parts = [el("p", { class: "lead" }, lead)];
+  if ((b.overview || []).length) parts.push(el("h2", {}, "How it's going"), el("ul", { class: "plain overview" }, b.overview.map(l => el("li", {}, l))));
+  idle.replaceChildren(...parts);
 }
 
 async function refresh() {
@@ -267,7 +298,11 @@ async function loadCard(task) {
 }
 
 function cited(item) {
-  return el("li", {}, item.text, item.cite ? el("span", { class: "cite" }, " ", item.cite) : null);
+  const id = item.cite && item.cite.startsWith("ledger ") ? item.cite.slice(7) : null;
+  return el("li", {}, item.text, " ", id
+    ? el("a", { class: "cite", href: "#", "data-focus": "cite-" + id, title: "Open this ledger entry",
+        onclick: e => { e.preventDefault(); toggleDoc("ledger:" + id); } }, item.cite)
+    : item.cite ? el("span", { class: "cite" }, item.cite) : null);
 }
 
 function list(title, items) {
@@ -280,16 +315,16 @@ function renderCard() {
   const box = document.getElementById("card");
   const key = focusKey();
   const waits = c.state === "ready" || c.state === "needs you";
-  const chip = c.state === "ready" ? "good" : waits ? "wait" : c.state === "done" ? "plain" : "info";
+  const chip = CHIP[c.chip] || (c.state === "ready" ? "good" : waits ? "wait" : c.state === "done" ? "plain" : "info");
   let bottom = c.report.bottom;
   for (const p of ["Needs you: ", "Ready again after your reject: ", "Ready: "]) if (bottom.startsWith(p)) bottom = cap(bottom.slice(p.length));
   box.replaceChildren(...[
     el("header", { class: "card-head" },
       el("button", { class: "back", onclick: closeCard, "data-focus": "back" }, "Back to tasks"),
-      el("p", { class: "meta" }, el("span", { class: "tag " + chip }, cap(c.state)), " ",
-        el("span", { class: "mono" }, c.task), c.cost_usd ? ` $${c.cost_usd.toFixed(2)} spent` : ""),
+      el("p", { class: "meta" }, el("span", { class: "tag " + chip }, c.chip || cap(c.state)), " ",
+        el("span", { class: "mono" }, c.task), spendBar(c.spend)),
       el("h2", { id: "card-title", tabindex: "-1" }, c.title)),
-    stageStrip(c),
+    strip(c.task, c.strip, true),
     c.live ? el("p", { class: "live" }, c.live) : null,
     c.redraft ? el("p", { class: "redraft" }, "Redrafted after you rejected it") : null,
     el("p", { class: "bottom" }, bottom),
@@ -299,6 +334,7 @@ function renderCard() {
     c.redraft ? null : list("Changed since last time", c.changed),
     list("Found", c.found),
     shotsSection(c),
+    askBox(c),
     docs(c),
     c.details.length ? el("details", { class: "more" }, el("summary", {}, "Details"),
       el("ul", { class: "plain" }, c.details.map(cited))) : null,
@@ -308,6 +344,35 @@ function renderCard() {
   restoreFocus(key);
   const r = document.getElementById("reason");
   if (r && state.pending) r.value = state.pending.text || "";
+}
+
+// the Ask box: a question about this task, answered from its record only; it can't change anything
+function askBox(c) {
+  const mine = state.answers[c.task] || [];
+  const used = c.ask ? `$${c.ask.spent.toFixed(2)} of $${c.ask.budget.toFixed(2)} used on questions about this task.` : "";
+  return el("section", { class: "ask", "aria-labelledby": "ask-h" },
+    el("h3", { id: "ask-h" }, "Ask about this task"),
+    mine.length ? el("ul", { class: "answers" }, mine.map(a => el("li", {},
+      el("p", { class: "q" }, a.question), el("p", { class: "a" }, a.answer),
+      a.sources && a.sources.length ? el("p", { class: "cite" }, "From: " + a.sources.join(", ")) : null))) : null,
+    el("form", { class: "ask-form", onsubmit: e => { e.preventDefault(); askNow(c.task); } },
+      el("label", { for: "ask", class: "vh" }, "Your question"),
+      el("input", { id: "ask", "data-focus": "ask", placeholder: "Why did the check fail? What did Reticle test?", autocomplete: "off" }),
+      el("button", { type: "submit", "data-focus": "ask-send" }, "Ask")),
+    el("p", { class: "hint" }, "Answers come from this task's record only, and can't change or start anything. ", used));
+}
+
+async function askNow(task) {
+  const input = document.getElementById("ask");
+  const question = input ? input.value.trim() : "";
+  if (!question) { if (input) input.focus(); return; }
+  const out = await run("/api/ask", { task, question }, true);
+  if (!out) return;
+  (state.answers[task] = state.answers[task] || []).push({ question, answer: out.answer, sources: out.sources });
+  state.cardKey = "";
+  await loadCard(task);
+  const again = document.getElementById("ask");
+  if (again) again.focus();
 }
 
 // what the UI tester saw: images need the token, so they come as blobs (the CSP allows blob: images only)
@@ -388,11 +453,12 @@ function actions(c) {
 function docs(c) {
   const names = [...(c.has_change ? ["diff"] : []), ...c.docs];
   if (!names.length) return null;
-  const label = n => n === "diff" ? "The change" : cap(n);
+  const label = n => n === "diff" ? "The change" : n.startsWith("ledger:") ? `Ledger entry ${n.slice(7)}` : cap(n);
   return [el("div", { class: "docs", role: "group", "aria-label": "Documents" }, names.map(n =>
       el("button", { "aria-pressed": state.doc === n ? "true" : "false", "data-focus": "doc-" + n,
         onclick: () => toggleDoc(n) }, label(n), n === "diff" ? el("kbd", { "aria-hidden": "true" }, "d") : null))),
-    state.doc ? el("pre", { class: "doc", id: "doc", tabindex: "0", "aria-label": label(state.doc) }) : null];
+    state.doc ? [state.doc.startsWith("ledger:") ? el("p", { class: "hint" }, label(state.doc)) : null,
+      el("pre", { class: "doc", id: "doc", tabindex: "0", "aria-label": label(state.doc) })] : null];
 }
 
 async function toggleDoc(name) {
@@ -401,7 +467,8 @@ async function toggleDoc(name) {
   renderCard();
   if (!state.doc) return;
   try {
-    const { text } = await api(`/api/task/${encodeURIComponent(state.open)}/doc/${name}`);
+    const path = name.startsWith("ledger:") ? `ledger/${encodeURIComponent(name.slice(7))}` : `doc/${name}`;
+    const { text } = await api(`/api/task/${encodeURIComponent(state.open)}/${path}`);
     if (state.doc !== name) return;
     state.docText = text || "(nothing yet)";
     fillDoc();
@@ -450,13 +517,13 @@ async function openNext() {
   if (t) openCard(t, true);
 }
 
-async function run(path, body) {
+async function run(path, body, quiet) {
   if (state.busy) return false;
   state.busy = true;
   document.body.classList.add("busy");
   try {
     const out = await api(path, body);
-    say(out.merge ? `${out.message} ${out.merge}` : out.message);
+    if (!quiet) say(out.merge ? `${out.message} ${out.merge}` : out.message);
     return out;
   } catch (err) {
     say(err.message, true);
@@ -483,8 +550,8 @@ async function choose(c, o) {
     document.getElementById("reason").focus();
     return;
   }
-  const out = c.actions.kind === "ready" ? await run("/api/accept", { task: c.task })
-    : await run("/api/decide", { task: c.task, option: o.name });
+  const out = c.actions.kind !== "ready" ? await run("/api/decide", { task: c.task, option: o.name })
+    : await run("/api/accept", o.name === "merge" ? { task: c.task, merge: true } : { task: c.task });
   if (out) await acted(c.task, !!out.merge);  // after accept, stay: the merge command is on the card
 }
 
@@ -548,7 +615,7 @@ document.addEventListener("keydown", e => {
   }
   else if (e.key === "n") openNext();
   else if (e.key === "a" && c && c.actions.kind === "ready") { const b = document.getElementById("opt-accept"); if (b) { e.preventDefault(); b.focus(); } }
-  else if (e.key === "r" && c && c.actions.kind === "ready") { e.preventDefault(); choose(c, READY_OPTIONS[1]); }
+  else if (e.key === "r" && c && c.actions.kind === "ready") { e.preventDefault(); choose(c, READY_OPTIONS.find(o => o.name === "reject")); }
   else if (e.key === "d" && c && c.has_change) toggleDoc("diff");
   else if (/^[1-9]$/.test(e.key) && c && (c.actions.kind === "decide" || c.actions.kind === "ready")) {
     const opts = c.actions.kind === "ready" ? READY_OPTIONS : c.actions.options;

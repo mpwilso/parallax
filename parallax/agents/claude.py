@@ -312,6 +312,20 @@ async def _structured(sdk, model: str, system: str, prompt: str, schema: dict, e
     return data, getattr(result, "total_cost_usd", None)
 
 
+class ClaudeAsker:
+    """The Ask box's model: one tool-less turn over a task's record (_structured: no tools, an empty
+    folder, every tool request refused), so it can read what it's given and nothing else."""
+
+    def __init__(self, model: str = DEFAULT_MODEL, max_budget_usd: float | None = None):
+        self.sdk = _load_sdk()
+        self.model = model
+        self.max_budget_usd = max_budget_usd
+
+    def ask(self, system: str, prompt: str, schema: dict) -> tuple[dict, float]:
+        data, cost = asyncio.run(_structured(self.sdk, self.model, system, prompt, schema, CheckerError, self.max_budget_usd))
+        return data, cost or 0.0
+
+
 class ClaudeChecker:
     def __init__(self, model: str = DEFAULT_MODEL, max_budget_usd: float | None = None):
         self.sdk = _load_sdk()

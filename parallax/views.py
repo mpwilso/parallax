@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 
-from . import decide, inbox, lifecycle, live, show, status
+from . import decide, inbox, lifecycle, live, progress, show, stats, status
 from .core import Project
 
 MAX_TEXT = 200_000
@@ -37,16 +37,33 @@ def board(project: Project) -> dict:
     for item in columns["needs you"] + columns["ready"]:
         dec = decide.decision(project, item["task"])
         item["kind"] = dec.kind if dec else "ready"
-        item["line"] = _headline(project, item["task"])
+        item["line"] = progress.sentence(_headline(project, item["task"]))
         item["secret"] = bool(dec and dec.item and any(f.get("secret") and f.get("size") for f in dec.item["data"].get("files") or []))
+        item.update(_row(project, item, dec))
         waiting.append(item)
     waiting.sort(key=lambda i: (not i["secret"], RISK.get(i["kind"], 5), i["last"] or ""))
-    working = [dict(i, line=live.line(project, i["task"]), agent=live.agent_of(live.doing(status.attempt(project.ledger.entries(), i["task"]))[0]))
-               for s in ("drafting", "building", "checking") for i in columns[s]]
+    working = []
+    for s in ("drafting", "building", "checking"):
+        for i in columns[s]:
+            entries = status.attempt(project.ledger.entries(), i["task"])
+            what, why, _ = live.doing(entries)
+            item = dict(i, line=progress.sentence(what + (f". {why[:1].upper()}{why[1:]}" if why else "")),
+                        agent=live.agent_of(what), kind=None)
+            item.update(_row(project, item, None))
+            working.append(item)
     done = sorted(columns["done"], key=lambda i: i["last"] or "", reverse=True)
+    touches = stats.touches(project)
     for item in done:
         item["merge"] = item["status"] == "accepted"  # accepted, and the merge is still yours
-    return {"columns": columns, "waiting": waiting, "working": working, "done": done, "count": len(waiting)}
+        item.update(progress.done_row(project, item["task"], touches))
+    return {"columns": columns, "waiting": waiting, "working": working, "done": done, "count": len(waiting),
+            "overview": progress.overview(project)}
+
+
+def _row(project: Project, item: dict, dec) -> dict:
+    """What a waiting or working row shows besides its title: chip, strip, spend and start."""
+    return {"chip": progress.chip(item["state"], item.get("kind")), "strip": progress.strip(project, item["task"], dec),
+            "spend": progress.spend(project, item["task"]), "started": progress.started(project, item["task"])}
 
 
 def _headline(project: Project, task_id: str) -> str:
@@ -74,7 +91,7 @@ def parse_report(text: str) -> dict:
     return out
 
 
-GAP = re.compile(r"(did not look at|not looked at): ", re.I)
+GAP = re.compile(r"(did not look at|not looked at|didn't check): ", re.I)
 CITE = re.compile(r"\s*\((ledger [0-9a-f]+|[\w./-]+:\d+|Unverified)\)$")
 
 
@@ -108,9 +125,9 @@ def card(project: Project, task_id: str) -> dict:
         gaps = [i for i in items if GAP.search(i)]
         report["sections"][where] = [i for i in items if i not in gaps]
         unseen = [GAP.split(i, 1)[-1] for i in gaps] or unseen
-    found = [_cited(i) for i in report["sections"].get("Found", []) if not i.startswith("the work: ")]  # the title says it
+    found = [_cited(i) for i in report["sections"].get("Found", []) if not i.startswith("The work: ")]  # the title says it
     for f in found:
-        f["text"] = re.sub(r"; parallax diff \w+ shows it$", "", f["text"])  # the page has the change a click away
+        f["text"] = re.sub(r"; parallax diff \w+ shows it\.$", ".", f["text"])  # the page has the change a click away
     if files:  # the table under the question says it, file by file
         found = [f for f in found if f["cite"] != f"ledger {dec.item['id']}"]
     state = status.board(t["status"])
@@ -125,9 +142,28 @@ def card(project: Project, task_id: str) -> dict:
             "actions": actions, "merge": merge, "files": files,
             "live": live.line(project, task_id) if state in ("drafting", "building", "checking") else "",
             "stages": live.stages(status.attempt(entries, task_id), waiting=state not in ("drafting", "building", "checking")),
+            "strip": progress.strip(project, task_id, dec), "spend": progress.spend(project, task_id),
+            "ask": {"spent": _ask_spent(project, task_id), "budget": float(project.policy.ask["budget_usd"])},
+            "chip": progress.chip(state, dec.kind if dec else ("ready" if t["status"] == "ready" else None))
+            if state != "done" else progress.OUTCOMES.get(t["status"], t["status"].capitalize()),
             "has_change": any(e["kind"] == "check.staged" for e in entries) or t["status"] in ("accepted", "merged"),
             "shots": shots(project, task_id),
             "docs": [d for d in ("intent", "spec", "plan", "record") if lifecycle.found_doc(project, task_id, d)]}
+
+
+def _ask_spent(project: Project, task_id: str) -> float:
+    from .ask import spent
+    return spent(project, task_id)
+
+
+def ledger_entry(project: Project, task_id: str, entry_id: str) -> str:
+    """One of this task's ledger entries, as plain text: what a citation on the card points at."""
+    import json
+    project.task(task_id)
+    for e in project.ledger.entries():
+        if e["id"] == entry_id and e["data"].get("task") == task_id:
+            return json.dumps({k: e[k] for k in ("id", "ts", "kind", "actor", "reason", "data") if k in e}, indent=2)
+    raise ValueError(f"no ledger entry {entry_id!r} for task {task_id}")
 
 
 def shots(project: Project, task_id: str) -> list[dict]:

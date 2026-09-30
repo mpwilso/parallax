@@ -18,7 +18,7 @@ The UI (`parallax ui`) exists so the user can see at a glance what needs them an
 
 ## Positioning
 
-Agents do the work; the human makes the calls. The maker builds in a sandbox, a blind checker reviews only the outcome, constraints and diff, and code (never a model) turns everything waiting on the user into exactly one item per task: Ready, or one Decision needed with its options and a code-written recommendation. Merging is always the user's, and the UI shows the merge command but never runs it.
+Agents do the work; the human makes the calls. The maker builds in a sandbox, a blind checker reviews only the outcome, constraints and diff, and code (never a model) turns everything waiting on the user into exactly one item per task: Ready, or one Decision needed with its options and a code-written recommendation. Parallax never merges without your click: Accept shows the merge command, and Accept and merge fast-forwards the base branch locally on that click, never forcing and never pushing.
 
 ## Operating Context
 
@@ -31,7 +31,7 @@ Agents do the work; the human makes the calls. The maker builds in a sandbox, a 
 ## Capabilities and Constraints
 
 - Intake box, board of tasks by state, one card per task, accept, reject with a reason (redraft or drop), answer a Decision needed, view the diff, intent and plan, live updates, keyboard use.
-- No merge endpoint, ever. Rejects, overrides and accepted risks need a reason; approvals don't.
+- No merge without your click: the only merge is Accept and merge, fast-forward only, local, never pushed. Rejects, overrides and accepted risks need a reason; approvals don't.
 - Agent-written text is shown as text, never HTML. No inline code. No external requests.
 - Plain static HTML, CSS and JS served from `parallax/web/`, no build step, no framework, no runtime dependencies (inferred from the repo; stdlib only in `parallax/`).
 - No em dashes anywhere in UI copy.

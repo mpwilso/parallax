@@ -112,7 +112,7 @@ def test_a_launch_over_the_threshold_asks_only_about_cost(repo, monkeypatch):
     assert (dec.kind, dec.question, [o.name for o in dec.options]) == (
         "launch", "Launch it, with a cap of $2.20?", ["launch", "drop"])
     card = show.report(proj, tid)
-    assert "cost: estimated $0.90, cap $2.20" in card and "the work: fixing the README install steps" in card
+    assert "It's estimated at $0.90, with a cap of $2.20." in card and "The work: fixing the README install steps." in card
     assert lints(proj, card)
     assert decide.apply(proj, tid, "launch").startswith("building")
 
