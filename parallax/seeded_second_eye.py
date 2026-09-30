@@ -2,7 +2,9 @@
 
 For each case, the newest seeded run that finished it gives what stays fixed: Focus's intent from
 that run's scratch repo, and Reticle's results, copied as they are. REVIEW.md is today's general
-template, the one an eval gets, so a rerun measures Second Eye's input as it is now. The broken
+template, the one an eval gets, so a rerun measures Second Eye's input as it is now. The scratch
+repo is read as files (its ledger and the task's intent.md), never loaded as a project: its policy
+was written by an older Parallax and may name settings since removed. The broken
 versions are made again by code (seeded.candidates is deterministic) and picked by name, and the
 real fix is the same. Only Second Eye is called, with its exact normal input, and it's scored on
 findings about behavior (seeded.second_eye_scored). No Focus, no Reticle, no hidden tests run.
@@ -16,8 +18,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from . import build, evals, lifecycle, review, seeded
-from .core import ParallaxError, Project
+from . import build, evals, review, seeded
+from .core import STATE_DIR, ParallaxError, Project
+from .ledger import Ledger
 
 CALL = 0.25  # the most one Second Eye call may spend
 
@@ -35,14 +38,13 @@ def source(root: Path, case_id: str) -> tuple[str, dict] | None:
     return max(found, key=lambda x: x[0])[1:] if found else None
 
 
-def rescore_case(case, run_id: str, r: dict, checker_for) -> dict:
+def rescore_case(case, run_id: str, r: dict, checker_for, model: str) -> dict:
     repo = evals.home() / "runs" / run_id / case.id / "repo"
     if not repo.exists():
         raise ParallaxError(f"run {run_id}'s scratch repo for {case.id} is gone, so its intent is too")
-    project = Project(repo)
-    [tid] = list(project.tasks())
-    base = project.task(tid)["base"]
-    intent = lifecycle._read(project, tid, "intent")
+    [created] = [e for e in Ledger(repo / STATE_DIR / "ledger.jsonl").entries() if e["kind"] == "task.created"]
+    tid, base = created["data"]["task"], created["data"]["base"]
+    intent = (repo / "docs" / "tasks" / tid / "intent.md").read_text(encoding="utf-8")
     review_text = review.TEMPLATE
     blocking = review.blocking(review_text)
     cache = evals.cache_repo(case)
@@ -55,7 +57,7 @@ def rescore_case(case, run_id: str, r: dict, checker_for) -> dict:
         nonlocal cost
         tree = seeded.tree_with(repo, base, files, home / "index")
         diff = seeded._git(repo, "diff", "--binary", base, tree, "--", ".", ":(exclude)docs/tasks/")
-        rv = checker_for(CALL, project.policy.check["model"]).check(review.brief(intent, review_text, "", diff))
+        rv = checker_for(CALL, model).check(review.brief(intent, review_text, "", diff))
         cost += rv.cost_usd or 0
         return seeded.second_eye_scored(rv.findings, blocking)
 
@@ -100,7 +102,7 @@ def run(project: Project, cases: list, budget: float, say: Callable[[str], None]
             r = {"case": case.id, "mode": "seeded", "error": "no seeded run finished this case", "cost_usd": 0.0}
         else:
             try:
-                r = rescore_case(case, *found, checker_for)
+                r = rescore_case(case, *found, checker_for, project.policy.check["model"])  # your checker model
             except Exception as err:  # a crashed case is a result too
                 r = {"case": case.id, "mode": "seeded", "error": f"{type(err).__name__}: {err}"[:300], "cost_usd": 0.0}
         spent = round(spent + (r.get("cost_usd") or 0), 4)

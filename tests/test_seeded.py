@@ -152,7 +152,10 @@ def test_second_eye_alone_reruns_on_the_same_versions_reusing_the_intent_and_ret
     before = json.loads((first / "calc-2.json").read_text())
     monkeypatch.setattr(reticle, "WRITER", lambda *a: pytest.fail("Reticle was called again"))
     monkeypatch.setattr(seeded, "run_case", lambda *a: pytest.fail("the seeded case ran again"))
-    (evals.home() / "runs" / first.name.split("-")[3] / "calc-2" / "repo" / "REVIEW.md").write_text("OLD RULES\n")
+    scratch = evals.home() / "runs" / first.name.split("-")[3] / "calc-2" / "repo"
+    (scratch / "REVIEW.md").write_text("OLD RULES\n")
+    policy = scratch / "parallax.policy.toml"  # written by an older Parallax: a setting since removed
+    policy.write_text(policy.read_text() + "\n[reticle]\ninferred = true\n")
     checker = FakeChecker(reviews=[blocker("wrong cap", "calc.py:6"), Review("pass"), Review("pass"), Review("pass", cost_usd=0.02)])
     said = []
     out = seeded_second_eye.run(proj, [upstream], 3.0, say=said.append, checker_for=checker)
