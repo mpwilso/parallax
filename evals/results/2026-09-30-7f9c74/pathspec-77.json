@@ -1,0 +1,26 @@
+{
+ "case": "pathspec-77",
+ "pr": "https://github.com/cpburnz/python-pathspec/commit/9302492483b06ca1613aa8b11cf08cef93930b12",
+ "issue": "https://github.com/cpburnz/python-pathspec/issues/77",
+ "ceiling_usd": 4.0,
+ "task": "ee1b30",
+ "end": "ready",
+ "status": "ready",
+ "hidden": "pass",
+ "hidden_detail": "45 of 45 pass (exit 0)",
+ "second_eye": "right",
+ "verdicts": [
+  {
+   "tree": "c6b9929f1199993dd572ec67089d2607f02b0048",
+   "verdict": "pass",
+   "hidden": "pass",
+   "judgment": "right"
+  }
+ ],
+ "cost_usd": 0.9382,
+ "seconds_to_ready": 132.0,
+ "touches": 1,
+ "decisions": [],
+ "scratch": "/home/matt/.local/share/parallax/evals/runs/7f9c74/pathspec-77/repo",
+ "seconds": 134.5
+}
