@@ -228,6 +228,9 @@ def test_a_background_error_leads_with_the_error_and_a_repeat_says_drop(page, pr
     stopped(proj, tid, why, error=True)
     open_card(page, tid)
     expect(page.locator("#card .bottom")).to_have_text("The sandbox runtime exited with code 1.", timeout=WAIT)
+    card = page.locator("#card")
+    expect(card).to_contain_text("Run parallax doctor to find the cause.")  # how to find the cause
+    expect(card).to_contain_text('For the user-namespace step, see "Allow user namespaces" in docs/wsl.md.')
     expect(page.locator("#opt-retry")).to_have_class(re.compile("primary"))
     page.locator("#opt-retry").click()  # retry, and it fails the same way
     expect(page.locator("#status")).not_to_have_text("", timeout=WAIT)

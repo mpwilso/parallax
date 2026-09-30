@@ -13,8 +13,12 @@ Claude Code's sandbox runs on Linux, macOS and WSL2, not on native Windows, so o
    wsl --unregister Ubuntu-24.04
    ```
 3. `wsl -d parallax`, then as root: `adduser <you>` and `usermod -aG sudo <you>`.
-4. Follow the README's setup steps 1 to 3 inside the distro. Ubuntu 24.04 blocks the unprivileged user namespaces the sandbox needs until you allow them; the README's step 1 has the `sysctl` line.
+4. Follow the README's setup steps 1 to 3 inside the distro, and allow user namespaces, below.
 5. Clone while Windows drives are still mounted if the repo is on the Windows side, and drop the `/mnt/c` remote afterwards: `git -C ~/code/parallax remote remove origin`, since the next step turns drives off.
+
+### Allow user namespaces
+
+Ubuntu 24.04 blocks the unprivileged user namespaces the sandbox needs, so `bwrap` stops with `No permissions to create new namespace` until you allow them. The README's setup step 1 has the `sysctl` line, and `parallax doctor` says whether the sandbox tools work once it's set.
 
 ## Harden WSL
 

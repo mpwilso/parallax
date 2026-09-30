@@ -167,6 +167,53 @@ def test_every_kind_of_decision_is_one_lint_clean_question(proj):
         proj.resolve(item["id"], False, "next case")
 
 
+# a sandbox that never started: the card says how to find the cause --------------------------------------
+
+DOCTOR = "Run parallax doctor to find the cause."
+WSL_STEP = 'For the user-namespace step, see "Allow user namespaces" in docs/wsl.md.'
+
+
+def test_sandbox_error_card_points_to_doctor_and_the_namespace_step(proj):
+    tid = pilot.intake(proj, WANT)["task"]
+    pilot_run(proj, tid)
+    why = "error: the sandbox runtime exited with code 1 (srt: bwrap: No permissions to create new namespace)"
+    proj.ledger.append("stuck.raised", "parallax", why, task=tid, error=True)
+    dec = decide.decision(proj, tid)
+    assert (dec.kind, dec.recommend, [o.name for o in dec.options]) == ("error", "retry", ["retry", "reject", "drop"])
+    assert dec.question == "It stopped on an error: run it again once the cause is fixed, or drop it?"
+    card = show.report(proj, tid)
+    assert lints(proj, card), card
+    assert DOCTOR in card and WSL_STEP in card
+    assert card.startswith("Type: Decision needed\nBottom line: Needs you: the sandbox runtime exited with code 1.")
+    assert card.index(why.split(": ", 1)[1]) < card.index(DOCTOR) < card.index(WSL_STEP)  # the problem first
+    from parallax import views
+    found = [i["text"] for i in views.card(proj, tid)["found"]]  # the web card is parsed from the same text
+    assert found[1:3] == [DOCTOR, WSL_STEP]
+
+
+def test_other_sandbox_start_error_gets_only_the_doctor_line(proj):
+    tid = pilot.intake(proj, WANT)["task"]
+    pilot_run(proj, tid)
+    proj.ledger.append("stuck.raised", "parallax", "error: the sandbox runtime exited with code 2 (srt: not found)",
+                       task=tid, error=True)
+    card = show.report(proj, tid)
+    assert lints(proj, card) and DOCTOR in card and "docs/wsl.md" not in card
+
+
+def test_unrelated_error_card_has_no_hint(proj):
+    tid = pilot.intake(proj, WANT)["task"]
+    pilot_run(proj, tid)
+    proj.ledger.append("stuck.raised", "parallax", "error: the agent crashed", task=tid, error=True)
+    card = show.report(proj, tid)
+    assert lints(proj, card) and "parallax doctor" not in card and "docs/wsl.md" not in card
+
+
+def test_the_namespace_hint_names_a_heading_that_exists():
+    from pathlib import Path
+    doc = Path(__file__).resolve().parents[1] / "docs" / "wsl.md"
+    assert "### Allow user namespaces" in doc.read_text(encoding="utf-8")
+
+
 def test_options_and_reasons_are_checked(proj):
     tid = pilot.intake(proj, WANT)["task"]
     proj.ledger.append("disagreement.raised", "parallax", "extra.py changed but isn't in the plan's files", task=tid,
