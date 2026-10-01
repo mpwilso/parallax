@@ -1,0 +1,60 @@
+{
+ "case": "boltons-337",
+ "mode": "seeded",
+ "pr": "https://github.com/mahmoud/boltons/pull/338",
+ "issue": "https://github.com/mahmoud/boltons/issues/337",
+ "inferred": [
+  "3",
+  "4",
+  "5"
+ ],
+ "reticle_kept": {
+  "asked": 1,
+  "inferred": 4
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "undo the hunk at boltons/dictutils.py:74",
+   "hidden": "0 of 1 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: PY3 is only assigned in the except ImportError branch (PY3 = False). The try branch, which runs on Python 3, shows no PY3 = True. The hunk lines are contiguous. Unless PY3 is defined earlier in the file, `if PY3:` in the class body raises N"
+   ],
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "not_counted": []
+  },
+  {
+   "broken": "undo the hunk at boltons/dictutils.py:178",
+   "hidden": "7 of 26 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The diff removes `self._clear_ll()` from `__init__`. That call is what creates `_map` and `root`. Without it, `OrderedMultiDict()` with no args never sets them, so `add`, `pop` and `__len__`-style ops raise AttributeError on a fresh object."
+   ],
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "not_counted": []
+  },
+  {
+   "broken": "undo the hunk at boltons/dictutils.py:194",
+   "hidden": "25 of 26 pass",
+   "second_eye": "miss",
+   "findings": [],
+   "reticle": "miss",
+   "reticle_with_inferred": "catch",
+   "not_counted": []
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "findings": [],
+  "reticle": "right",
+  "inferred_notes": 1,
+  "not_counted": []
+ },
+ "cost_usd": 0.1274,
+ "seconds": 86.1,
+ "second_eye_from": "48a3a5",
+ "reticle_from": "48a3a5"
+}

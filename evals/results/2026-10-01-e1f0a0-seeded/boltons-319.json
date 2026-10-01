@@ -1,0 +1,63 @@
+{
+ "case": "boltons-319",
+ "mode": "seeded",
+ "pr": "https://github.com/mahmoud/boltons/commit/8ba3a7fa0d99b73f7f43c1aed82c571b941eecea",
+ "issue": "https://github.com/mahmoud/boltons/issues/319",
+ "inferred": [
+  "2",
+  "3",
+  "4",
+  "5"
+ ],
+ "reticle_kept": {
+  "asked": 1,
+  "inferred": 1
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "change 12 to 13 at boltons/timeutils.py:381",
+   "hidden": "2 of 4 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: `m_step += y_step * 13` should be `* 12`. A year is 12 months. With step=(1, 0, 0), m_step becomes 13, so 2012-12-25 goes to 2014-01-25, not 2013-12-25. The headline case does not work. Every year step is off by one month, and this also bre"
+   ],
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "not_counted": []
+  },
+  {
+   "broken": "change 1 to 2 at boltons/timeutils.py:394",
+   "hidden": "2 of 4 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The month arithmetic is off by one. It uses (now.month - 2) + m_step and then month = cur_month + 1, so the result is one month early. For step=(1,0,0) from 2012-12-25: divmod(10+12, 12) = (1, 10), so the month is 11 and the result is 2013-"
+   ],
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "not_counted": []
+  },
+  {
+   "broken": "undo the hunk at boltons/timeutils.py:393",
+   "hidden": "2 of 4 pass",
+   "second_eye": "catch",
+   "findings": [
+    "major behavior: The diff only adds `m_step += y_step * 12`. The loop that applies the steps is not shown. If it still adds y_step to the year separately, years are counted twice and step=(1,0,0) would jump two years. If the loop already uses only m_step, y"
+   ],
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "not_counted": []
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "findings": [],
+  "reticle": "right",
+  "inferred_notes": 0,
+  "not_counted": []
+ },
+ "cost_usd": 0.0851,
+ "seconds": 66.8,
+ "second_eye_from": "48a3a5",
+ "reticle_from": "48a3a5"
+}

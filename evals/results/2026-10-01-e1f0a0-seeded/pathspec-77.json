@@ -1,0 +1,43 @@
+{
+ "case": "pathspec-77",
+ "mode": "seeded",
+ "pr": "https://github.com/cpburnz/python-pathspec/commit/9302492483b06ca1613aa8b11cf08cef93930b12",
+ "issue": "https://github.com/cpburnz/python-pathspec/issues/77",
+ "inferred": [
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8"
+ ],
+ "reticle_kept": {
+  "asked": 2,
+  "inferred": 1
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "undo the hunk at pathspec/patterns/gitwildmatch.py:316",
+   "hidden": "43 of 45 pass",
+   "second_eye": "miss",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [],
+   "not_counted": []
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "reticle": "right",
+  "inferred_notes": 1,
+  "findings": [],
+  "not_counted": [
+   "major missing_test: No tests were added. The diff changes `[^...]` from a literal caret to negation but has no test showing `a[^b]c` does not match `abc` and does match `azc`. Without a test, nothing would fail if the change were reverted."
+  ]
+ },
+ "cost_usd": 0.0647,
+ "seconds": 55.7,
+ "second_eye_from": "9ba608",
+ "reticle_from": "9ba608"
+}

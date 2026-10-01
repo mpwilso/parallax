@@ -1,0 +1,41 @@
+{
+ "case": "boltons-348",
+ "mode": "seeded",
+ "pr": "https://github.com/mahmoud/boltons/pull/349",
+ "issue": "https://github.com/mahmoud/boltons/issues/348",
+ "inferred": [
+  "3",
+  "4",
+  "5",
+  "6"
+ ],
+ "reticle_kept": {
+  "asked": 4,
+  "inferred": 5
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "undo the hunk at boltons/cacheutils.py:240",
+   "hidden": "11 of 18 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The change deletes the `super().__setitem__(key, value)` call from the new-key path and adds nothing to the overwrite (`else`) path. The overwrite branch still only sets `link[VALUE]`, so the dict still keeps the old value and `dict(cache)`"
+   ],
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "not_counted": []
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "findings": [],
+  "reticle": "right",
+  "inferred_notes": 0,
+  "not_counted": []
+ },
+ "cost_usd": 0.051,
+ "seconds": 42.1,
+ "second_eye_from": "48a3a5",
+ "reticle_from": "48a3a5"
+}

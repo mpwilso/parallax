@@ -1,0 +1,44 @@
+{
+ "case": "tabulate-190",
+ "mode": "seeded",
+ "pr": "https://github.com/astanin/python-tabulate/commit/6c48142c0b57ea6108cb1d304b69b90b18748e45",
+ "issue": "https://github.com/astanin/python-tabulate/issues/190",
+ "inferred": [
+  "3",
+  "4",
+  "5",
+  "6",
+  "7"
+ ],
+ "reticle_kept": {
+  "asked": 0,
+  "inferred": 0
+ },
+ "reticle_weak": [
+  "the file doesn't load on the base (collection failure)"
+ ],
+ "versions": [
+  {
+   "broken": "flip != to == at tabulate/__init__.py:1521",
+   "hidden": "28 of 29 pass",
+   "second_eye": "catch",
+   "reticle": "no test",
+   "reticle_with_inferred": "no test",
+   "findings": [
+    "blocker behavior: The filter is inverted: `if line.strip() == \"\"` keeps only blank lines and drops all real text. The example `\"123456789 bbb\\nccc\"` would render as empty, not as three lines. Cells without newlines also lose their text, because the single no"
+   ],
+   "not_counted": []
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "reticle": "no test",
+  "inferred_notes": 0,
+  "findings": [],
+  "not_counted": []
+ },
+ "cost_usd": 0.0415,
+ "seconds": 48.6,
+ "second_eye_from": "9ba608",
+ "reticle_from": "9ba608"
+}

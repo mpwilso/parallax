@@ -8,11 +8,13 @@ Eleven real fixes hold only one bad one, which gives no catch rate. So `parallax
 
 **Seeded versions are mechanical edits, not real mistakes.** The rates describe that kind of error: one wrong operator, constant or missing hunk inside a fix that is otherwise the maintainers' own. They don't say how often the checkers catch the mistakes Maker actually makes.
 
-23 broken versions from 10 of the 11 cases (cachetools-387 gave none that failed the hidden tests), and 11 real fixes. Reticle from runs 9ba608-seeded and 48a3a5-seeded; Second Eye from cbcd0e-seeded, on the same versions and intents.
+23 broken versions from 10 of the 11 cases (cachetools-387 gave none that failed the hidden tests), and 11 real fixes. Reticle from runs 9ba608-seeded and 48a3a5-seeded; Second Eye from [e1f0a0-seeded](../evals/results/2026-10-01-e1f0a0-seeded/summary.md) (2026-10-01), on the same versions and intents as the previous run, [cbcd0e-seeded](../evals/results/2026-09-30-cbcd0e-seeded/summary.md).
 
 | | Broken versions caught | Real fixes blocked (false alarms) |
 |---|---|---|
 | **Reticle or Second Eye** | **22 of 23** | **2 of 11** |
+
+The same as in cbcd0e by the rule. By hand it's 22 of 23 now and was 21 of 23 then: see humanize-174 below.
 
 - **Missed by both:** one version, boltons-337 with a hunk undone at dictutils.py:194. Its hidden tests show one failure in 26.
 - **False alarms:** humanize-174, where Second Eye cites a constraint Focus wrote (results under an hour stay the same) that the maintainers' broader fix breaks; and tabulate-231, where one of Reticle's tests fails on the real fix.
@@ -24,7 +26,8 @@ Eleven real fixes hold only one bad one, which gives no catch rate. So `parallax
 | Reticle, tests of what you asked | 19 of 23 (it had a test for 22) | 1 of 10 it had a test for (tabulate-231) |
 | Second Eye in 221c3e: outcomes without their marks | 23 of 23 by the rule, 22 by hand | 7 of 11 by the rule, 6 by hand |
 | Second Eye in f5ff69: marked outcomes, asked-only by instruction | 20 of 23 by the rule and by hand | 4 of 11 by the rule, 3 by hand |
-| Second Eye now (cbcd0e): asked-only enforced by code, findings by kind | 20 of 23 | 1 of 11 (humanize-174) |
+| Second Eye in cbcd0e: asked-only enforced by code, findings by kind | 20 of 23 by the rule, 19 by hand | 1 of 11 (humanize-174) |
+| Second Eye now (e1f0a0): the same, and a stale protected doc is a note | 19 of 23 by the rule and by hand | 1 of 11 (humanize-174), by the rule and by hand |
 
 - **Reticle** missed three versions its tests didn't reach, and had no test at all for tabulate-190. It costs about $0.03 to $0.08 a task. It's on by default since these results (`[reticle] enabled = true`).
 - **What changed for Second Eye, and why.** In 221c3e most of its false alarms were correct fixes doing less than Focus's intent asked, and much of that intent was Focus's own inferred outcomes, the same ones behind Reticle's early false alarms. Three changes followed, each rerun on the same versions and intents:
@@ -32,6 +35,11 @@ Eleven real fixes hold only one bad one, which gives no catch rate. So `parallax
   - Code enforces the rule: each finding says what it cites, and a blocking finding that cites only inferred outcomes becomes a note, recorded in the ledger. tabulate-190's real fix passes in cbcd0e.
   - Each finding carries a kind (behavior, missing_test, scope or housekeeping), and the seeded mode counts only behavior and scope, by that field. Before, a phrase-matching rule guessed which findings only asked for a test, and missed some wordings, which is why earlier runs have separate counts by hand. No seeded version has tests, since they're the hidden ones, so a missing test would flag every version.
   - Catches stayed at 20 of 23. Two of the misses are tabulate-180's: each version undoes one of the fix's two guards for an empty table with `maxcolwidths`, which breaks an asked outcome, and Second Eye passed both; Reticle's tests caught both. (An earlier version of this page said those versions broke only an inferred outcome. They don't.) boltons-337's old catch in 221c3e had rested only on a missing test, so it was never a real one.
+- **The rerun on 2026-10-01 (e1f0a0)**, after two changes since cbcd0e: Second Eye's fixed rules now say a change that makes a protected doc (CLAUDE.md, REVIEW.md and the like) wrong is a note, never a reason to fail; and a task now stops when the same check fails the same way twice in a row. The second doesn't touch this eval, which judges each version once and never reworks. The first can't explain the one change either, since no seeded diff touches a protected doc.
+  - 19 of 23 caught, one fewer: pathspec-77's version with its hunk undone, which leaves only a comment's typo fixed. In cbcd0e Second Eye said the change doesn't make `[^...]` a negation; this time it raised nothing at all. Same diff, same intent. It's run-to-run variance, like boltons-319's in f5ff69 and cbcd0e. Reticle still catches it, so the two together are unchanged.
+  - By hand, cbcd0e had one catch fewer than its rule counted: humanize-174's version with `<` flipped to `<=`. Its findings there were the maintainers' minute and month rounding, the same ones behind the false alarm on the real fix, so none was about the flipped comparison. In e1f0a0 Second Eye names the flip itself (one day and a few seconds now reads as hours), so the catch counts by hand.
+  - False alarms are unchanged: humanize-174's real fix, on the same constraint as before. The other ten real fixes drew no blocking finding.
+  - The run cost $0.80, against $0.79 for cbcd0e.
 - **Inferred-outcome notes were tried and rejected.** With Reticle also testing the outcomes Focus inferred, failures shown as notes on the card and never sent back, the seeded runs showed 5 notes on the 11 real fixes, all noise by definition, for 3 more catches (22 of 23). On humanize-174 run through the whole pipeline (7eb145), the one case where a note could have mattered, there was none. Reticle now tests only what you asked.
 
 **Why humanize-174 gets past every checker:** the rule the fix broke wasn't in the request. The issue asks that `naturaldelta(10799)` say "3 hours", not "2 hours". The maintainers went further and made every unit round to the nearest one, minutes and months too, and their hidden tests check that. Reticle tests what you asked, and Maker gets hours right, so its tests pass. Focus inferred the other units as an outcome, but Reticle doesn't test inferred outcomes, and the inferred-outcome test it wrote in 7eb145 was for hours, which passed. Second Eye sees only the diff, which looks right for hours. A checker can only hold a fix to a rule that someone wrote down.
@@ -83,8 +91,8 @@ The last four cases first ran in 41250f and stopped at caps of $0.67 to $0.80, w
 ## What they don't show
 
 - **How often Second Eye catches a bad fix Maker made.** Only one fix was bad, and it wasn't caught. One case can't give a rate. The seeded rates above are for mechanical edits.
-- **Its false-alarm rate on Maker's fixes.** None in 11 judgments is too few to say it's rare. On the maintainers' real fixes, seeded, it went from 6 of 11 to 1 of 11 as its rule changed (above).
-- **Variance.** Each seeded run is one run. Second Eye's catches on the same versions moved between runs (boltons-319's undone hunk was missed in f5ff69 and caught in cbcd0e), so a difference of one or two isn't a trend.
+- **Its false-alarm rate on Maker's fixes.** None in 11 judgments is too few to say it's rare. On the maintainers' real fixes, seeded, it went from 6 of 11 to 1 of 11 as its rule changed, and stayed at 1 of 11 in e1f0a0 (above).
+- **Variance.** Each seeded run is one run. Second Eye's catches on the same versions moved between runs (boltons-319's undone hunk was missed in f5ff69 and caught in cbcd0e; pathspec-77's was caught in cbcd0e and missed in e1f0a0), so a difference of one or two isn't a trend.
 - **Anything beyond small, pure-Python repos,** or any variance: each case ran once.
 - **An independent test of the cap floor.** Its $2.00 default came from Maker's costs on these same cases, so the rerun succeeding is expected.
 - **One consistent version.** The runs span three commits of Parallax.

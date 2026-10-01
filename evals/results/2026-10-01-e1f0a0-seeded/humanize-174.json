@@ -1,0 +1,80 @@
+{
+ "case": "humanize-174",
+ "mode": "seeded",
+ "pr": "https://github.com/python-humanize/humanize/pull/272",
+ "issue": "https://github.com/python-humanize/humanize/issues/174",
+ "inferred": [
+  "3",
+  "4",
+  "5",
+  "6"
+ ],
+ "reticle_kept": {
+  "asked": 1,
+  "inferred": 3
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "flip == to != at src/humanize/time.py:162",
+   "hidden": "208 of 379 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The condition changed from `not years and days < 1` to `years != 0 and days < 1`. This inverts it. Sub-day deltas with years == 0 now skip the seconds, minutes and hours branch and fall into the `elif years == 0` days branch. So naturaldelt",
+    "major scope: Minutes are now rounded. For example 90 s or 119 s was \"a minute\" and now becomes \"2 minutes\", and 3599 s was \"59 minutes\" and now becomes \"an hour\". The constraint says results below one hour stay the same unless explicitly extended.",
+    "major scope: Month and year rounding was changed (round(days / 30.5), new 12-month cases). This was not asked for. It alters the `months` behavior and the outputs of day and year deltas."
+   ],
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "not_counted": [
+    "major missing_test: The diff adds no tests: no 10799 regression test, no 86399 test, no naturaltime shift tests, and no update to existing floor-assuming tests."
+   ]
+  },
+  {
+   "broken": "change 0 to 1 at src/humanize/time.py:162",
+   "hidden": "209 of 379 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The guard changed from `not years and days < 1` to `years == 1 and days < 1`. Sub-day values with years == 0, such as 10799 seconds, no longer enter the seconds/minutes/hours branch. They fall to the `years == 0` days branch and likely retu",
+    "major scope: Minutes are now rounded (`round(delta.seconds / 60)`). 90 seconds becomes \"2 minutes\" (was \"a minute\"), and 3570 seconds or more becomes \"an hour\". The constraint says results below one hour stay the same.",
+    "major scope: Month calculation changed to `round(days / 30.5)`, and new \"a year\" and years-increment branches were added. This changes day, month and year output. The outcome only asked for hour rounding."
+   ],
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "not_counted": [
+    "major missing_test: The diff has no tests. There is no 10799 regression test and no test of the 86399 edge. Tests showing the naturaltime shifts are also missing. Existing tests that assumed floor behaviour are not updated."
+   ]
+  },
+  {
+   "broken": "flip < to <= at src/humanize/time.py:162",
+   "hidden": "364 of 379 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: Changing `days < 1` to `days <= 1` sends deltas of one day plus some seconds into the sub-day branch. 29 hours now reads \"5 hours\" instead of \"a day\". Exactly 1 day has delta.seconds == 0, so it hits the zero-seconds branch and returns \"a m",
+    "blocker behavior: Minute handling was rewritten to round. 119 seconds, previously \"a minute\", now gives \"2 minutes\", and 3599 seconds now gives \"an hour\". The constraint says results below one hour stay the same unless the change is explicitly extended to mi",
+    "major scope: Month rounding (`round(days / 30.5)`) and the new \"a year\" and year-increment branches change day, month and year outputs. The outcome only asked for hour rounding. This also shifts naturaltime outputs for day and month values."
+   ],
+   "reticle": "miss",
+   "reticle_with_inferred": "catch",
+   "not_counted": [
+    "major missing_test: The diff has no test changes. There is no regression test for naturaldelta(10799) and no test for 10800, 86399 or naturaltime. Existing tests that assumed floor behaviour are not updated, and the constraint requires tests to show how natura"
+   ]
+  }
+ ],
+ "real_fix": {
+  "second_eye": "false alarm",
+  "findings": [
+   "blocker scope: Minute rounding was added. 90 or 119 seconds used to read 'a minute' and now read '2 minutes'. 3599 seconds now reads 'an hour', and 150 seconds changes from 2 minutes to 3 (banker's rounding). The constraint says results below one hour sta",
+   "major scope: Day, month and year output was changed too. num_months now uses round() instead of floor, so day counts near month boundaries read differently. New 'a year' and '2 years' branches were added, and the years check was edited. None of this was"
+  ],
+  "reticle": "right",
+  "inferred_notes": 1,
+  "not_counted": [
+   "major missing_test: The diff has no tests. There is no regression test for 10799 and none for 10800. The top-of-range case (86399) has no test. There is nothing showing how naturaltime outputs shift for hour values, which the constraints require."
+  ]
+ },
+ "cost_usd": 0.1243,
+ "seconds": 81.1,
+ "second_eye_from": "48a3a5",
+ "reticle_from": "48a3a5"
+}

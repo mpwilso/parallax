@@ -1,0 +1,66 @@
+{
+ "case": "tabulate-231",
+ "mode": "seeded",
+ "pr": "https://github.com/astanin/python-tabulate/pull/232",
+ "issue": "https://github.com/astanin/python-tabulate/issues/231",
+ "inferred": [
+  "2",
+  "3",
+  "4"
+ ],
+ "reticle_kept": {
+  "asked": 2,
+  "inferred": 4
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "flip == to != at tabulate/__init__.py:105",
+   "hidden": "55 of 159 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker behavior: The new helper has the comparison inverted. It returns True when the value is a string that is NOT the separator (`!= SEPARATING_LINE`). So `_is_separating_line` now treats almost every normal row with a string in column 0 or 1 as a separat",
+    "major behavior: The change does not touch the code that writes the separator line. It only edits the detection helper. So the psql output `|---------+-------|` is not fixed even if the comparison were correct. Padded formats are not handled."
+   ],
+   "not_counted": []
+  },
+  {
+   "broken": "change 1 to 2 at tabulate/__init__.py:111",
+   "hidden": "155 of 159 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker behavior: The diff only changes how a separating line is detected. It does not touch the code that renders the separator row (padding or the psql line format). Nothing here makes psql print `|---------+-------|`. The reported bug is not fixed by this",
+    "blocker behavior: The check `len(row) >= 1` became `len(row) >= 2` for the first column. A one-column row `[SEPARATING_LINE]` is no longer detected as a separator. That worked before and now breaks. Also, for `str` rows, `row[0]` is a single character, so th",
+    "major behavior: Using `.strip()` means a cell like ' ' padded forms of the marker are treated as separators. That changes which rows are separators, so output may change for existing inputs. It is also unclear why it is needed. The `showindex` case (marker"
+   ],
+   "not_counted": []
+  },
+  {
+   "broken": "undo the hunk at tabulate/__init__.py:104",
+   "hidden": "5 of 159 pass",
+   "second_eye": "catch",
+   "reticle": "catch",
+   "reticle_with_inferred": "catch",
+   "findings": [
+    "blocker behavior: The diff calls `_is_separating_line_value`, which is not defined anywhere in the diff. Every call to `_is_separating_line` would raise NameError, which breaks all tables with rows. Unless it exists elsewhere (not shown), this breaks existin",
+    "blocker behavior: The change does not touch the padding or separator rendering code, so psql still cannot print `|---------+-------|` for SEPARATING_LINE. The reported output is not fixed."
+   ],
+   "not_counted": []
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "reticle": "false alarm",
+  "inferred_notes": 1,
+  "findings": [],
+  "not_counted": []
+ },
+ "cost_usd": 0.0739,
+ "seconds": 80.6,
+ "second_eye_from": "9ba608",
+ "reticle_from": "9ba608"
+}
