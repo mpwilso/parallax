@@ -29,13 +29,19 @@ def private_home(tmp_path_factory, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def git_identity(monkeypatch):
+def git_identity(monkeypatch, tmp_path_factory):
     """Commits in tests carry their own identity, never borrowed from your ~/.gitconfig.
 
     Inside the sandbox $HOME is hidden, so a test that leaned on yours failed there (seen in M12)."""
     for who in ("AUTHOR", "COMMITTER"):
         monkeypatch.setenv(f"GIT_{who}_NAME", "Parallax Test")
         monkeypatch.setenv(f"GIT_{who}_EMAIL", "test@parallax.invalid")
+    # nor your git config: a global commit.gpgsign, user.signingkey or init.defaultBranch would change
+    # what the tests' own repositories do, depending on whose machine runs them
+    empty = tmp_path_factory.mktemp("gitconfig") / "config"
+    empty.write_text("")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(empty))
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
 
 
 @pytest.fixture(autouse=True)

@@ -1,3 +1,4 @@
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -120,13 +121,13 @@ def test_the_test_harness_comes_from_the_base_branch(repo):
 
     def spy(config, cwd, cmd, env):
         seen.update(conftest=(cwd / "tests" / "conftest.py").read_text(), ini=(cwd / "pytest.ini").exists(),
-                    tox=(cwd / "tox.ini").exists(), tmp=cmd.split(";")[0], copy=str(cwd))
+                    tox=(cwd / "tox.ini").exists(), tmp=shlex.split(cmd.split("; ", 1)[0]), copy=str(cwd))
         return junit_runner()(config, cwd, cmd, env)
 
     run(proj, tid, ScriptedAgent(), runner=spy)
     assert seen["conftest"] == "BASE = True\n" and seen["ini"] and not seen["tox"]
-    assert seen["tmp"].startswith("export TMPDIR=") and seen["tmp"].endswith("check-tmp")
-    assert not seen["tmp"].split("=", 1)[1].startswith(seen["copy"])  # beside the copy, not in it
+    assert seen["tmp"][0] == "export" and seen["tmp"][1].startswith("TMPDIR=") and seen["tmp"][1].endswith("check-tmp")
+    assert not seen["tmp"][1].split("=", 1)[1].startswith(seen["copy"])  # beside the copy, not in it
     assert sorted(kinds(proj, "tests.recorded")[-1]["data"]["harness_reset"]) == ["pytest.ini", "tests/conftest.py", "tox.ini"]
 
 

@@ -8,9 +8,24 @@ from parallax.markdown import placeholders, prose  # the one rule, shared with t
 
 ROOT = Path(__file__).resolve().parent.parent
 
+SKIP = {".git", ".venv", "node_modules", "__pycache__", ".pytest_cache", ".ruff_cache"}
+
+
 def markdown_files() -> list[Path]:
-    out = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z", "*.md"], capture_output=True, text=True, check=True)
-    return [ROOT / p for p in out.stdout.split("\0") if p]
+    """The repo's Markdown files, wherever it was cloned or copied. git's list when this folder is its
+    own repository; otherwise every .md file in it, since a copy has no .git (or sits inside someone
+    else's repository, whose ls-files would list none of these and pass on nothing)."""
+    top = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+    if top.returncode == 0 and Path(top.stdout.strip()).resolve() == ROOT:
+        out = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z", "*.md"], capture_output=True, text=True, check=True)
+        return [ROOT / p for p in out.stdout.split("\0") if p]
+    return sorted(p for p in ROOT.rglob("*.md") if not SKIP & set(p.relative_to(ROOT).parts[:-1])
+                  and not any(part.endswith(".egg-info") for part in p.relative_to(ROOT).parts))
+
+
+def test_the_markdown_files_are_found_with_or_without_git():
+    names = {p.relative_to(ROOT).as_posix() for p in markdown_files()}
+    assert {"README.md", "CLAUDE.md", "REVIEW.md", "docs/PRODUCT.md"} <= names
 
 
 def slug(heading: str) -> str:

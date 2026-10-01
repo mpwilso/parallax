@@ -1,4 +1,5 @@
 import json
+import shlex
 import shutil
 import stat
 import subprocess
@@ -235,7 +236,7 @@ def test_shell_check_reads_tokens_not_substrings(tmp_path):
     assert guard.check_shell("cat .gitignore && git status", tmp_path) is None
     assert guard.check_shell("echo x > CLAUDE.md", tmp_path)
     assert guard.check_shell("dd if=a of=.claude/settings.json", tmp_path)
-    assert guard.check_shell(f"touch {tmp_path}/docs/tasks/x", tmp_path)
+    assert guard.check_shell(f"touch {shlex.quote(str(tmp_path / 'docs' / 'tasks' / 'x'))}", tmp_path)  # a path may hold a space
 
 
 # preflight -------------------------------------------------------------------------------------------
@@ -485,7 +486,9 @@ def test_the_sandbox_tools_are_found_wherever_node_put_them(tmp_path, monkeypatc
     (system / "srt").symlink_to(bin_dir / "srt")  # nothing to add when the tools are on the system path already
     (system / "node").symlink_to(bin_dir / "node")
     assert build.scrubbed_env(None, {"PATH": str(system)})["PATH"] == str(system)
-    # doctor says where it found srt when that's outside the system folders
+    # doctor says where it found srt when that's outside the system folders. Your home is elsewhere here,
+    # so the path isn't shortened to ~ when this machine's temp folder sits under it
+    monkeypatch.setenv("HOME", str(tmp_path / "someone"))
     m = doctor.Machine(which=lambda b: str(bin_dir / b) if b in ("bwrap", "socat", "srt") else None)
     assert doctor.check_sandbox(m).detail == f"bubblewrap, socat, srt (srt at {bin_dir / 'srt'})"
     m = doctor.Machine(which=lambda b: f"/usr/bin/{b}")

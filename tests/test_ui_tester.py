@@ -1,6 +1,7 @@
 """The UI tester: blind, sandboxed, off by default; its tests are hashed and rerun at every check."""
 import json
 import re
+import shlex
 import sys
 from pathlib import Path
 
@@ -53,7 +54,7 @@ def flow_runner(results):
 
     def run(config, cwd, script, env):
         calls.append((script, env))
-        cfg = Path(re.search(r"--config (\S+)", script).group(1).strip("'"))
+        cfg = Path(shlex.split(re.search(r"--config ('[^']*'|\S+)", script).group(1))[0])  # quoted when the path has a space
         junit = Path(json.loads(cfg.read_text().removeprefix("module.exports = ").rstrip(";\n"))["reporter"][0][1]["outputFile"])
         junit.parent.mkdir(parents=True, exist_ok=True)
         cases = results.pop(0) if len(results) > 1 else results[0]

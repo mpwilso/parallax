@@ -18,8 +18,8 @@ from test_lifecycle_gates import docs, make_key
 from test_sandbox_and_preflight import kinds
 
 PYTEST_SITE = str(Path(pytest.__file__).resolve().parent.parent)  # so the venv's python can run pytest here
-VENV = (f'{sys.executable} -m venv --without-pip "$PARALLAX_VENV" && SP=$(echo "$PARALLAX_VENV"/lib/python*/site-packages)'
-        f' && echo {PYTEST_SITE} > "$SP/runner.pth"')
+VENV = (f'"{sys.executable}" -m venv --without-pip "$PARALLAX_VENV" && SP=$(echo "$PARALLAX_VENV"/lib/python*/site-packages)'
+        f' && echo "{PYTEST_SITE}" > "$SP/runner.pth"')  # double quotes: either path may hold a space, and setup sits in a TOML literal
 
 
 def git(repo, *args):

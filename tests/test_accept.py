@@ -1,4 +1,5 @@
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -55,7 +56,7 @@ def test_accept_then_the_printed_merge_really_merges(repo, monkeypatch, capsys):
 def test_the_commit_is_exactly_the_reviewed_tree_plus_the_task_docs(repo):
     proj, tid, wt = ready(repo)
     hook = repo / ".git" / "hooks" / "pre-commit"
-    hook.write_text(f"#!/bin/sh\ntouch {repo}/HOOK-RAN\n")
+    hook.write_text(f"#!/bin/sh\ntouch {shlex.quote(str(repo / 'HOOK-RAN'))}\n")  # a path may hold a space
     hook.chmod(0o755)
     acc = accept(proj, tid)["data"]
     reviewed = kinds(proj, "check.staged")[-1]["data"]["tree"]

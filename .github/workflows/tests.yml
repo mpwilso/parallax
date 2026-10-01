@@ -10,6 +10,13 @@ permissions:
 
 jobs:
   test:
+    # twice, side by side: from the checkout, and from a second clone at a path with a space in it, so
+    # no test depends on where the repo lives (four once failed in a scratch copy). Neither stops the other
+    name: tests from ${{ matrix.where }}
+    strategy:
+      fail-fast: false
+      matrix:
+        where: [the checkout, a second clone]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -27,13 +34,23 @@ jobs:
       - name: Chromium for the browser tests, the version scripts/test.sh pins
         run: scripts/test.sh browser
       - name: Lint and the full suite, browser tests included, as scripts/test.sh runs them. No test calls a model.
+        if: matrix.where == 'the checkout'
         run: scripts/test.sh
         env:
           PARALLAX_BROWSER_TRACES: browser-traces   # each failed browser test leaves a Playwright trace and its console log here
+      - name: The same suite from a second clone, at a path with a space in it
+        if: matrix.where == 'a second clone'
+        run: |
+          second="$RUNNER_TEMP/second clone/px"
+          git clone --quiet --no-checkout "$GITHUB_WORKSPACE" "$second"
+          git -C "$second" checkout --quiet --detach "$GITHUB_SHA"
+          cd "$second" && scripts/test.sh
+        env:
+          PARALLAX_BROWSER_TRACES: ${{ github.workspace }}/browser-traces
       - name: Traces and console logs of failed browser tests
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: browser-traces
+          name: browser-traces from ${{ matrix.where }}
           path: browser-traces/
           if-no-files-found: ignore
