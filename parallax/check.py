@@ -17,7 +17,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Callable
 
-from . import build, costs, lifecycle, lint, outputs, reticle, review, sandbox, status, testrun, tree, uitest
+from . import build, costs, lifecycle, lint, outputs, reticle, review, sandbox, staledocs, status, testrun, tree, uitest
 from .agents.base import BlindChecker, Review
 from .core import ParallaxError, Project
 
@@ -241,6 +241,11 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
         project.ledger.append("verdict.downgraded", "parallax",
                               f"{len(lowered)} of Second Eye's blocking findings cite only inferred outcomes, so they're notes",
                               task=task_id, tree=s.tree, lowered=lowered)
+    counted, stale = staledocs.lower(counted, blocking)
+    if stale:  # Maker can't edit a protected doc: a stale one is yours to update, never a reason to rework
+        project.ledger.append("verdict.downgraded", "parallax",
+                              f"{len(stale)} of Second Eye's blocking findings are on protected docs, so they're notes",
+                              task=task_id, tree=s.tree, lowered=stale)
     blockers = [f for f in counted if f.severity in blocking]
     # a scope finding on a file your approved plan lists: intent and plan disagree. that's yours,
     # never the maker's to settle, since fixing it would change approved scope

@@ -191,6 +191,9 @@ def _material(project: Project, task_id: str, doc: str, feedback: str, problems:
     if doc == "plan":
         parts.append(f"Drafting this task has cost an estimated ${costs.spent(project, task_id):.2f} so far. "
                      "It counts against the cap.")
+        from .staledocs import material
+        if stale := material(project.root):  # a protected doc the change makes wrong: yours to update
+            parts.append(stale)
     if feedback:
         parts.append(f"The human rejected the last draft. Their reason (data):\n{feedback}")
         from .sendback import material

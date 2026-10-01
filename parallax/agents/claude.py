@@ -71,6 +71,9 @@ Give each finding one kind: "behavior" if the code does something wrong; "missin
 change needs isn't there; "scope" if the change does something the outcome or the constraints don't allow
 (or leaves out something they require); "housekeeping" for a changelog entry, docs, a version number and
 the like.
+Some docs are protected: the author can't edit them, so the person updates them by hand. They are CLAUDE.md,
+REVIEW.md, mission.md and docs/parallax.md, wherever they sit, and Markdown under .claude/. A change that
+makes one of them wrong or out of date is a note at a severity that doesn't block, never a reason to fail.
 Give each finding what it cites: "outcome <n>" for each outcome it rests on, and "constraint" if it rests
 on a constraint. Leave it empty for a problem that rests on neither, like a plain bug. Code checks it: a
 blocking finding that cites only inferred outcomes becomes a note.

@@ -31,6 +31,7 @@ Agents do the work; the human makes the calls. The maker builds in a sandbox, a 
 ## Capabilities and Constraints
 
 - Intake box, board of tasks by state, one card per task, accept, reject with a reason (redraft or drop), answer a Decision needed, view the diff, intent and plan, live updates, keyboard use.
+- A protected doc (CLAUDE.md, REVIEW.md, docs/parallax.md and the like) is one Maker can't edit. When a change makes one wrong, Focus's plan lists it under "Docs you'll need to update", the Ready card says to update it yourself before merging and why, and Second Eye treats a stale one as a note, never a block.
 - When the tests, Reticle's tests or Field's flows fail, their whole output is kept as a file in the task's data folder, with its path and hash in the ledger. The card's failure line links to it (shown only while the hash matches), and the Ask box can read it.
 - No merge without your click: the only merge is Accept and merge, local, never pushed; a fast-forward, or the base branch merged in and the test gate re-run when it has moved on. Rejects, overrides and accepted risks need a reason; approvals don't.
 - Agent-written text is shown as text, never HTML. No inline code. No external requests.

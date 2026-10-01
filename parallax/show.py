@@ -275,7 +275,9 @@ def report(project: Project, task_id: str) -> str:
                             f"not looked at: the plan's tests and Second Eye (the blind checker) haven't run (ledger {dec.item['id']})")]
         return _decision(project, task_id, dec, found, gaps, changed, boundary + findings)
     if status == "ready":
-        found = _the_work(project, task_id, staged) + found + _outcomes(project, task_id, tests)
+        from .staledocs import card_lines  # protected docs this change makes wrong: Maker can't, so you update them
+        stale = card_lines(lifecycle._read(project, task_id, "plan"), task_id)
+        found = _the_work(project, task_id, staged) + stale + found + _outcomes(project, task_id, tests)
         boundary = boundary + _rails(_attempt(entries, task_id), tests)
         passed = tests["data"]["passed"] if tests else 0
         total = tests["data"]["total"] if tests else 0
