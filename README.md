@@ -67,6 +67,14 @@ You can start work from the app or the terminal, and pick it back up several way
   <img src="docs/ui-runs/final-ui/ready.png" alt="A Ready card: the stage strip with the last agent's portrait in its tile, the bottom line, one question with Accept, Accept and merge, Reject and Drop, what wasn't looked at, the evidence in plain sentences with quiet ledger links, and the Ask box" width="1280">
 </picture>
 
+**Spending, chosen once.** The first time Parallax runs in a repo (`parallax init` in a terminal, or else the first time you open `parallax ui`), it asks one question: how should Parallax handle spending? Your answer goes in `parallax.policy.toml` as `[budget] mode`:
+
+- **Ask me before a task goes over a limit** (`ask`, the default): each task has a cap, at most $5 for a small task and $20 for a large one, and it stops and asks before going over.
+- **Keep going, and stop only at $25 a task** (`ceiling`; set the amount with `ceiling_usd`).
+- **No limit** (`none`): it never stops for money.
+
+A budget you name in the request always wins, and above the mode's limit it asks you once. In every mode, no limit included, a task stops and asks when the same check fails the same way twice in a row, and says what keeps failing. The overview shows the current mode; change it with `parallax budget ask`, `ceiling` or `none`, or the button under the overview. The dollars are Claude Code's estimates at API list prices: on a Claude subscription they measure how much a task used, not a charge.
+
 A few cards tell you something before you have to ask:
 
 - **A budget over the limit.** If your request names a budget above the policy's limit for its size (`small_cap_usd` or `large_cap_usd`), Focus drafts once and the card asks one question: allow that budget for this task only, or use the limit. Nothing is redrafted to fit. When the budget is also over `auto_launch_usd`, the first choice is "Allow $8 and launch" (with your amount): one answer covers the budget and the launch of the plan you can read on the card. If that plan changes before it launches, the card asks again.

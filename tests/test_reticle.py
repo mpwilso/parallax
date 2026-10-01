@@ -316,12 +316,13 @@ def test_when_only_reticle_fails_maker_gets_one_rework_then_it_is_yours_at_ready
     assert "def test_" not in card and "add(2, 3)" not in card  # the message, never the code
 
 
-def test_when_the_plan_tests_fail_too_rework_goes_on_as_before(proj):
+def test_when_the_plan_tests_fail_too_rework_goes_on_until_it_fails_the_same_way_twice(proj):
     broken = ScriptedAgent(steps=[("write", "calc.py", f"def add(a, b):\n    {WRONG}\n"),
                                   ("write", "tests/test_mine.py", "from calc import add\n\n\ndef test_neg():\n    assert add(-1, 1) == 0\n")],
                            cost=0.3)
     tid, status = go_with(proj, FakeReticle(KEPT), make=broken)
-    assert status == "disputed" and len(kinds(proj, "rework.started")) == 3  # the rework cap, as ever
+    assert status == "disputed" and len(kinds(proj, "rework.started")) == 1  # then the loop protection
+    assert proj.inbox()[-1]["reason"].startswith("the same check failed the same way twice in a row: ")
     assert not kinds(proj, "reticle.rework") and not kinds(proj, "reticle.disputed")
     assert all("a test of outcome 1 that you can't see fails" in e["reason"] for e in kinds(proj, "rework.started"))
 

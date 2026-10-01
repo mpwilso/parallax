@@ -218,8 +218,11 @@ def _decision(project: Project, task_id: str, dec, found: list[str], gaps: list[
         bottom = "The plan waits for you before it runs."
         plan = lifecycle.plan_data(project, task_id) or {}
         cap = costs.budget(project, task_id, plan)[0] if plan else 0.0
+        from .budgets import shown
         found = _the_work(project, task_id, None) + [
-            f"It's estimated at ${float(plan.get('estimated_cost_usd', 0)):.2f}, with a cap of ${cap:.2f}. (docs/tasks/{task_id}/plan.md:1)",
+            f"It's estimated at ${float(plan.get('estimated_cost_usd', 0)):.2f}, "
+            + (f"with a cap of {shown(cap)}." if cap != float("inf") else "with no spending limit (budget mode none).")
+            + f" (docs/tasks/{task_id}/plan.md:1)",
             f"It waits because {dec.extra.get('why', '').rstrip('.')}."
             + (f" (ledger {dec.extra['asked']})" if dec.extra.get("asked") else " (Unverified)")]
         gaps = [(f"{doc}.md says: {text}", f"docs/tasks/{task_id}/{doc}.md:{n} not looked at: {text}")

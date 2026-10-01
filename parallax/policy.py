@@ -12,7 +12,9 @@ from pathlib import Path
 
 DEFAULT_LIMITS = {"stuck_after": 3, "stale_minutes": 60, "maker_turns": 150}
 DEFAULT_BUDGET = {"drafting_usd": 2.0, "small_cap_usd": 5.0, "large_cap_usd": 20.0,  # estimated dollars
-                  "small_floor_usd": 2.0, "large_floor_usd": 8.0}  # Maker's spend a cap covers, until the ledger knows (capfloor.py)
+                  "small_floor_usd": 2.0, "large_floor_usd": 8.0,  # Maker's spend a cap covers, until the ledger knows (capfloor.py)
+                  "mode": "ask", "ceiling_usd": 25.0}  # how spending is handled, chosen once (budgets.py)
+BUDGET_MODES = ("ask", "ceiling", "none")
 DEFAULT_LAUNCH = {"auto_launch_usd": 3.0, "review_paths": [], "review_plans": False}
 DEFAULT_DRAFT = {"model": "claude-sonnet-5-5"}  # a fifth of Opus's drafting cost, no more redrafts (docs/plan.md)
 DEFAULT_UI_TESTER = {
@@ -46,6 +48,10 @@ small_cap_usd = 5.00           # the highest cap a small task's plan may set
 large_cap_usd = 20.00          # the highest cap a large task's plan may set
 small_floor_usd = 2.00         # a small task's cap covers at least this much Maker work, until 5 small tasks show better
 large_floor_usd = 8.00         # the same for a large task
+ceiling_usd = 25.00            # with mode = "ceiling": what one task may spend before it stops and asks
+# mode, asked the first time Parallax runs here: "ask" (stop and ask before a task goes over its cap, the
+# size caps above), "ceiling" (keep going, stop only at ceiling_usd) or "none" (no spending limit). Every
+# mode stops and asks when the same check fails the same way twice in a row. Change it with parallax budget.
 
 [launch]
 auto_launch_usd = 3.00         # a plan whose cap is at most this launches without asking you, if it crosses no boundary
@@ -124,10 +130,14 @@ class Policy:
         unknown = set(budget) - set(DEFAULT_BUDGET)
         if unknown:
             raise ValueError(f"unknown budget settings: {sorted(unknown)}")
+        mode = budget.pop("mode", None)
+        if mode is not None and mode not in BUDGET_MODES:
+            raise ValueError('[budget] mode must be "ask", "ceiling" or "none"')
         if any(not isinstance(v, (int, float)) or isinstance(v, bool) or v <= 0 for v in budget.values()):
             raise ValueError("budget settings must be dollar amounts above 0")
         self.limits = {**DEFAULT_LIMITS, **limits}
-        self.budget = {**DEFAULT_BUDGET, **budget}
+        self.budget = {**DEFAULT_BUDGET, **budget, "mode": mode or DEFAULT_BUDGET["mode"]}
+        self.mode_chosen = mode is not None  # unset: nobody has answered the question yet (budgets.QUESTION)
         build = dict(build or {})
         if set(build) - {"setup"} or not isinstance(build.get("setup", ""), str):
             raise ValueError("[build] takes one setting: setup, a shell command")
@@ -214,3 +224,28 @@ class Policy:
     def load(cls, path: Path) -> "Policy":
         with Path(path).open("rb") as f:
             return cls.from_dict(tomllib.load(f))
+
+
+def write_budget_mode(path: Path, mode: str) -> None:
+    """Set [budget] mode in the policy file, keeping every other line and comment as it is."""
+    if mode not in BUDGET_MODES:
+        raise ValueError('[budget] mode must be "ask", "ceiling" or "none"')
+    path = Path(path)
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    line = f'mode = "{mode}"'
+    lines = text.splitlines()
+    start = next((i for i, x in enumerate(lines) if x.strip() == "[budget]"), None)
+    if start is None:
+        lines += ["", "[budget]", line]
+    else:
+        end = next((i for i in range(start + 1, len(lines)) if lines[i].lstrip().startswith("[")), len(lines))
+        at = next((i for i in range(start + 1, end) if re.match(r"^\s*mode\s*=", lines[i])), None)
+        if at is not None:
+            comment = lines[at].split("#", 1)[1] if "#" in lines[at] else ""
+            lines[at] = line + (f"  #{comment}" if comment else "")
+        else:
+            while end > start + 1 and not lines[end - 1].strip():
+                end -= 1
+            lines.insert(end, line)
+    Policy.from_dict(tomllib.loads("\n".join(lines) + "\n"))  # never write a file that won't load
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")

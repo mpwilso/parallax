@@ -142,6 +142,13 @@ def act(project: Project, path: str, body: dict) -> dict:
                         "merge": merge_command(e, project)}
         return {"message": f"accepted {task} as {e['data']['commit'][:7]}. merge it yourself:",
                 "merge": merge_command(e)}
+    if path == "/api/budget":  # your answer to the spending question, written to the local policy file
+        from .budgets import choose
+        chosen = str(body.get("mode") or "")
+        if chosen not in ("ask", "ceiling", "none"):
+            raise ParallaxError("choose ask, ceiling or none")
+        choose(project, chosen, f"chose {chosen} in parallax ui")
+        return {"message": f"budget mode is {chosen}. change it any time from the overview."}
     if path == "/api/ask":
         from . import ask
         return ask.answer(project, task, str(body.get("question") or ""))
@@ -228,7 +235,8 @@ def _handler(ui: UI):
                     self._json(200, {"version": f"{st.st_size}-{st.st_mtime_ns}"})
                 elif path == "/api/board":
                     p = ui.project()
-                    self._json(200, {"project": p.root.name, "tools": ui.missing(), **views.board(p)})
+                    from .budgets import state as budget_state
+                    self._json(200, {"project": p.root.name, "tools": ui.missing(), "budget": budget_state(p), **views.board(p)})
                 elif len(parts) == 3 and parts[:2] == ["api", "task"]:
                     self._json(200, views.card(ui.project(), parts[2]))
                 elif len(parts) == 5 and parts[:2] == ["api", "task"] and parts[3] == "shot":

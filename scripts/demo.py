@@ -71,6 +71,8 @@ def main() -> None:
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "init"], check=True)
     gates.make_key()
     proj = Project.init(repo)
+    from parallax import budgets
+    budgets.choose(proj, "ask")  # the demo shows tasks, not the first-run spending question
     build._spawn = lambda argv, env, cwd, log: os.getpid()  # the pilot runs in this process, below
 
     class Slow(FakeDrafter):  # each draft takes a moment, so the page shows Focus at work

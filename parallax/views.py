@@ -17,7 +17,7 @@ SECTIONS = ("Decisions", "Changed since last time", "Found", "Recommended", "Det
 
 
 RISK = {"guard": 0, "scope": 1, "conflict": 1, "stuck": 2, "tool": 2, "checker": 2, "tests": 2, "rework": 3, "cap": 3,
-        "drafting": 3, "budget": 3, "launch": 4, "review": 4}  # what needs you most comes first; Ready comes last
+        "drafting": 3, "budget": 3, "loop": 3, "launch": 4, "review": 4}  # what needs you most comes first; Ready comes last
 
 
 BROKEN = "couldn't display this task"

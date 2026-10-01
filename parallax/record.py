@@ -55,7 +55,7 @@ def write(project: Project, task_id: str, files: list[str], plan: dict) -> str:
         f"{'s' if len(makers) != 1 else ''} in the sandbox." if makers else "Written by: nobody recorded.",
         f"Verified by: Parallax ran the plan's tests in the sandbox ({t['passed']} of {t['total']} passed); "
         f"Second Eye, the blind checker ({checker_model or 'model not recorded'}), said {verdicts[-1]['data']['verdict'] if verdicts else 'nothing'}.",
-        f"Cost: an estimated ${cap - left:.2f} of the ${cap:.2f} cap.",
+        f"Cost: an estimated ${costs.spent(project, task_id):.2f}" + (" (budget mode none: no cap)." if cap == float("inf") else f" of the ${cap:.2f} cap."),
         f"Rollback: revert the commit whose message has Parallax-Task: {task_id} "
         f"(find it with git log --grep 'Parallax-Task: {task_id}').",
     ]

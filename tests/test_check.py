@@ -482,9 +482,11 @@ def test_the_card_leads_with_what_matters(repo):
                                                                 'tests = ["tests/test_readme.py", "tests/test_a.py", "tests/test_b.py"]'))
     maker = built(proj, tid, [("write", "README.md", "ok\n")])
     maker.cost = 1.6
+    first = junit_runner({"tests/test_readme.py": (3, 0), "tests/test_a.py": (6, 4), "tests/test_b.py": (1, 1)}, exit_code=1)
     failing = junit_runner({"tests/test_readme.py": (3, 0), "tests/test_a.py": (7, 3), "tests/test_b.py": (1, 1)},
                            exit_code=1)
-    assert run(proj, tid, maker, runner=failing) == "stuck"
+    runs = iter([first])  # progress each time, so the loop protection doesn't stop it before the cap does
+    assert run(proj, tid, maker, runner=lambda *a: next(runs, failing)(*a)) == "stuck"
     card = show.report(proj, tid)
     lines = card.splitlines()
     assert lines[1].startswith("Bottom line: Needs you: Maker spent $") and lines[1].endswith(", so the budget cap ran out.")

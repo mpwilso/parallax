@@ -54,6 +54,8 @@ def main(port: int) -> None:
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "init"], check=True)
     test_m8.make_key()
     proj = Project.init(repo)
+    from parallax import budgets
+    budgets.choose(proj, "ask")  # the demo shows tasks, not the first-run spending question
 
     def docs(title, bottom, outcome):
         d = test_m8.docs()

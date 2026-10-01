@@ -17,7 +17,7 @@ WORKING = ("drafting", "building", "checking", "merging")
 # a decision's kind -> the stage that stopped. cap, error and stuck stop whichever stage was running
 STOPPED_AT = {"drafting": "focus", "budget": "focus", "turns": "maker", "guard": "maker", "scope": "check", "conflict": "check",
               "flows": "check", "rework": "check", "checker": "check", "tests": "check"}
-FAILED_KINDS = {"cap", "rework", "checker", "tests", "turns", "error", "stuck", "drafting"}  # the work failed: chip Failed
+FAILED_KINDS = {"cap", "rework", "checker", "tests", "turns", "error", "stuck", "drafting", "loop"}  # the work failed: chip Failed
 SUMMARY = 110  # characters a row's sentence gets before it's shortened, at a word
 
 
@@ -103,7 +103,8 @@ def spend(project: Project, task_id: str) -> dict:
     """What it has spent, and its cap once a plan sets one."""
     plan = lifecycle.plan_data(project, task_id)
     cap = costs.budget(project, task_id, plan)[0] if plan else None
-    return {"spent": round(costs.spent(project, task_id), 2), "cap": round(cap, 2) if cap else None}
+    limited = bool(cap) and cap != float("inf")  # budget mode none: no cap to show a bar against
+    return {"spent": round(costs.spent(project, task_id), 2), "cap": round(cap, 2) if limited else None}
 
 
 def sentence(text: str, limit: int = SUMMARY) -> str:
@@ -167,6 +168,8 @@ def overview(project: Project, now: datetime | None = None) -> list[str]:
     else:
         lines.append("No task has finished yet. The goal is that each one needs you once: to accept it.")
     lines.append(f"${spent:.2f} spent on agents in the last 7 days" + (f", plus ${asked:.2f} on questions you asked." if asked else "."))
+    from .budgets import describe
+    lines.append(describe(project))  # the mode, and how to change it
     evals = staleness(project)
     if evals:
         lines.append(evals[:1].upper() + evals[1:])

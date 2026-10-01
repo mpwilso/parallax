@@ -238,6 +238,30 @@ function renderTools(lines) {
     ...lines.map(l => el("p", { class: "tool" }, l)));
 }
 
+// how Parallax handles spending: asked once, on the first open if init didn't ask, and changeable later
+function renderBudget(b) {
+  const box = document.getElementById("budget");
+  const show = !!b && (!b.chosen || state.budgetOpen);
+  box.hidden = !show;
+  if (!show) return;
+  box.replaceChildren(el("h2", { id: "budget-q" }, b.question),
+    el("ol", { class: "options" }, b.choices.map(c => el("li", {},
+      el("button", { id: "budget-" + c.mode, class: b.chosen && c.mode === b.mode ? "primary" : null,
+        "aria-pressed": b.chosen && c.mode === b.mode ? "true" : "false", onclick: () => chooseBudget(c.mode) }, c.label),
+      el("span", { class: "does" }, c.does)))),
+    el("p", { class: "hint" }, b.note),
+    b.chosen ? el("button", { onclick: () => { state.budgetOpen = false; renderBudget(b); } }, "Keep it as it is") : null);
+}
+
+async function chooseBudget(mode) {
+  try {
+    const r = await api("/api/budget", { mode });
+    state.budgetOpen = false;
+    say(r.message);
+    await refresh();
+  } catch (err) { say(err.message, true); }
+}
+
 function renderIdle() {
   const idle = document.getElementById("idle");
   const b = state.board;
@@ -247,6 +271,7 @@ function renderIdle() {
     : b.working.length ? "Nothing waits on you. The work on the left runs without you." : "Nothing waits on you.";
   const parts = [el("p", { class: "lead" }, lead)];
   if ((b.overview || []).length) parts.push(el("h2", {}, "How it's going"), el("ul", { class: "plain overview" }, b.overview.map(l => el("li", {}, l))));
+  if (b.budget && b.budget.chosen) parts.push(el("button", { id: "budget-change", onclick: () => { state.budgetOpen = true; renderBudget(b.budget); } }, "Change how spending is handled"));
   idle.replaceChildren(...parts);
 }
 
@@ -256,6 +281,7 @@ async function refresh() {
     const key = JSON.stringify(board);
     state.board = board;
     renderTools(board.tools || []);
+    renderBudget(board.budget);
     if (key !== state.boardKey) { state.boardKey = key; renderQueue(); }
     checkWaiting();
     if (state.wanted) {  // the link named a task: open its card once, if it's there

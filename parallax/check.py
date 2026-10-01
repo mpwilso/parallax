@@ -298,6 +298,9 @@ def run_check(project: Project, task_id: str, checker_for: CheckerFor, maker_for
         status, fix = check_once(project, task_id, checker_for, test_runner)
         if status != "rework":  # ready, disputed, or stuck at the cap
             return status
+        if keeps_failing(project, task_id, fix):  # in every budget mode, no limit included: never pay twice for nothing
+            return _to_you(project, task_id, "check", f"the same check failed the same way twice in a row: {summarize(fix)}",
+                           loop=True)
         cycles = rework_cycles(project, task_id)
         if cycles >= cap:
             summary = "; ".join(line.splitlines()[0] for line in fix)
@@ -305,7 +308,8 @@ def run_check(project: Project, task_id: str, checker_for: CheckerFor, maker_for
         p = build.prepare(project, task_id, setup=False, launching=False)
         if p.left <= 0:
             return costs.stop_at_cap(project, task_id, p.cap)
-        project.ledger.append("rework.started", "parallax", "\n".join(fix), task=task_id, cycle=cycles + 1)
+        project.ledger.append("rework.started", "parallax", "\n".join(fix), task=task_id, cycle=cycles + 1,
+                              failing=failing(fix))
         extra = REWORK.format(fixes="\n".join(f"- {line}" for line in fix))
         before = project.ledger.entries()
         reviewed = [e for e in before if e["kind"] == "check.staged" and e["data"].get("task") == task_id][-1]["data"]["tree"]
@@ -318,6 +322,17 @@ def run_check(project: Project, task_id: str, checker_for: CheckerFor, maker_for
         if gone:  # the backstop: a rework may never drop what you approved
             return _to_you(project, task_id, "conflict",
                            f"the rework removed {', '.join(gone)}, which your approved plan lists")
+
+
+def failing(fix: list[str]) -> list[str]:
+    """What a check found, without the test output's last lines, whose timings change run to run."""
+    return [line for line in fix if not line.startswith("test output")]
+
+
+def keeps_failing(project: Project, task_id: str, fix: list[str]) -> bool:
+    """This check failed exactly as the one before its rework did: the loop protection, in every mode."""
+    reworks = [e for e in status.attempt(project.ledger.entries(), task_id) if e["kind"] == "rework.started"]
+    return bool(failing(fix)) and bool(reworks) and reworks[-1]["data"].get("failing") == failing(fix)
 
 
 def summarize(fix: list[str]) -> str:

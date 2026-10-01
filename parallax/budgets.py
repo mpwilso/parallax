@@ -6,9 +6,15 @@ redraft never lowers a cap you already approved.
   it can never fix (786e71).
 - approved_cap: the highest cap you approved in an earlier attempt, raises included. A redraft's cap
   is lifted to it by code, never past the limit (fb461d went $3.80, $3.60, $2.50).
+- the mode, chosen once ([budget] mode, asked at init or on the first UI open): "ask" stops at each
+  plan's cap, under the size caps, as before; "ceiling" keeps going and stops only at ceiling_usd a
+  task; "none" never stops for money. A budget named in the request always wins: it is the cap, and
+  above the mode's limit it asks once (over_limit). In every mode, the same check failing the same
+  way twice in a row stops and asks (check.py), so no mode can spend in a loop.
 """
 from __future__ import annotations
 
+import math
 import re
 
 from . import lifecycle, lint
@@ -17,6 +23,84 @@ from .core import Project
 
 def money(x: float) -> str:
     return f"${x:.2f}".removesuffix(".00")
+
+
+NO_LIMIT = math.inf
+QUESTION = "How should Parallax handle spending?"
+NOTE = ("Costs are Claude Code's estimates at API list prices. On a Claude subscription they measure how much "
+        "a task used, not a charge.")
+
+
+def mode(project: Project) -> str:
+    return project.policy.budget["mode"]
+
+
+def choices(project: Project) -> list[dict]:
+    """The question's options, in the policy's own numbers: {mode, label, does}."""
+    b = project.policy.budget
+    return [
+        {"mode": "ask", "label": "Ask me before a task goes over a limit",
+         "does": f"the default: each task has a cap, at most {money(b['small_cap_usd'])} for a small task and "
+                 f"{money(b['large_cap_usd'])} for a large one, and it stops and asks before going over"},
+        {"mode": "ceiling", "label": f"Keep going, and stop only at {money(b['ceiling_usd'])} a task",
+         "does": f"no question about money until a task has used {money(b['ceiling_usd'])}"},
+        {"mode": "none", "label": "No limit",
+         "does": "it never stops for money; it still stops and asks when the same check fails the same way twice in a row"},
+    ]
+
+
+def describe(project: Project) -> str:
+    """The current mode in one sentence, and how to change it: for the overview and parallax budget."""
+    label = next(c["label"] for c in choices(project) if c["mode"] == mode(project))
+    chosen = "" if project.policy.mode_chosen else " (the default; nobody has chosen yet)"
+    return (f"Spending: {label[:1].lower()}{label[1:]}{chosen}. Change it with parallax budget ask, ceiling or none, "
+            f"or [budget] mode in parallax.policy.toml.")
+
+
+def choose(project: Project, chosen: str, reason: str = "") -> dict:
+    """Your answer, written to the local policy file and recorded as yours."""
+    from .core import POLICY_FILE
+    from .policy import write_budget_mode
+    write_budget_mode(project.root / POLICY_FILE, chosen)
+    project.reload_policy()
+    return project.ledger.append("budget.mode", "human", reason or f"chose {chosen}", mode=chosen,
+                                 ceiling_usd=project.policy.budget["ceiling_usd"])
+
+
+def state(project: Project) -> dict:
+    """What the page needs: the mode, whether anyone chose it, and the question with its options."""
+    return {"mode": mode(project), "chosen": project.policy.mode_chosen, "question": QUESTION, "note": NOTE,
+            "choices": choices(project), "line": describe(project)}
+
+
+def mode_limit(project: Project, size: str) -> float:
+    """The most a plan may set for a task of this size, by the mode."""
+    b = project.policy.budget
+    if mode(project) == "none":
+        return NO_LIMIT
+    if mode(project) == "ceiling":
+        return float(b["ceiling_usd"])
+    return float(b["large_cap_usd" if size == "large" else "small_cap_usd"])
+
+
+def effective_cap(project: Project, task_id: str, plan_cap: float) -> float:
+    """What the task may spend before it stops: a budget you named, else what the mode says."""
+    if lint.budget_of(lifecycle._read(project, task_id, "intent")) is not None or mode(project) == "ask":
+        return plan_cap  # the plan's cap is your named budget (planfit holds it to that), or the mode's cap
+    if mode(project) == "none":
+        return NO_LIMIT
+    return max(plan_cap, float(project.policy.budget["ceiling_usd"]))
+
+
+def launch_limit(project: Project) -> float:
+    """The cap code may launch with, under the policy: auto_launch_usd, or the mode's ceiling."""
+    auto = float(project.policy.launch["auto_launch_usd"])
+    return {"ask": auto, "ceiling": max(auto, float(project.policy.budget["ceiling_usd"])), "none": NO_LIMIT}[mode(project)]
+
+
+def shown(cap: float | None) -> str:
+    """A cap in words: dollars, or no limit."""
+    return "no limit" if cap is None or math.isinf(cap) else f"${cap:.2f}"
 
 
 def size_of(project: Project, task_id: str) -> str:
@@ -30,7 +114,7 @@ def _mine(project: Project, task_id: str) -> list[dict]:
 def limit(project: Project, task_id: str, size: str | None = None) -> float:
     """The policy's cap for the task's size, or the budget you allowed for this task, if higher."""
     size = size or size_of(project, task_id)
-    base = float(project.policy.budget["large_cap_usd" if size == "large" else "small_cap_usd"])
+    base = mode_limit(project, size)
     allowed = [e for e in _mine(project, task_id) if e["kind"] == "budget.allowed"]
     return max(base, float(allowed[-1]["data"]["amount_usd"])) if allowed else base
 

@@ -25,7 +25,8 @@ def raised(project: Project, task_id: str) -> float:
 
 def budget(project: Project, task_id: str, plan: dict) -> tuple[float, float]:
     """(cap, left): the plan's cap, plus anything you raised it by, and what's left of it."""
-    cap = round(float(plan["budget_cap_usd"]) + raised(project, task_id), 4)
+    from .budgets import effective_cap  # the mode, or a budget you named
+    cap = round(effective_cap(project, task_id, float(plan["budget_cap_usd"])) + raised(project, task_id), 4)
     return cap, round(cap - spent(project, task_id), 4)
 
 

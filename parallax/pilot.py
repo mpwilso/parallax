@@ -143,7 +143,8 @@ def launch_rule(project: Project, task_id: str) -> tuple[bool, str]:
     intent = lifecycle._read(project, task_id, "intent")
     plan = lifecycle.plan_data(project, task_id)
     rules = project.policy.launch
-    cap, limit = float(plan["budget_cap_usd"]), float(rules["auto_launch_usd"])
+    from . import budgets
+    cap, limit, mode = float(plan["budget_cap_usd"]), budgets.launch_limit(project), budgets.mode(project)
     if rules["review_plans"]:
         return False, "review_plans is on in the policy, so every plan waits for you"
     if lint.intent_fields(intent).get("size") == "large":
@@ -155,7 +156,13 @@ def launch_rule(project: Project, task_id: str) -> tuple[bool, str]:
         if plan[field]:
             return False, f"the plan's {field} ({plan[field][0]}) cross the boundary, so only you can approve it"
     if cap > limit:
+        if mode == "ceiling":
+            return False, f"the budget cap (${cap:.2f}) is over auto_launch_usd and the budget mode's ceiling (${limit:.2f})"
         return False, f"the budget cap (${cap:.2f}) is over auto_launch_usd (${limit:.2f})"
+    if mode == "ceiling":  # your answer to the spending question, in the policy file: keep going up to the ceiling
+        return True, f"launch rule: a small task, cap ${cap:.2f} within the budget mode's ${limit:.2f} ceiling, nothing in review_paths"
+    if mode == "none":
+        return True, "launch rule: a small task, budget mode none (no spending limit), nothing in review_paths"
     return True, f"launch rule: a small task, cap ${cap:.2f} within auto_launch_usd ${limit:.2f}, nothing in review_paths"
 
 

@@ -44,6 +44,8 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("doctor", help="check this machine can run agents in a sandbox")
     sub.add_parser("init", help="set up parallax in this git repo")
+    bm = sub.add_parser("budget", help="how parallax handles spending: ask, ceiling or none")
+    bm.add_argument("mode", nargs="?", choices=("ask", "ceiling", "none"), help="leave it out to see the current mode")
 
     t = sub.add_parser("task", help="manage tasks")
     tsub = t.add_subparsers(dest="tcmd", required=True)
@@ -124,6 +126,11 @@ def _run(args) -> int:
         already = (cwd / "parallax.policy.toml").exists() and (cwd / ".parallax").exists()
         proj = Project.init(cwd, confirm_setup=_confirm_setup)
         print(f"{'already set up' if already else 'initialized parallax'} in {proj.root}")
+        if not proj.policy.mode_chosen:  # asked once, here, or on the first open of parallax ui
+            chosen = _ask_budget_mode(proj)
+            if chosen:
+                from .budgets import choose
+                choose(proj, chosen)
         print("  parallax.policy.toml  what agents may do. anything unlisted is denied.")
         print("  REVIEW.md             how Second Eye (the blind checker) reviews, and what blocks ready. you own it.")
         print('next: parallax do "what you want done"')
@@ -195,7 +202,8 @@ def _run(args) -> int:
         from . import build
         p = build.prepare(proj, args.task)
         build.launch(proj, p)  # the builder preflights first, whoever starts it
-        print(f"building {args.task}, estimated budget ${p.left:.2f}. parallax stop ends it.")
+        from .budgets import shown
+        print(f"building {args.task}, estimated budget {shown(p.left)}. parallax stop ends it.")
         return 0
 
     if args.cmd == "recheck":
@@ -222,6 +230,14 @@ def _run(args) -> int:
         from . import build
         stopped = build.stop(proj)
         print(f"stopped {', '.join(stopped)}." if stopped else "nothing is running.")
+        return 0
+
+    if args.cmd == "budget":
+        from .budgets import choose, describe
+        if args.mode:
+            choose(proj, args.mode, f"parallax budget {args.mode}")
+            print(f"budget mode is {args.mode}.")
+        print(describe(proj))
         return 0
 
     if args.cmd == "ui":
@@ -416,6 +432,21 @@ def _confirm_setup(command: str) -> bool:
         print("not an interactive terminal, so it's left out. set [build] setup in parallax.policy.toml yourself if you want it.")
         return False
     return input("keep it? [y/N] ").strip().lower() in ("y", "yes")
+
+
+def _ask_budget_mode(proj) -> str | None:
+    """The spending question, at init. Not a terminal: it's left for the first open of parallax ui."""
+    from .budgets import NOTE, QUESTION, choices
+    if not sys.stdin.isatty():
+        print("not an interactive terminal: parallax ui asks how to handle spending when it first opens.")
+        return None
+    opts = choices(proj)
+    print(QUESTION)
+    for n, c in enumerate(opts, 1):
+        print(f"  {n}. {c['label']}: {c['does']}.")
+    print(f"  {NOTE}")
+    answer = input("choose 1, 2 or 3 [1]: ").strip() or "1"
+    return opts[int(answer) - 1]["mode"] if answer in ("1", "2", "3") else None
 
 
 def _doctor() -> int:

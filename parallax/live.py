@@ -5,6 +5,8 @@ for how long, and what this attempt has spent against its cap. For the UI's work
 """
 from __future__ import annotations
 
+import math
+
 from datetime import datetime, timezone
 
 from . import costs, lifecycle, lint, status
@@ -72,7 +74,9 @@ def line(project: Project, task_id: str, now: datetime | None = None) -> str:
     plan = lifecycle.plan_data(project, task_id)
     spent = costs.spent(project, task_id)
     if plan:
-        parts.append(f"${spent:.2f} of ${costs.budget(project, task_id, plan)[0]:.2f}")
+        from .budgets import shown
+        cap = costs.budget(project, task_id, plan)[0]
+        parts.append(f"${spent:.2f} spent, no limit" if math.isinf(cap) else f"${spent:.2f} of {shown(cap)}")
     elif spent:
         parts.append(f"${spent:.2f} spent")
     return ", ".join(parts) + (f". {why[0].upper()}{why[1:]}" if why else "")

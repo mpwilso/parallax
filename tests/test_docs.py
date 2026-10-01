@@ -101,5 +101,6 @@ def test_the_readme_and_product_doc_describe_what_the_last_batch_built():
     for name in ("README.md", "docs/PRODUCT.md"):
         text = " ".join((ROOT / name).read_text(encoding="utf-8").split())
         for said in ("Merging", "usually takes", "the median of the last five", "Allow $8 and launch",
-                     "use the limit", "heads-up", "git merge --ff-only", "changes only what", "worktree"):
+                     "use the limit", "heads-up", "git merge --ff-only", "changes only what", "worktree",
+                     "[budget] mode", "no limit", "same check fails the same way twice", "not a charge"):
             assert said.lower() in text.lower(), f"{name} doesn't say {said!r}"

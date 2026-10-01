@@ -134,7 +134,8 @@ def test_disagreement_goes_to_inbox_and_needs_a_reason(repo, approve, status):
     """The rework rule: 3 recorded cycles, then the 4th fail comes to you."""
     proj, tid = _approved(repo)
     maker = ScriptedAgent(steps=[("write", "README.md", "x\n")])
-    checker = FakeChecker(reviews=[blocker("greeting is misspelled")])
+    checker = FakeChecker(reviews=[blocker(f"greeting is misspelled, take {n}") for n in range(4)])  # a new failure each
+    # time, so the loop protection (the same failure twice) doesn't stop it before the cap
     build.run_build(proj, tid, lambda left, settings: maker, preflight_runner=good_probe)
     assert _check(proj, tid, maker, checker) == "disputed"
     assert len(checker.briefs) == 4 and len(maker.goals) == 4  # the first check, then 3 reworks
@@ -314,3 +315,19 @@ def test_second_eyes_answer_is_pinned_each_finding_with_its_kind_and_what_it_cit
         "additionalProperties": False,
     }
     assert set(claude.BLIND_SCHEMA["required"]) == {"verdict", "findings", "not_looked_at"}
+
+
+def test_the_same_failure_twice_in_a_row_stops_and_says_what_keeps_failing(repo):
+    """Loop protection, in every budget mode: another rework would buy the same result."""
+    from parallax import budgets, decide
+    proj, tid = _approved(repo)
+    budgets.choose(proj, "none")  # no limit: only the loop protection stops it
+    maker = ScriptedAgent(steps=[("write", "README.md", "x\n")])
+    checker = FakeChecker(reviews=[blocker("greeting is misspelled")])
+    build.run_build(proj, tid, lambda left, settings: maker, preflight_runner=good_probe)
+    assert _check(proj, tid, maker, checker) == "disputed"
+    assert len(checker.briefs) == 2 and [e["data"]["cycle"] for e in proj.ledger.entries() if e["kind"] == "rework.started"] == [1]
+    [item] = proj.inbox()
+    assert item["reason"] == "the same check failed the same way twice in a row: blocker README.md:3: greeting is misspelled"
+    dec = decide.decision(proj, tid)
+    assert dec.kind == "loop" and dec.recommend == "send back" and [o.name for o in dec.options] == ["send back", "accept", "drop"]

@@ -66,6 +66,7 @@ WHY_HUMAN = {  # one short sentence per kind: why code stopped instead of decidi
     "turns": "Maker used every turn it had, and more turns may just be more of the same",
     "budget": "the budget you named is over your policy's limit, and only you can spend past it",
     "tool": "a program the build needs isn't installed where Parallax can find it, and only you can install it",
+    "loop": "running it again would buy the same result, so what to change is yours",
 }
 
 
@@ -173,6 +174,10 @@ def decision(project: Project, task_id: str) -> Decision | None:
                         [Option("remove", "the test is wrong: it's taken out of this task, and the check goes on", True),
                          Option("reject", "the app is wrong: Focus redrafts the intent and plan from your reason", True),
                          DROP], "reject", "Ready", item)
+    if stage == "check" and d.get("loop"):  # the loop protection, in every budget mode
+        return Decision("loop", "The same check failed the same way twice in a row: send it back with a note, or accept it as it is?",
+                        [SEND_BACK, Option("accept", "accepts the risk and makes it Ready", True), DROP],
+                        "send back", "Ready", item)
     if stage == "check" and why.startswith("the check still fails after"):
         return Decision("rework", "The check kept failing after every rework: send it back with a note, or accept it as it is?",
                         [SEND_BACK, Option("accept", "accepts the risk and makes it Ready", True), DROP],
@@ -190,7 +195,7 @@ def decision(project: Project, task_id: str) -> Decision | None:
     if d.get("over_limit"):  # a budget you named, over the limit: one question, no redraft (786e71)
         named, cap = budgets.money(d["named"]), budgets.money(d["limit"])
         extra = {"named": d["named"], "limit": d["limit"]}
-        if d["named"] > float(project.policy.launch["auto_launch_usd"]) + 0.005:  # one answer, not a launch question after
+        if d["named"] > budgets.launch_limit(project) + 0.005:  # one answer, not a launch question after
             return Decision("budget", f"Your budget of {named} is over the {cap} limit for {d['size']} tasks: "
                                       f"allow {named} and launch it, or use {cap}?",
                             [Option("allow and launch", f"allows {named} for this task only and launches it once the plan "
@@ -313,7 +318,7 @@ def apply(project: Project, task_id: str, name: str, reason: str = "", spawn: Ca
         project.resolve(dec.item["id"], True, said)
     elif name == "accept":
         project.resolve(dec.item["id"], True, said)
-        if dec.kind in ("rework", "checker"):
+        if dec.kind in ("rework", "checker", "loop"):
             return f"accepted the risk on {task_id}. it's Ready: parallax accept {task_id} commits it."
     elif dec.item:  # retry, plan
         project.resolve(dec.item["id"], True, said)

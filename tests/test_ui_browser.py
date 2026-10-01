@@ -15,7 +15,7 @@ playwright = pytest.importorskip("playwright.sync_api", reason="needs Playwright
 from playwright.sync_api import expect, sync_playwright  # noqa: E402
 
 from fakes import FakeChecker, FakeDrafter, ScriptedAgent, good_probe, junit_runner  # noqa: E402
-from parallax import build, lifecycle, pilot, preflight, views  # noqa: E402
+from parallax import budgets, build, lifecycle, pilot, preflight, views  # noqa: E402
 from parallax.agents.base import Review  # noqa: E402
 from parallax.core import Project  # noqa: E402
 from parallax.ui import ERROR_MESSAGE, UI  # noqa: E402
@@ -45,7 +45,9 @@ def proj(repo, monkeypatch):
     import subprocess
     subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "readme"], check=True)
-    return Project.init(repo)
+    proj = Project.init(repo)
+    budgets.choose(proj, "ask")  # answered: the spending question has its own tests below
+    return proj
 
 
 @pytest.fixture
@@ -415,6 +417,33 @@ def test_a_missing_program_shows_on_the_page_with_its_fix(browser, proj):
     pg.reload()
     expect(pg.locator("#queue")).to_be_visible()
     expect(note).to_be_hidden()
+    ctx.close()
+    app.close()
+
+
+def test_the_first_open_asks_how_to_handle_spending_once_and_it_can_change(browser, repo):
+    make_key()
+    fresh = Project.init(repo)  # init wasn't in a terminal, so nobody has answered yet
+    app = UI(fresh.root, port=0, find=lambda tool: f"/usr/bin/{tool}")
+    threading.Thread(target=app.server.serve_forever, daemon=True).start()
+    ctx = browser.new_context()
+    pg = ctx.new_page()
+    pg.goto(app.url)
+    box = pg.locator("#budget")
+    expect(box).to_be_visible(timeout=WAIT)
+    expect(box.locator("h2")).to_have_text("How should Parallax handle spending?")
+    expect(pg.locator("#budget-ask")).to_have_text("Ask me before a task goes over a limit")
+    pg.locator("#budget-ceiling").click()
+    expect(box).to_be_hidden(timeout=WAIT)
+    assert 'mode = "ceiling"' in (repo / "parallax.policy.toml").read_text()
+    expect(pg.locator("#idle")).to_contain_text("Spending: keep going, and stop only at $25 a task.")
+    pg.reload()
+    expect(pg.locator("#queue")).to_be_visible()
+    expect(box).to_be_hidden()  # asked once
+    pg.locator("#budget-change").click()
+    expect(pg.locator("#budget-ceiling")).to_have_attribute("aria-pressed", "true")
+    pg.get_by_role("button", name="Keep it as it is").click()
+    expect(box).to_be_hidden()
     ctx.close()
     app.close()
 

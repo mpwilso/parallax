@@ -152,7 +152,7 @@ def test_each_case_is_scored_by_the_hidden_tests_and_second_eye_against_them(
     assert r["cost_usd"] > 0 and r["seconds"] > 0
     assert (r["seconds_to_ready"] is not None) == (end == "ready")
     if end == "needs you":
-        assert "the check still fails after 3 rework cycles" in r["decisions"][0]
+        assert "the same check failed the same way twice in a row" in r["decisions"][0]  # the loop protection
     assert said[-1].startswith(f"[1/1] calc-1: {end}, hidden tests {hidden}, Second Eye {judgment}")
 
     header = json.loads((out / "run.json").read_text())

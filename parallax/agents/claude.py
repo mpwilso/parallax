@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import re
 import tempfile
 from pathlib import Path
@@ -171,6 +172,11 @@ async def _final_result(sdk, options, prompt: str, agent: str):
     return result
 
 
+def _limit(usd: float | None) -> float | None:
+    """A budget for the SDK: None means no limit (budget mode none), never infinity."""
+    return None if usd is None or math.isinf(usd) else usd
+
+
 class ClaudeAgent:
     def __init__(self, model: str = DEFAULT_MODEL, max_turns: int | None = None,
                  max_budget_usd: float | None = None, settings: str | None = None):
@@ -179,7 +185,7 @@ class ClaudeAgent:
         self.sdk = _load_sdk()
         self.model = model
         self.max_turns = max_turns
-        self.max_budget_usd = max_budget_usd
+        self.max_budget_usd = _limit(max_budget_usd)
         self.settings = settings
 
     def run(self, goal: str, cwd: Path, permission_fn: PermissionFn, stage: str = "build",
@@ -247,7 +253,7 @@ class ClaudeUITester:
 
     def __init__(self, model: str = DEFAULT_MODEL, max_budget_usd: float | None = None, max_turns: int = 80):
         self.sdk = _load_sdk()
-        self.model, self.max_budget_usd, self.max_turns = model, max_budget_usd, max_turns
+        self.model, self.max_budget_usd, self.max_turns = model, _limit(max_budget_usd), max_turns
 
     def run(self, goal: str, cwd: Path, server: dict, allowed) -> AgentResult:
         return asyncio.run(self._run(goal, cwd, server, allowed))
@@ -322,7 +328,7 @@ class ClaudeAsker:
     def __init__(self, model: str = DEFAULT_MODEL, max_budget_usd: float | None = None):
         self.sdk = _load_sdk()
         self.model = model
-        self.max_budget_usd = max_budget_usd
+        self.max_budget_usd = _limit(max_budget_usd)
 
     def ask(self, system: str, prompt: str, schema: dict) -> tuple[dict, float]:
         data, cost = asyncio.run(_structured(self.sdk, self.model, system, prompt, schema, CheckerError, self.max_budget_usd))
@@ -333,7 +339,7 @@ class ClaudeChecker:
     def __init__(self, model: str = DEFAULT_MODEL, max_budget_usd: float | None = None):
         self.sdk = _load_sdk()
         self.model = model
-        self.max_budget_usd = max_budget_usd
+        self.max_budget_usd = _limit(max_budget_usd)
 
     def check(self, brief: str) -> Review:
         """The M10 blind check: exactly the brief, one tool-less turn."""
