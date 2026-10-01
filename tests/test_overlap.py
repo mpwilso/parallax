@@ -23,6 +23,12 @@ def test_the_newer_task_names_the_older_one_that_changes_the_same_file(repo, mon
     monkeypatch.chdir(repo)
     assert main(["inbox"]) == 0
     assert f"        {said}\n" in capsys.readouterr().out
+    assert main(["show", second]) == 0  # the terminal's card says it too, citing where the other task's files come from
+    staged = [e for e in proj.ledger.entries() if e["kind"] == "check.staged" and e["data"]["task"] == first][-1]
+    out = capsys.readouterr().out
+    assert f"- {said} (ledger {staged['id']})\n" in out
+    assert not [f for f in views.card(proj, second)["found"] if f["text"].startswith("Heads-up")]  # shown once, above
+    assert main(["show", first]) == 0 and "Heads-up" not in capsys.readouterr().out
 
 
 def test_it_never_blocks_and_ends_once_the_older_task_is_merged(repo):

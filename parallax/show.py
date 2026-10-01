@@ -198,7 +198,7 @@ def lead(why: str) -> str:
 
 
 def _decision(project: Project, task_id: str, dec, found: list[str], gaps: list[tuple[str, str]],
-              changed: list[str] = (), extra: list[str] = ()) -> str:
+              changed: list[str] = (), extra: list[str] = (), heads: list[str] = ()) -> str:
     """One Decision needed: the problem up top, the question and its options, then the evidence."""
     options = [f"{o.name}: {o.does}" + (" (needs a reason)" if o.needs_reason else "") for o in dec.options]
     if dec.item:
@@ -224,6 +224,7 @@ def _decision(project: Project, task_id: str, dec, found: list[str], gaps: list[
             + (f" (ledger {dec.extra['asked']})" if dec.extra.get("asked") else " (Unverified)")]
         gaps = [(f"{doc}.md says: {text}", f"docs/tasks/{task_id}/{doc}.md:{n} not looked at: {text}")
                 for doc, n, text in lifecycle.gaps(project, task_id, ("intent", "plan"))]
+    found = list(heads) + list(found)  # another open task changes the same files: first, as on the card
     who = "the checker" if dec.item else "the drafters"  # a plan under review hasn't met the checker yet
     return lint.shaped("Decision needed", bottom, gaps, _next(task_id, dec), found, changed, who,
                        list(extra), decisions=decide.lines(dec), details=options + _files(dec))
@@ -255,8 +256,10 @@ def report(project: Project, task_id: str) -> str:
         if status == "drafting":
             return lint.report("FYI", f"Task {task_id} is drafting.", "nothing", "nothing waits on you; parallax stop ends it.")
         return lifecycle.report(project, task_id)
+    from .overlap import cited
+    heads = cited(project, task_id)  # the heads-up the card and parallax inbox show
     if dec is not None and dec.item is None:
-        return _decision(project, task_id, dec, [], [])
+        return _decision(project, task_id, dec, [], [], heads=heads)
 
     tests = _last(entries, "tests.recorded")
     verdict = _last(entries, "verdict.recorded", stage="check")
@@ -273,11 +276,11 @@ def report(project: Project, task_id: str) -> str:
         if dec.item and not _last(_attempt(entries, task_id), "verdict.recorded", stage="check"):  # it stopped before the checker: say so, never "nothing"
             gaps = gaps + [("the plan's tests and Second Eye, which haven't run",
                             f"not looked at: the plan's tests and Second Eye (the blind checker) haven't run (ledger {dec.item['id']})")]
-        return _decision(project, task_id, dec, found, gaps, changed, boundary + findings)
+        return _decision(project, task_id, dec, found, gaps, changed, boundary + findings, heads)
     if status == "ready":
         from .staledocs import card_lines  # protected docs this change makes wrong: Maker can't, so you update them
         stale = card_lines(lifecycle._read(project, task_id, "plan"), task_id)
-        found = _the_work(project, task_id, staged) + stale + found + _outcomes(project, task_id, tests)
+        found = heads + _the_work(project, task_id, staged) + stale + found + _outcomes(project, task_id, tests)
         boundary = boundary + _rails(_attempt(entries, task_id), tests)
         passed = tests["data"]["passed"] if tests else 0
         total = tests["data"]["total"] if tests else 0

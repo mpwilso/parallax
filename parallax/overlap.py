@@ -47,6 +47,17 @@ def of(project: Project, task_id: str) -> list[dict]:
     return out
 
 
+def source(project: Project, task_id: str) -> str:
+    """Where the other task's files come from, for a citation: its staged check, or its plan."""
+    staged = [e for e in status.attempt(project.ledger.entries(), task_id) if e["kind"] == "check.staged"]
+    return f"ledger {staged[-1]['id']}" if staged else f"docs/tasks/{task_id}/plan.md:1"
+
+
+def cited(project: Project, task_id: str) -> list[str]:
+    """This task's heads-ups as Found lines, for parallax show: the same words as the card and the inbox."""
+    return [f"{line(o)} ({source(project, o['task'])})" for o in of(project, task_id)]
+
+
 def line(o: dict) -> str:
     files = ", ".join(o["files"][:3]) + (f" and {len(o['files']) - 3} more" if len(o["files"]) > 3 else "")
     return f"Heads-up: task {o['task']} ({o['title']}), {o['state']}, also changes {files}."

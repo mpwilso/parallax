@@ -25,12 +25,15 @@ Agents do the work; the human makes the calls. The maker builds in a sandbox, a 
 - Runs locally in WSL2 (or macOS/Linux). The server is stdlib Python on 127.0.0.1; the user usually opens it from a Windows browser at `localhost`.
 - A token in the URL fragment unlocks the page; a strict CSP forbids inline script and style.
 - The same data is in the terminal: `parallax inbox`, `parallax show <task>`, `parallax diff <task>`. The card in the UI is exactly `parallax show`.
-- Tasks move through drafting, building, checking, then Ready or needs you, then done. Several can run at once. Reject redrafts the task from the user's reason; drop ends it.
+- Tasks move through drafting, building, checking, then Ready or needs you, then done. Several can run at once. Reject redrafts the task from the user's reason, and a send-back changes only what the reason names: code checks the redraft against the version sent back. Drop ends it.
+- Accept and merge shows the task as Merging from the click until it lands or stops: the step it's on, how long it has run, and how long it usually takes (the median of the last five pre-merge test runs; Parallax's own suite takes about 4 minutes). A conflict leaves the base branch where it was, and the card lists the git commands to finish the merge by hand: check out the task's branch, merge the base branch in, fix and add the files, `git commit --no-edit`, then `git merge --ff-only` the task's branch from the base branch. A merged card is built from the ledger and the repo's commits, so it no longer needs the task's worktree.
 - Everything the user reads follows one output shape (docs/parallax.md): Type, Bottom line, Not looked at, Next, then Decisions, Changed since last time, Found, Recommended, Details. Header under 40 words, body under 150.
 
 ## Capabilities and Constraints
 
 - Intake box, board of tasks by state, one card per task, accept, reject with a reason (redraft or drop), answer a Decision needed, view the diff, intent and plan, live updates, keyboard use.
+- A budget named over the policy's limit for the task's size asks once: allow it for this task, or use the limit. When it's also over auto_launch_usd, "Allow $8 and launch" (with the amount) answers the budget and the launch together, for the plan on the card; a changed plan asks again.
+- When a new task's scope names a file an older open task also changes, the newer task's card, `parallax inbox` and `parallax show` give a heads-up naming the other task and the files. It never blocks.
 - A protected doc (CLAUDE.md, REVIEW.md, docs/parallax.md and the like) is one Maker can't edit. When a change makes one wrong, Focus's plan lists it under "Docs you'll need to update", the Ready card says to update it yourself before merging and why, and Second Eye treats a stale one as a note, never a block.
 - When the tests, Reticle's tests or Field's flows fail, their whole output is kept as a file in the task's data folder, with its path and hash in the ledger. The card's failure line links to it (shown only while the hash matches), and the Ask box can read it.
 - No merge without your click: the only merge is Accept and merge, local, never pushed; a fast-forward, or the base branch merged in and the test gate re-run when it has moved on. Rejects, overrides and accepted risks need a reason; approvals don't.

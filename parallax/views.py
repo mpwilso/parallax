@@ -207,7 +207,8 @@ def _card(project: Project, task_id: str) -> dict:
         gaps = [i for i in items if GAP.search(i)]
         report["sections"][where] = [i for i in items if i not in gaps]
         unseen = [GAP.split(i, 1)[-1] for i in gaps] or unseen
-    found = [_cited(i) for i in report["sections"].get("Found", []) if not i.startswith("The work: ")]  # the title says it
+    found = [_cited(i) for i in report["sections"].get("Found", [])
+             if not i.startswith(("The work: ", "Heads-up: task "))]  # the title says it; the heads-up shows above
     for f in found:
         f["text"] = re.sub(r"; parallax diff \w+ shows it\.$", ".", f["text"])  # the page has the change a click away
     if files:  # the table under the question says it, file by file
