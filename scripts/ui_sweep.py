@@ -42,6 +42,8 @@ def project():
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "init"], check=True)
     gates.make_key()
     proj = Project.init(repo)
+    from parallax import budgets, costs
+    budgets.choose(proj, "ask")  # the shots show tasks, not the first-run spending question
     build._spawn = lambda argv, env, cwd, log: os.getpid()  # a live process, so the working task stays working
 
     class Writer:  # Reticle's test of what was asked: fails on the typo, passes once it's fixed
@@ -86,8 +88,10 @@ def project():
     for _ in range(2):
         proj.ledger.append("tests.recorded", "parallax", "", task=stuck, tree="t", exit=1,
                            per_file={"tests/test_readme.py": [1, 3, 0]}, passed=1, total=3, harness_reset=[])
-    proj.ledger.append("stuck.raised", "parallax", "the budget cap ran out ($2.30 of $2.20 estimated) while rework was fixing tests",
-                       task=stuck, budget=True)
+    cap = costs.budget(proj, stuck, lifecycle.plan_data(proj, stuck))[0]  # Maker spends past it in rework
+    proj.ledger.append("maker.finished", "maker", "", task=stuck, stage="rework", status="done",
+                       cost_usd=round(cap - costs.spent(proj, stuck) + 0.10, 2))
+    costs.stop_at_cap(proj, stuck, cap, "rework was fixing tests")  # the card's words come from today's code
     proj.ledger.append("builder.finished", "parallax", "", task=stuck, status="stuck")
     working = pilot.intake(proj, "adding a --help flag")["task"]
     pilot.draft_until_fit(proj, working, FakeDrafter(docs("adding a --help flag", "calc --help prints the usage.")))

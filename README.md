@@ -61,7 +61,7 @@ You can start work from the app or the terminal, and pick it back up several way
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/ui-runs/final-ui/ready-dark.png">
-  <img src="docs/ui-runs/final-ui/ready.png" alt="A Ready card: the stage strip with the last agent's portrait in its tile, the bottom line, one question with Accept, Accept and merge, Reject and Drop, what wasn't looked at, the evidence in plain sentences with quiet ledger links, and the Ask box" width="1280">
+  <img src="docs/ui-runs/final-ui/ready.png" alt="A Ready card: the stage strip with the last agent's portrait in its tile, the bottom line, one question with Accept, Accept and merge, Reject and Drop, what wasn't looked at, and the evidence in plain sentences with quiet ledger links, beside the list of tasks" width="1280">
 </picture>
 
 **Ready** means the listed checks passed: the plan's tests ran on the exact reviewed tree, the card says for each outcome in the intent which test that ran covers it or that none does, and Second Eye found nothing blocking. It does not mean the code is bug-free. **Needs you** means one decision only you can make; the card says whose call it is and why a person has to make it. Anything that sends work back, drops it or accepts a risk asks for a one-line reason, and Focus redrafts from it.
