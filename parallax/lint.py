@@ -287,6 +287,11 @@ def lint_lifecycle(text: str, doc: str) -> list[Problem]:
             problems.append((1, "intent's 'budget:' must be a dollar amount, like 4.00"))
         if not outcomes_of(text):
             problems.append((1, "intent's '## Outcome' needs a numbered list: 1. ..., 2. ..."))
+        for j, line in _section_lines(lines, _sections(lines, 0), "Outcome"):  # fb461d: a redraft dropped this marker
+            m, terms = OUTCOME_ITEM.match(line), outside_page_terms(line)
+            if m and terms and not UNTESTABLE.search(line):
+                problems.append((j + 1, f"outcome {m.group(1)} names \"{terms[0]}\", which happens outside the page, where no "
+                                        "test browser can see or drive it: end the outcome with (not browser-testable)"))
         for n, kind in outcome_kinds(text).items():
             if kind is None:
                 problems.append((1, f"outcome {n} needs 'asked:' (the person's words state or clearly imply it) or "
@@ -418,9 +423,15 @@ def browser_untestable(intent: str) -> set[str]:
             if (m := OUTCOME_ITEM.match(line)) and UNTESTABLE.search(line)}
 
 
+_IN_PAGE = r"(?![\s_-]*(?:page|panel|list|tab|tabs|settings|screen|area|section|count|badge))"  # a page about notifications is in the page
 OUTSIDE_PAGE = re.compile(  # OS-level phrases only: an in-page toast, alert or banner is testable
-    r"(?i)\b(?:(?:desktop|os|system|native|push)[\s_-]*notifications?"
-    r"|notifications?[\s_-]*(?:centre|center)"
+    r"(?i)\b(?:(?:desktop|os|system|native|push|browser)[\s_-]*notifications?" + _IN_PAGE +
+    r"|(?:shows?|showing|shown|sends?|sending|sent|fires?|firing|raises?|raising|pops?[\s_-]*up|popping[\s_-]*up)"
+    r"[\s_-]+(?:(?:a|an|the|one|its)[\s_-]+)?notifications?" + _IN_PAGE +
+    r"|(?:clicks?|clicking|clicked|taps?|tapping|tapped|opens?|opening|opened)[\s_-]+(?:on[\s_-]+)?"
+    r"(?:(?:a|an|the|that|its)[\s_-]+)?notifications?" + _IN_PAGE +
+    r"|notifications?[\s_-]*(?:centre|center|permission)"
+    r"|asks?[\s_-]+(?:the[\s_-]+(?:person|user)[\s_-]+)?for[\s_-]+(?:\w+[\s_-]+)?permission"
     r"|permission[\s_-]*(?:prompt|dialog|request)"
     r"|(?:file|folder|save|open|print|upload|download)[\s_-]*(?:dialog|picker|chooser)"
     r"|system[\s_-]*tray|menu[\s_-]*bar[\s_-]*icon)\b")

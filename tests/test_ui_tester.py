@@ -400,8 +400,9 @@ def test_a_tester_that_reaches_the_cap_stops_the_task_and_nothing_else_runs(proj
 # behavior outside the page: never a flow (c08f9e: OS notifications failed every flow, rework to the cap) ------
 
 NOTIFY = "2. inferred: A desktop notification appears when it's done, and a click on it opens the app. (not browser-testable)"
-UNMARKED = "2. inferred: A desktop notification appears when it's done."  # the same thing, unmarked by Focus
-MIXED = "2. inferred: The page shows Done when it finishes, and a desktop notification appears."
+# outside the page, in words the draft check can't see, so they reach Field unmarked: the flow is what says it
+UNMARKED = "2. inferred: You hear about it when it's done, even with the page in the background."
+MIXED = "2. inferred: The page shows Done when it finishes, and you hear about it with the page in the background."
 
 
 def untestable_docs(flows, outcome=NOTIFY):

@@ -546,3 +546,52 @@ def test_a_draft_with_an_angle_bracket_placeholder_is_rewritten_before_it_can_be
     assert len(redrafts) == 2  # the intent and the plan each went back to Focus with the problem
     for doc in ("intent", "plan"):
         assert not placeholders(lifecycle._read(proj, tid, doc))
+
+
+# outcomes outside the page carry the marker, through every redraft (fb461d) --------------------------------
+
+@pytest.mark.parametrize("text,outside", [
+    ("the page shows a browser notification", True), ("show a notification", True), ("clicking the notification", True),
+    ("the page asks for notification permission once", True), ("asks for permission", True),
+    ("Opening the notification takes the person to the card", True),
+    ("the notifications page", False), ("a toast", False), ("an alert banner", False), ("a dialog asks you to confirm", False),
+])
+def test_outside_the_page_wording_is_matched_and_in_page_wording_is_not(text, outside):
+    assert bool(lint.outside_page_terms(text)) is outside, lint.outside_page_terms(text)
+
+
+NOTIFY_OUTCOME = "2. asked: When a task becomes Ready, the page shows a browser notification that names the task."
+
+
+def _with_outcome(line, budget=None):
+    d = docs()
+    d["intent"] = d["intent"].replace("1. asked: A new user on WSL can follow them.", "1. asked: A new user on WSL can follow them.\n" + line)
+    if budget:
+        d["intent"] = d["intent"].replace("scope:", f"budget: {budget}\nscope:")
+    d["plan"] = d["plan"].replace('covers = { "1" = ["tests/test_readme.py"] }',
+                                  'covers = { "1" = ["tests/test_readme.py"], "2" = ["tests/test_readme.py"] }')
+    return d
+
+
+def test_an_outcome_outside_the_page_without_the_marker_fails_the_draft_check():
+    unmarked = _with_outcome(NOTIFY_OUTCOME)["intent"]
+    reasons = [m for _, m in lint.lint_lifecycle(unmarked, "intent")]
+    assert ('outcome 2 names "browser notification", which happens outside the page, where no test browser can see or drive '
+            "it: end the outcome with (not browser-testable)") in reasons
+    assert not lint.lint_lifecycle(_with_outcome(NOTIFY_OUTCOME + " (not browser-testable)")["intent"], "intent")
+
+
+def test_a_redraft_that_drops_the_marker_goes_back_to_focus(proj, monkeypatch):
+    """fb461d: the first draft had the marker but failed on its budget line; the redraft fixed that and
+    dropped the marker, and nothing checked. Now the third draft has to put it back."""
+    monkeypatch.setattr(build, "_spawn", lambda *a: 1)
+    first = _with_outcome(NOTIFY_OUTCOME + " (not browser-testable)", budget="about four dollars")["intent"]
+    dropped = _with_outcome(NOTIFY_OUTCOME)["intent"]
+    restored = _with_outcome(NOTIFY_OUTCOME + " (not browser-testable)")["intent"]
+    tid = pilot.intake(proj, WANT)["task"]
+    drafter = FakeDrafter({"intent": [first, dropped, restored], "plan": _with_outcome(NOTIFY_OUTCOME)["plan"]})
+    assert pilot.draft_until_fit(proj, tid, drafter) == "fit"
+    asks = [r for r in drafter.requests if "/intent.md" in r]
+    assert len(asks) == 3 and "budget:' must be a dollar amount" in asks[1]
+    assert 'outcome 2 names "browser notification"' in asks[2]  # the dropped marker, caught and sent back
+    assert lifecycle._read(proj, tid, "intent").count("(not browser-testable)") == 1
