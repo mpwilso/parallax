@@ -1,0 +1,39 @@
+{
+ "case": "pathspec-77",
+ "mode": "seeded",
+ "pr": "https://github.com/cpburnz/python-pathspec/commit/9302492483b06ca1613aa8b11cf08cef93930b12",
+ "issue": "https://github.com/cpburnz/python-pathspec/issues/77",
+ "inferred": [
+  "2",
+  "3",
+  "4",
+  "5",
+  "6"
+ ],
+ "reticle_kept": {
+  "asked": 1
+ },
+ "reticle_weak": [
+  "it fails on TypeError, not an assertion, a wait for the behavior, or a crash the request shows (startswith first arg must be bytes or a tuple of bytes, not str)"
+ ],
+ "versions": [
+  {
+   "broken": "undo the hunk at pathspec/patterns/gitwildmatch.py:316",
+   "hidden": "43 of 45 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The only code-file change is a comment typo fix (Braket to Bracket). The `elif pattern[i] == '^':` branch is unchanged context, so `^` is still handled as before (a literal), and `a[^b]c` still matches `abc`. The requested fix is not in the"
+   ],
+   "not_counted": [],
+   "reticle": "catch"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "findings": [],
+  "not_counted": [],
+  "reticle": "right"
+ },
+ "cost_usd": 0.1397,
+ "seconds": 45.9
+}

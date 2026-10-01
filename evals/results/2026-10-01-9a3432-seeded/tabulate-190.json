@@ -1,0 +1,40 @@
+{
+ "case": "tabulate-190",
+ "mode": "seeded",
+ "pr": "https://github.com/astanin/python-tabulate/commit/6c48142c0b57ea6108cb1d304b69b90b18748e45",
+ "issue": "https://github.com/astanin/python-tabulate/issues/190",
+ "inferred": [
+  "3",
+  "4",
+  "5",
+  "6",
+  "7"
+ ],
+ "reticle_kept": {
+  "asked": 2
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "flip != to == at tabulate/__init__.py:1521",
+   "hidden": "28 of 29 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The condition `if line.strip() == \"\"` is inverted. Only blank lines are kept, and each one goes through wrapper.wrap, which returns [] for an empty string. So any non-empty cell becomes an empty string. `\"123456789 bbb\\nccc\"` yields \"\" inst"
+   ],
+   "not_counted": [],
+   "reticle": "catch"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "false alarm",
+  "findings": [
+   "blocker behavior: The `if line.strip() != \"\"` filter drops blank lines inside a cell, so `\"a\\n\\nb\"` becomes `a\\nb`. This is the reporter's filter, and the outcome says to keep blank lines. Whitespace-only lines are dropped too. Previously `wrapper.wrap` on t",
+   "major behavior: An empty cell string `\"\"` gives `splitlines()` == [], so the result is still \"\" (fine). But a cell with only whitespace, or a cell that is a single line, now has the same result only if the filter does not trigger. A whitespace-only no-newl"
+  ],
+  "not_counted": [],
+  "reticle": "right"
+ },
+ "cost_usd": 0.1031,
+ "seconds": 36.4
+}

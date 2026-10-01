@@ -1,0 +1,44 @@
+{
+ "case": "tomlkit-512",
+ "pr": "https://github.com/python-poetry/tomlkit/pull/514",
+ "issue": "https://github.com/python-poetry/tomlkit/issues/512",
+ "ceiling_usd": 4.0,
+ "task": "10bc5e",
+ "end": "ready",
+ "status": "ready",
+ "hidden": "pass",
+ "hidden_detail": "80 of 80 pass (exit 0)",
+ "second_eye": "right",
+ "verdicts": [
+  {
+   "tree": "d24957941ccdacd1606403064a06b9a12e941deb",
+   "verdict": "pass",
+   "hidden": "pass",
+   "judgment": "right"
+  }
+ ],
+ "cost_usd": 1.3257,
+ "seconds_to_ready": 265.0,
+ "touches": 1,
+ "decisions": [],
+ "inferred": [
+  "3",
+  "4",
+  "5"
+ ],
+ "reticle": "right",
+ "reticle_verdicts": [
+  {
+   "tree": "d24957941ccdacd1606403064a06b9a12e941deb",
+   "verdict": "pass",
+   "hidden": "pass",
+   "judgment": "right"
+  }
+ ],
+ "reticle_kept": 2,
+ "reticle_weak": [],
+ "reticle_cost_usd": 0.0231,
+ "reticle_false_alarm_rework_usd": 0.0,
+ "scratch": "/home/matt/.local/share/parallax/evals/runs/8e3074/tomlkit-512/repo",
+ "seconds": 258.4
+}

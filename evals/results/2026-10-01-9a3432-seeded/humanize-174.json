@@ -1,0 +1,67 @@
+{
+ "case": "humanize-174",
+ "mode": "seeded",
+ "pr": "https://github.com/python-humanize/humanize/pull/272",
+ "issue": "https://github.com/python-humanize/humanize/issues/174",
+ "inferred": [
+  "3",
+  "4",
+  "5",
+  "6"
+ ],
+ "reticle_kept": {
+  "asked": 1
+ },
+ "reticle_weak": [
+  "it passes on the base, so it doesn't show the problem"
+ ],
+ "versions": [
+  {
+   "broken": "flip == to != at src/humanize/time.py:162",
+   "hidden": "208 of 379 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The condition `if not years and days < 1` was changed to `if years != 0 and days < 1`. This inverts the check. Sub-day values with zero years (including 10799 and 10800 seconds) no longer reach the seconds, minutes and hours code. They fall",
+    "major scope: Minutes are now rounded (`round(delta.seconds / 60)`), and 119 seconds now reads 'a minute' where it read '2 minutes' before. The constraint says minutes output stays as it is. The 'an hour' return for 3570 seconds and above is also new beh",
+    "major scope: `num_months` now uses `round(days / 30.5)` instead of floor division. New 'a year' and years-increment branches were added for 12 months. This changes day, month and year output, which the constraint says must stay as it is. For example, 17"
+   ],
+   "not_counted": [],
+   "reticle": "catch"
+  },
+  {
+   "broken": "change 0 to 1 at src/humanize/time.py:162",
+   "hidden": "209 of 379 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The sub-day guard was changed from `not years and days < 1` to `years == 1 and days < 1`. It should still be `years == 0`. Now a value like 10799 seconds (years 0, days 0) skips the seconds, minutes and hours code and falls into the `elif y",
+    "major scope: `num_months = round(days / 30.5)` replaces floor division. This changes month output. For example, 16 days now gives \"a month\" instead of \"16 days\", and 350 days gives \"a year\". The extra `num_months == 12` branches and the 1-year-plus-mont",
+    "major scope: Minutes are now rounded. For example, 90 seconds gives \"2 minutes\" where it gave \"a minute\", and 119 seconds changes the same way. Minute output must stay as it is today."
+   ],
+   "not_counted": [],
+   "reticle": "catch"
+  },
+  {
+   "broken": "flip < to <= at src/humanize/time.py:162",
+   "hidden": "364 of 379 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: Changing `days < 1` to `days <= 1` sends timedeltas of one day plus some hours into the seconds branch. Exactly 86400 seconds has `delta.seconds == 0`, so it reads as a sub-second value (\"a moment\"), not \"a day\". 1 day 5 hours reads \"5 hour",
+    "blocker behavior: Minutes changed from floor to rounding. 90 to 119 seconds now read \"2 minutes\" (before: \"a minute\"), and 3570 seconds or more now read \"an hour\". Minute output must stay as it is.",
+    "blocker behavior: Month and year logic changed: `num_months` now uses `round`, and new branches return \"a year\" or \"2 years\" for 12 months. Day, month and year output differs from today (e.g. 16 days now reads \"a month\"). Months and years must stay as they a"
+   ],
+   "not_counted": [],
+   "reticle": "miss"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "false alarm",
+  "findings": [
+   "blocker behavior: The minutes branch was rewritten with round(). 90 to 119 seconds used to read 'a minute' and now read '2 minutes'. Every minute count above that is also rounded instead of floored, and 3570 seconds or more now reads 'an hour'. The constrain",
+   "blocker behavior: num_months changed from floor to round(days / 30.5). Day and month output changes: 46 days now reads 'a month' where it used to read '46 days', and about 350 days or more now reads 'a year'. The years==1 branch also changes. The constraint "
+  ],
+  "not_counted": [],
+  "reticle": "right"
+ },
+ "cost_usd": 0.1696,
+ "seconds": 71.0
+}

@@ -1,0 +1,61 @@
+{
+ "case": "tomlkit-430",
+ "mode": "seeded",
+ "pr": "https://github.com/python-poetry/tomlkit/pull/520",
+ "issue": "https://github.com/python-poetry/tomlkit/issues/430",
+ "inferred": [
+  "4",
+  "5",
+  "6"
+ ],
+ "reticle_kept": {
+  "asked": 2
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "flip == to != at tomlkit/api.py:266",
+   "hidden": "150 of 152 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The condition is inverted. `len(keys) != 1` returns `keys[0]`, so a one-element list falls through to `DottedKey` (the bug stays), and a list of two or more returns only its first key, dropping the rest. An empty list raises IndexError. It "
+   ],
+   "not_counted": [
+    "major missing_test: No test covers `key([\"my_key\"])` equality or the `in doc` check."
+   ],
+   "reticle": "catch"
+  },
+  {
+   "broken": "change 1 to 2 at tomlkit/api.py:266",
+   "hidden": "150 of 152 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: Off-by-one: the check is `len(keys) == 2`, not `== 1`. A one-element list like `key([\"my_key\"])` still returns a `DottedKey`, so the bug is not fixed. A two-element list like `key([\"foo\", \"bar\"])` now returns only the first `SingleKey` (\"fo"
+   ],
+   "not_counted": [
+    "major missing_test: No test covers the one-element case, the `in doc` check after append, or that two-element lists stay dotted. A test would have caught the off-by-one."
+   ],
+   "reticle": "catch"
+  },
+  {
+   "broken": "change 0 to 1 at tomlkit/api.py:267",
+   "hidden": "151 of 152 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: `return keys[1]` is an off-by-one. With one element the list only has index 0, so `key([\"my_key\"])` raises IndexError instead of returning a SingleKey. It should be `keys[0]`. The change breaks the one-element case it was meant to fix."
+   ],
+   "not_counted": [
+    "major missing_test: No test covers `key([\"my_key\"])` equality with `key(\"my_key\")` or the `in doc` check after append. A test would have caught the IndexError."
+   ],
+   "reticle": "catch"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "findings": [],
+  "not_counted": [],
+  "reticle": "right"
+ },
+ "cost_usd": 0.1459,
+ "seconds": 44.7
+}

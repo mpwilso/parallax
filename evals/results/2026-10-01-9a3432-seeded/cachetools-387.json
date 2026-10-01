@@ -1,0 +1,24 @@
+{
+ "case": "cachetools-387",
+ "mode": "seeded",
+ "pr": "https://github.com/tkem/cachetools/commit/57d2e4813d9801f97034559e22428bac6f7c6c9b",
+ "issue": "https://github.com/tkem/cachetools/issues/387",
+ "inferred": [
+  "3",
+  "4",
+  "5"
+ ],
+ "reticle_kept": {
+  "asked": 2
+ },
+ "reticle_weak": [],
+ "versions": [],
+ "real_fix": {
+  "second_eye": "right",
+  "findings": [],
+  "not_counted": [],
+  "reticle": "right"
+ },
+ "cost_usd": 0.1171,
+ "seconds": 34.7
+}

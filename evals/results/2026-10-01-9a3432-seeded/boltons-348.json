@@ -1,0 +1,37 @@
+{
+ "case": "boltons-348",
+ "mode": "seeded",
+ "pr": "https://github.com/mahmoud/boltons/pull/349",
+ "issue": "https://github.com/mahmoud/boltons/issues/348",
+ "inferred": [
+  "3",
+  "4",
+  "5",
+  "6"
+ ],
+ "reticle_kept": {
+  "asked": 2
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "undo the hunk at boltons/cacheutils.py:240",
+   "hidden": "11 of 18 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The change deletes the dict write for new keys and adds no dict write in the replacement branch. The link helpers only update the linked list and `_link_lookup`, so new keys no longer reach the underlying dict. That breaks insertion, `len()",
+    "major scope: The CI workflow change moves the Python 2.7 job into its own container job. It is unrelated to the cache fix."
+   ],
+   "not_counted": [],
+   "reticle": "catch"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "findings": [],
+  "not_counted": [],
+  "reticle": "right"
+ },
+ "cost_usd": 0.129,
+ "seconds": 44.4
+}

@@ -1,0 +1,60 @@
+{
+ "case": "boltons-337",
+ "mode": "seeded",
+ "pr": "https://github.com/mahmoud/boltons/pull/338",
+ "issue": "https://github.com/mahmoud/boltons/issues/337",
+ "inferred": [
+  "3",
+  "4",
+  "5",
+  "6",
+  "7"
+ ],
+ "reticle_kept": {
+  "asked": 2
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "undo the hunk at boltons/dictutils.py:74",
+   "hidden": "0 of 1 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: __setstate__ assumes the state is a list of (key, value) pairs. A pickle of an empty OMD made before the fix stores the instance __dict__ as its state, and that state is non-empty. Loading it now passes that dict to update_extend, which tre"
+   ],
+   "not_counted": [],
+   "reticle": "catch"
+  },
+  {
+   "broken": "undo the hunk at boltons/dictutils.py:178",
+   "hidden": "7 of 26 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The diff removes `self._clear_ll()` from `__init__` and adds no `__new__` to replace it. `OMD()` with no args now never creates `_map` or the sentinel. Calls like `add`, `__setitem__` and iteration on an empty OMD would then raise Attribute",
+    "major behavior: The new `__setstate__` expects a list of (key, value) pairs. Pickles of empty OMDs made before the fix hold a dict state (the instance `__dict__`). Loading one now calls `update_extend` on that dict, which iterates its keys and fails or giv"
+   ],
+   "not_counted": [],
+   "reticle": "catch"
+  },
+  {
+   "broken": "undo the hunk at boltons/dictutils.py:194",
+   "hidden": "25 of 26 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: Adding `__new__` only stops the AttributeError. It does not give OMD a correct pickle path. The default reduce for a dict subclass restores dict items first, using `self.items()` (one value per key, last value only), through the overridden "
+   ],
+   "not_counted": [],
+   "reticle": "miss"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "false alarm",
+  "findings": [
+   "major behavior: __setstate__ assumes the state is a list of pairs. A pickle of an empty OMD made before the fix has a dict state (the instance __dict__ with the internal linked-list fields). update_extend on that dict would add its internal field names as "
+  ],
+  "not_counted": [],
+  "reticle": "right"
+ },
+ "cost_usd": 0.1856,
+ "seconds": 91.5
+}

@@ -1,0 +1,59 @@
+{
+ "case": "tabulate-231",
+ "mode": "seeded",
+ "pr": "https://github.com/astanin/python-tabulate/pull/232",
+ "issue": "https://github.com/astanin/python-tabulate/issues/231",
+ "inferred": [
+  "3",
+  "4",
+  "5"
+ ],
+ "reticle_kept": {
+  "asked": 2
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "flip == to != at tabulate/__init__.py:105",
+   "hidden": "55 of 159 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The check is inverted. `type(value) != str and value.strip() == ...` returns False for every str, so a plain SEPARATING_LINE cell (a str) is no longer detected, and separating lines stop working. For non-str cells such as ints, floats or No",
+    "blocker behavior: The change does not touch the padding or alignment code that makes a SEPARATING_LINE row render as a malformed data row in psql. Even with the check fixed, nothing here gives the `|---------+-------|` line. The repro cannot be shown to pass"
+   ],
+   "not_counted": [],
+   "reticle": "catch"
+  },
+  {
+   "broken": "change 1 to 2 at tabulate/__init__.py:111",
+   "hidden": "155 of 159 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The row[0] check now needs len(row) >= 2. A one-column separating row such as [SEPARATING_LINE] (or a bare SEPARATING_LINE string row) used to be detected and now is not. In a single-column table it renders as a malformed data row, which is",
+    "major behavior: Only the detection helper changed. The diff shows no change to the padding or alignment code that turns a separating row into a line. A strip()-tolerant match only helps if a padded value reaches this function. From the diff alone I can't c"
+   ],
+   "not_counted": [],
+   "reticle": "catch"
+  },
+  {
+   "broken": "undo the hunk at tabulate/__init__.py:104",
+   "hidden": "5 of 159 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The diff calls `_is_separating_line_value`, but nothing in the diff defines it. If it does not already exist, `_is_separating_line` raises NameError on every call, which breaks all tables, including ones with no separating lines. Even if it"
+   ],
+   "not_counted": [
+    "major missing_test: No regression test is added for the psql repro table. No test covers a separating line in a table with headers or in one without headers."
+   ],
+   "reticle": "catch"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "findings": [],
+  "not_counted": [],
+  "reticle": "right"
+ },
+ "cost_usd": 0.161,
+ "seconds": 76.1
+}
