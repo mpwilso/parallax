@@ -54,37 +54,15 @@ You can start work from the app or the terminal, and pick it back up several way
 ## Day to day
 
 1. **Start it.** In your repo, run `parallax ui` and open the link it prints. The link stays the same between runs.
-2. **Type the task** into the box at the top and press Enter. That's all. If what you paste reads like a list of build steps (numbered steps naming branches, commits and batches) rather than one task, the box says so first: "This looks like a list of build steps. Send it as one task anyway?" It's a heads-up: you can send it anyway.
-3. **Watch the list.** Waiting on you: the only part that needs you, riskiest first. Working: which agent has each task. Each row shows its stages, what it has spent against its cap, and for how long. Done: folded away, with each task's outcome, cost and touches. With no card open, the page says how it's going.
-4. **Open a card.** It shows the stages, the bottom line, the one question with its options and which one is recommended, what nobody looked at, and the evidence, with the change, the intent and the plan one click away. Ask about the task in the box on the card: a model answers from that task's record only, and can't change anything.
-5. **Accept, or accept and merge.** Accept commits the reviewed change to the task's branch and shows the merge command, which you run. Accept and merge also lands it on your base branch here: a fast-forward when your base branch is still where the task began, or your base branch merged into the task first when it has moved on. Either way your project's tests run on the exact commit your base branch would become (`[merge] test_command` in the policy; Parallax's own is `scripts/test.sh`), and that gate is the only check. If they fail, or the merge hits a conflict, your base branch doesn't move, and the card says why and leaves the merge to you. Parallax never merges without your click, and never pushes.
-6. **Merging.** From your click on Accept and merge until it lands or stops, the task shows as Merging. The card says which step it's on (merging your base branch in, or running the tests), how long it has run, and how long it usually takes here: the median of the last five pre-merge test runs. Parallax's own suite takes about 4 minutes. The buttons stay greyed out until it's done.
-7. **A conflict.** If merging your base branch in hits a conflict, nothing moves, and the card gives you the commands to finish it in your repo's folder: `git checkout` the task's branch, `git merge` your base branch, fix the files it names and `git add` them, `git commit --no-edit`, then `git checkout` your base branch and `git merge --ff-only` the task's branch.
-8. **Stop, at any stage.** Every running card has Stop: while Focus drafts, Reticle writes tests, Maker builds, the checks and Field run, and during the pre-merge test run. It asks once, then that task's agents and processes end within a few seconds, recorded as your action with what it had spent. A stopped task waits on you: resume it from where it stopped (finished stages aren't done again), send it back with a reason, or drop it. Stopping during the pre-merge test run never moves your base branch.
-9. **After the merge** Parallax removes the task's worktree and deletes its branch, once your next command sees the accepted commit in your branch. The card stays readable: it's built from the ledger and the commits in your repo. Dropping a task keeps its work as a patch in the task's data folder (`~/.local/share/parallax/tasks/`), then removes its worktree and branch.
-
-A task's drafts (intent, plan, Reticle's tests, Field's flows) live in that data folder too, never in your checkout. Accept still writes `docs/tasks/<task>/` (intent, plan and record) into the task's commit.
+2. **Type the task** into the box at the top and press Enter. That's all.
+3. **Watch the list.** Waiting on you: the only part that needs you, riskiest first. Working: which agent has each task, and what it has spent against its cap.
+4. **Open a card.** It shows the bottom line, the one question with its options and which one is recommended, what nobody looked at, and the evidence. Ask about the task in the box on the card: a model answers from that task's record only, and can't change anything.
+5. **Accept, or accept and merge.** Accept commits the reviewed change to the task's branch and shows the merge command, which you run. Accept and merge also lands it on your base branch, once your project's tests pass on the exact commit your base branch would become; Parallax never merges without your click, and never pushes.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/ui-runs/final-ui/ready-dark.png">
   <img src="docs/ui-runs/final-ui/ready.png" alt="A Ready card: the stage strip with the last agent's portrait in its tile, the bottom line, one question with Accept, Accept and merge, Reject and Drop, what wasn't looked at, the evidence in plain sentences with quiet ledger links, and the Ask box" width="1280">
 </picture>
-
-**Spending, chosen once.** The first time Parallax runs in a repo (`parallax init` in a terminal, or else the first time you open `parallax ui`), it asks one question: how should Parallax handle spending? Your answer goes in `parallax.policy.toml` as `[budget] mode`:
-
-- **Ask me before a task goes over a limit** (`ask`, the default): each task has a cap, at most $5 for a small task and $20 for a large one, and it stops and asks before going over.
-- **Keep going, and stop only at $25 a task** (`ceiling`; set the amount with `ceiling_usd`).
-- **No limit** (`none`): it never stops for money.
-
-A budget you name in the request always wins, and above the mode's limit it asks you once. In every mode, no limit included, a task stops and asks when the same check fails the same way twice in a row, and says what keeps failing. The overview shows the current mode; change it with `parallax budget ask`, `ceiling` or `none`, or the button under the overview. The dollars are Claude Code's estimates at API list prices: on a Claude subscription they measure how much a task used, not a charge.
-
-A few cards tell you something before you have to ask:
-
-- **A budget over the limit.** If your request names a budget above the policy's limit for its size (`small_cap_usd` or `large_cap_usd`), Focus drafts once and the card asks one question: allow that budget for this task only, or use the limit. Nothing is redrafted to fit. When the budget is also over `auto_launch_usd`, the first choice is "Allow $8 and launch" (with your amount): one answer covers the budget and the launch of the plan you can read on the card. If that plan changes before it launches, the card asks again.
-- **Overlapping tasks.** When a new task's scope names a file that an older open task also changes (one waiting on you, Ready, or accepted but not merged), the newer task's card, `parallax inbox` and `parallax show` name the other task and the files. It's a heads-up: it never blocks anything.
-- **A send-back changes only what you name.** When you reject at Ready or send a task back, Focus gets the version it drafted with your reason and is told to change only what the reason asks. Code then compares the intent's outcomes, constraints and scope with that version; anything removed or rewritten that your reason doesn't mention goes back to Focus to restore.
-- **Docs you'll need to update.** Maker can't edit a protected doc such as CLAUDE.md or REVIEW.md. When a change makes one wrong, the Ready card names it and says to update it yourself before merging.
-- **The full output of a failed check** is a click away from the failure line.
 
 **Ready** means the listed checks passed: the plan's tests ran on the exact reviewed tree, the card says for each outcome in the intent which test that ran covers it or that none does, and Second Eye found nothing blocking. It does not mean the code is bug-free. **Needs you** means one decision only you can make; the card says whose call it is and why a person has to make it. Anything that sends work back, drops it or accepts a risk asks for a one-line reason, and Focus redrafts from it.
 
@@ -97,18 +75,21 @@ The terminal has the same: `parallax do "..."`, `parallax inbox`, `parallax show
 
 </details>
 
+Merging, conflicts, Stop, cleanup, where drafts live, spending, and the cards that tell you something first: [docs/using.md](docs/using.md).
+
 ## Status and known limits
 
-A working prototype I use on this repo. One task it did on itself, from the typed request to the accepted commit: [docs/example.md](docs/example.md). Three real runs through the UI with every state and cost: [docs/ui-runs/](docs/ui-runs/README.md). How it got here: [docs/history.md](docs/history.md). What it protects and what it can't: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
+A working prototype I use on this repo; the latest release is [v0.2.0](https://github.com/mpwilso/parallax/releases/tag/v0.2.0). One task it did on itself, from the typed request to the accepted commit: [docs/example.md](docs/example.md). Three real runs through the UI with every state and cost: [docs/ui-runs/](docs/ui-runs/README.md). How it got here: [docs/history.md](docs/history.md). What it protects and what it can't: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
-- **Second Eye reads the diff and can't run code.** It judges the outcome where the diff shows it, and says what it couldn't see. Proving that tests actually catch failures (a test seen failing before the fix, or a mutation the tests catch) is planned work, not done.
+- **Second Eye reads the diff and can't run code.** It judges the outcome where the diff shows it, and says what it couldn't see. Reticle's tests do run: each is kept only if it fails on the code before the change, so it's seen failing before the fix. Nothing yet proves the tests catch a deliberately broken change (mutation testing).
 - **Linux or WSL2.** It needs Claude Code's sandbox (bubblewrap); that sandbox doesn't run on native Windows. macOS is untested.
 - **It needs Claude Code**, logged in, and the Claude Agent SDK. Costs are Claude Code's estimates at list prices; on a subscription your real limit is the plan's usage limits, which Parallax can't see.
 - **A cap can overshoot by one turn.** Every agent gets what's left of the cap as its own limit, but the SDK checks it between turns.
 - **Field's browser server is pinned** to `@playwright/mcp` 0.0.70: later versions need Unix sockets the sandbox refuses.
 - **The three real-sandbox tests need a machine that allows unprivileged user namespaces**; elsewhere they skip and say why.
 - **One person, one machine.** No splitting work into several tasks yet (planned).
-- **Evals:** 11 real fixes from open-source projects; results and what they show in [docs/evals.md](docs/evals.md).
+- **Evals:** in run 8e3074, 10 of 11 real fixes from open-source projects passed the maintainers' hidden tests, each Ready with one decision: [docs/evals.md](docs/evals.md).
+- **A requirements gap gets past every checker.** When Focus guesses wrong about what was wanted, every check passes the guess, because each one judges the work against that intent (humanize-174 in the evals).
 
 ## How it was built
 
@@ -116,7 +97,6 @@ I designed Parallax and directed its build; Claude Code wrote most of the code u
 
 ## What's next
 
-- A behavioral verifier: tests of the intended outcomes, written before the build, that Maker can't change.
 - Several parallel tasks from one request.
 - A knowledge layer that gives agents project context and past decisions to draw on.
 
