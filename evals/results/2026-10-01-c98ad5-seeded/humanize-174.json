@@ -1,0 +1,70 @@
+{
+ "case": "humanize-174",
+ "mode": "seeded",
+ "pr": "https://github.com/python-humanize/humanize/pull/272",
+ "issue": "https://github.com/python-humanize/humanize/issues/174",
+ "inferred": [
+  "3",
+  "4",
+  "5",
+  "6"
+ ],
+ "reticle_kept": {
+  "asked": 1
+ },
+ "reticle_weak": [
+  "it passes on the base, so it doesn't show the problem"
+ ],
+ "versions": [
+  {
+   "broken": "flip == to != at src/humanize/time.py:162",
+   "hidden": "208 of 379 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The condition `if not years and days < 1` was changed to `if years != 0 and days < 1`. This inverts it. Sub-day deltas with years == 0 (such as 10799 or 10800 seconds) no longer reach the seconds/minutes/hours code. They fall into the `elif",
+    "major scope: The change alters month and year logic: `num_months` now uses round() instead of floor, and new 12-month and year cases were added. This changes existing days, months and years output, which the constraint says must stay as it is. The outco"
+   ],
+   "not_counted": [],
+   "reticle": "catch"
+  },
+  {
+   "broken": "change 0 to 1 at src/humanize/time.py:162",
+   "hidden": "209 of 379 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The sub-day condition was changed from `not years and days < 1` to `years == 1 and days < 1`. Now a sub-day delta with years == 0 skips the seconds/minutes/hours branch and falls into the `elif years == 0` days branch. So naturaldelta(10799",
+    "major scope: `num_months` changed from floor to `round(days / 30.5)`, and new month/year rollover branches were added. Day and month output changes, for example 16 days now reads \"a month\". The constraint says days, months and years output stays as it i",
+    "major scope: Minutes are now rounded. 90 seconds becomes \"2 minutes\" and 3599 seconds becomes \"an hour\". This changes minute output, which the constraint says must stay as it is."
+   ],
+   "not_counted": [
+    "major missing_test: The diff adds no tests for 10799, 10800, 8999, 9000, 86399 or the 3600 to 7199 range, so the broken logic went uncaught."
+   ],
+   "reticle": "catch"
+  },
+  {
+   "broken": "flip < to <= at src/humanize/time.py:162",
+   "hidden": "364 of 379 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The change `days <= 1` sends timedeltas of 1 day or more into the sub-day branch, which only reads `delta.seconds` and ignores `days`. Exactly 1 day (86400) has seconds == 0 and now takes the zero-seconds path (e.g. 'a moment'). 1 day plus ",
+    "blocker behavior: Minutes are now rounded. 90 to 119 seconds used to read 'a minute' and now read '2 minutes'. 3570 to 3599 seconds used to read 'N minutes' and now read 'an hour'. The constraint says minute and second output must not change.",
+    "major behavior: `num_months` now uses `round(days / 30.5)` instead of floor. Month output changes, for example 46 days now reads 'a month' and 'N months' values shift. Month and year output must stay as it is. The new 12-month to year conversions also chan"
+   ],
+   "not_counted": [],
+   "reticle": "miss"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "false alarm",
+  "findings": [
+   "blocker scope: Minutes output changed. The old code gave 'a minute' for 60-119s and floored minutes. The new code rounds, so 119s now reads '2 minutes', 90s reads '2 minutes', and 3599s reads 'an hour'. The constraint says minutes output must stay as toda",
+   "blocker scope: Month and year output changed. num_months now uses round(days / 30.5) instead of floor. This changes results for many day counts (for example 46 days now reads '2 months' instead of 'a month'). New 'a year' and year-increment branches were "
+  ],
+  "not_counted": [],
+  "reticle": "right"
+ },
+ "cost_usd": 0.1152,
+ "seconds": 71.0,
+ "second_eye_from": "9a3432",
+ "reticle_from": "9a3432"
+}

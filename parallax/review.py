@@ -63,21 +63,27 @@ def blocking(text: str) -> tuple[str, ...]:
     return found or DEFAULT_BLOCKING
 
 
+UNASKED = "cites no outcome you asked for"  # why code lowered it, as the card says
+
+
 def enforce(findings: list, intent: str, blocking: tuple[str, ...]) -> tuple[list, list[dict]]:
-    """Second Eye's asked-only rule, by code: a blocking finding that cites only inferred outcomes, and
-    no asked outcome or constraint, becomes a note at the highest severity that doesn't block.
-    Returns (findings as they count, what was lowered). A finding that cites nothing stays as it is:
-    a plain bug rests on no outcome. An unmarked outcome counts as asked."""
+    """Second Eye's asked-only rule, by code: a blocking finding must cite an asked outcome or a
+    constraint. One that cites none, or only inferred outcomes, becomes a note at the highest severity
+    that doesn't block. Returns (findings as they count, what was lowered). An unmarked outcome counts
+    as asked; a number the intent doesn't have counts as none. Until 2026-10-01 a finding that cited
+    nothing kept blocking, and on tabulate-190 (seeded run 9a3432) Second Eye failed a correct fix on
+    an inferred outcome it didn't cite."""
     from dataclasses import replace
     from .lint import outcome_kinds
     kinds = outcome_kinds(intent)
     note = next((s for s in SEVERITIES if s not in blocking), SEVERITIES[-1])
     out, lowered = [], []
     for f in findings:
-        cited = [c.split()[1] for c in f.cites if c.startswith("outcome ")]
-        rests = "constraint" in f.cites or any(kinds.get(n, "asked") != "inferred" for n in cited)
-        if f.severity in blocking and cited and not rests:
-            lowered.append({"text": f.text, "where": f.where, "from": f.severity, "to": note, "cites": list(f.cites)})
+        cited = [c.split()[-1] for c in f.cites if c.startswith("outcome ")]
+        rests = "constraint" in f.cites or any(n in kinds and kinds[n] != "inferred" for n in cited)
+        if f.severity in blocking and not rests:
+            lowered.append({"text": f.text, "where": f.where, "from": f.severity, "to": note, "cites": list(f.cites),
+                            "why": UNASKED})
             f = replace(f, severity=note)
         out.append(f)
     return out, lowered

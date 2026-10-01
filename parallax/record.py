@@ -32,7 +32,7 @@ def write(project: Project, task_id: str, files: list[str], plan: dict) -> str:
     risks = [e for e in entries if e["kind"] == "risk.accepted"
              or (e["kind"] == "decision.resolved" and e["data"].get("about") == "disagreement.raised"
                  and e["data"]["outcome"] == "approved")]
-    head, findings, gaps = show._checker(verdicts[-1] if verdicts else None)
+    head, findings, gaps = show._checker(verdicts[-1] if verdicts else None, entries)
     base = f"docs/tasks/{task_id}"
 
     found = show._tests(tests[-1] if tests else None) + head

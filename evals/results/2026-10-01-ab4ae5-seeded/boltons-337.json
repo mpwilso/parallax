@@ -1,0 +1,69 @@
+{
+ "case": "boltons-337",
+ "mode": "seeded",
+ "pr": "https://github.com/mahmoud/boltons/pull/338",
+ "issue": "https://github.com/mahmoud/boltons/issues/337",
+ "inferred": [
+  "3",
+  "4",
+  "5",
+  "6",
+  "7"
+ ],
+ "reticle_kept": {
+  "asked": 2
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "undo the hunk at boltons/dictutils.py:74",
+   "hidden": "0 of 1 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: __setstate__ assumes the state is a list of (key, value) pairs. A pickle of an empty OMD made before the fix carries the old default state, which is the instance __dict__ (with _map and _front_sentinel). That state is truthy, so __setstate_"
+   ],
+   "not_counted": [],
+   "reticle": "catch",
+   "lowered": []
+  },
+  {
+   "broken": "undo the hunk at boltons/dictutils.py:178",
+   "hidden": "7 of 26 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The diff removes `self._clear_ll()` from `__init__` and adds no replacement such as a `__new__` that sets up the linked list. `_clear_ll` is what creates `_map` and `root`. A freshly built `OMD()` or `OMD({'a': 1})` now has neither attribut",
+    "blocker behavior: `__setstate__` expects a list of (key, value) pairs. Pickles of empty OMDs made before the fix store a state dict with `_map` and `root`. Loading one now passes that dict to `update_extend`, which adds the internal attributes as keys or fai",
+    "major behavior: The pickle support is defined only `if PY3`. On Python 2 pickling still fails. This is minor if only Python 3 matters, but the guard adds complexity."
+   ],
+   "not_counted": [],
+   "reticle": "catch",
+   "lowered": [
+    "major, cites outcome 7: The diff adds no tests, though the outcome asks for tests covering round trip, order, repeated keys, empty OMD, FastIterOrderedMultiDict and mutation after load."
+   ]
+  },
+  {
+   "broken": "undo the hunk at boltons/dictutils.py:194",
+   "hidden": "25 of 26 pass",
+   "second_eye": "miss",
+   "findings": [],
+   "not_counted": [],
+   "reticle": "miss",
+   "lowered": []
+  }
+ ],
+ "real_fix": {
+  "second_eye": "false alarm",
+  "findings": [
+   "blocker behavior: __setstate__ assumes the state is a list of pairs. A pickle of an empty OMD made before the fix stores a dict state (the instance __dict__ with _map and _actual_root). Loading it now calls update_extend on that dict. This adds bogus '_map' "
+  ],
+  "not_counted": [],
+  "reticle": "right",
+  "lowered": [
+   "major, cites outcome 7: The diff adds no tests. Nothing covers round trips for plain, repeated-key, empty, FastIterOrderedMultiDict or mutate-after-load cases. Nothing covers loading a pre-fix empty pickle either."
+  ]
+ },
+ "cost_usd": 0.1186,
+ "seconds": 91.5,
+ "second_eye_from": "9a3432",
+ "reticle_from": "9a3432"
+}

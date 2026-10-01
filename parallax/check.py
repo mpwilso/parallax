@@ -239,7 +239,7 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
     counted, lowered = review.enforce(rv.findings, intent, blocking)
     if lowered:  # recorded: Second Eye broke its asked-only rule, and code held it to it
         project.ledger.append("verdict.downgraded", "parallax",
-                              f"{len(lowered)} of Second Eye's blocking findings cite only inferred outcomes, so they're notes",
+                              f"{len(lowered)} of Second Eye's blocking findings cite no outcome you asked for, so they're notes",
                               task=task_id, tree=s.tree, lowered=lowered)
     counted, stale = staledocs.lower(counted, blocking)
     if stale:  # Maker can't edit a protected doc: a stale one is yours to update, never a reason to rework

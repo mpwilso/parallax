@@ -1,0 +1,43 @@
+{
+ "case": "pathspec-77",
+ "mode": "seeded",
+ "pr": "https://github.com/cpburnz/python-pathspec/commit/9302492483b06ca1613aa8b11cf08cef93930b12",
+ "issue": "https://github.com/cpburnz/python-pathspec/issues/77",
+ "inferred": [
+  "2",
+  "3",
+  "4",
+  "5",
+  "6"
+ ],
+ "reticle_kept": {
+  "asked": 1
+ },
+ "reticle_weak": [
+  "it fails on TypeError, not an assertion, a wait for the behavior, or a crash the request shows (startswith first arg must be bytes or a tuple of bytes, not str)"
+ ],
+ "versions": [
+  {
+   "broken": "undo the hunk at pathspec/patterns/gitwildmatch.py:316",
+   "hidden": "43 of 45 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The only code change is a comment typo fix ('Braket' to 'Bracket'). The `elif pattern[i] == '^':` branch is unchanged context, so `[^...]` is still handled as before (the old code treats the caret as a literal). `a[^b]c` still matches `abc`"
+   ],
+   "not_counted": [],
+   "reticle": "catch"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "findings": [],
+  "not_counted": [
+   "major missing_test: The diff adds no tests. Nothing checks that `a[^b]c` rejects `abc` and matches `azc`, and nothing checks the generated regex for `[^...]`. The old tests that expected `^` to be escaped may also now fail and are not updated. Without a test, "
+  ],
+  "reticle": "right"
+ },
+ "cost_usd": 0.0528,
+ "seconds": 45.9,
+ "second_eye_from": "9a3432",
+ "reticle_from": "9a3432"
+}

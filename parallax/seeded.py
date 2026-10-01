@@ -78,13 +78,16 @@ COUNTED = ("behavior", "scope")  # the kinds a seeded version can be judged on: 
 def second_eye_scored(findings: list, blocking: tuple, intent: str) -> dict:
     """Second Eye's findings as they'd count in the pipeline (its asked-only rule, enforced), split by
     their kind: blocking behavior and scope findings count; missing tests and housekeeping don't, since
-    no seeded version has the maintainers' tests, and a missing test would flag every one."""
+    no seeded version has the maintainers' tests, and a missing test would flag every one. What the rule
+    lowered is kept too, with what it cited, so a run shows whether the rule or the checker moved a result."""
     from .review import enforce
-    counted, _ = enforce(findings, intent, blocking)
+    counted, lowered = enforce(findings, intent, blocking)
     said = [f for f in counted if f.severity in blocking]
     line = lambda f: f"{f.severity} {f.kind}: {' '.join(f.text.split())[:240]}"  # noqa: E731
     return {"flags": any(f.kind in COUNTED for f in said), "findings": [line(f) for f in said if f.kind in COUNTED],
-            "not_counted": [line(f) for f in said if f.kind not in COUNTED]}
+            "not_counted": [line(f) for f in said if f.kind not in COUNTED],
+            "lowered": [f"{x['from']}, cites {', '.join(x['cites']) or 'nothing'}: {' '.join(x['text'].split())[:240]}"
+                        for x in lowered]}
 
 
 def _code_part(line: str) -> str:
@@ -211,7 +214,7 @@ def run_case(case, where: Path, policy, drafter_for, checker_for, runner=None) -
             failing = ran[1] if ran else []
             se = second_eye_scored(rv.findings, blocking, intent)
             return {"tree": tree, "second_eye_flags": se["flags"], "findings": se["findings"], "not_counted": se["not_counted"],
-                    "reticle_asked": None if not kept else bool(failing)}
+                    "lowered": se["lowered"], "reticle_asked": None if not kept else bool(failing)}
 
         versions, tried = [], 0
         for name, files in candidates(cache, case):
@@ -226,12 +229,12 @@ def run_case(case, where: Path, policy, drafter_for, checker_for, runner=None) -
             j = judge(files, len(versions))
             versions.append({"broken": name, "hidden": f"{res.passed} of {res.total} pass",
                              "second_eye": "catch" if j["second_eye_flags"] else "miss", "findings": j["findings"],
-                             "not_counted": j["not_counted"],
+                             "not_counted": j["not_counted"], "lowered": j["lowered"],
                              "reticle": {None: "no test", True: "catch", False: "miss"}[j["reticle_asked"]]})
         r["versions"] = versions
         real = judge(fix_files(cache, case), len(versions))
         r["real_fix"] = {"second_eye": "false alarm" if real["second_eye_flags"] else "right", "findings": real["findings"],
-                         "not_counted": real["not_counted"],
+                         "not_counted": real["not_counted"], "lowered": real["lowered"],
                          "reticle": {None: "no test", True: "false alarm", False: "right"}[real["reticle_asked"]]}
         r["cost_usd"] = round(sum(e["data"].get("cost_usd") or 0 for e in project.ledger.entries()), 4)
     except Exception as err:  # a crashed case is a result too

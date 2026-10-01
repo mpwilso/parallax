@@ -1,0 +1,63 @@
+{
+ "case": "boltons-337",
+ "mode": "seeded",
+ "pr": "https://github.com/mahmoud/boltons/pull/338",
+ "issue": "https://github.com/mahmoud/boltons/issues/337",
+ "inferred": [
+  "3",
+  "4",
+  "5",
+  "6",
+  "7"
+ ],
+ "reticle_kept": {
+  "asked": 2
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "undo the hunk at boltons/dictutils.py:74",
+   "hidden": "0 of 1 pass",
+   "second_eye": "catch",
+   "findings": [
+    "major behavior: The diff only sets `PY3 = False` in the ImportError branch. Nothing in the diff sets `PY3 = True` on the success path. If PY3 isn't defined elsewhere in the file, importing the module raises NameError on Python 3, which breaks everything. I",
+    "major behavior: Old pickles of empty OMDs carry a dict state (the instance __dict__ with the internal linked-list attributes). The new __setstate__ is now called with that dict and feeds it to update_extend. That would insert the internal attribute names a"
+   ],
+   "not_counted": [],
+   "reticle": "catch"
+  },
+  {
+   "broken": "undo the hunk at boltons/dictutils.py:178",
+   "hidden": "7 of 26 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The diff removes `self._clear_ll()` from `__init__`. `_clear_ll` is the only place that creates `_map` and `root`. Without it, a fresh `OMD()` has no linked list, and `OMD({'a': 1})` fails in `update_extend` and `add` (the insert needs `sel",
+    "major behavior: Pickles of OMDs made before the fix store a dict state (`_map`, `root`). The new `__setstate__` passes that dict to `update_extend`, so it would load wrong data or fail. This breaks the constraint on old pickles of empty OMDs."
+   ],
+   "not_counted": [],
+   "reticle": "catch"
+  },
+  {
+   "broken": "undo the hunk at boltons/dictutils.py:194",
+   "hidden": "25 of 26 pass",
+   "second_eye": "miss",
+   "findings": [],
+   "not_counted": [
+    "major missing_test: The diff adds no tests. Nothing checks that an OMD round-trips through pickle, keeps equality and key order, or handles repeated keys, an empty OMD, FastIterOrderedMultiDict, or later add and pop. Without a test, nothing shows the fix works"
+   ],
+   "reticle": "miss"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "false alarm",
+  "findings": [
+   "blocker behavior: __setstate__ assumes the new state format (a list of pairs). A pickle of an empty OMD made before this change stores a state dict like {'_map': {}, '_root': ..., '_tail': ...}. Loading it now calls update_extend on that dict, so the OMD end"
+  ],
+  "not_counted": [],
+  "reticle": "right"
+ },
+ "cost_usd": 0.1253,
+ "seconds": 91.5,
+ "second_eye_from": "9a3432",
+ "reticle_from": "9a3432"
+}

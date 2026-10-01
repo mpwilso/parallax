@@ -85,7 +85,7 @@ def test_second_eye_and_reticle_are_scored_on_each_broken_version_and_the_real_f
     assert [v["second_eye"] for v in r["versions"]] == ["catch", "miss", "miss"]
     assert [v["reticle"] for v in r["versions"]] == ["miss", "catch", "miss"]  # its asked test is of add
     assert all("reticle_with_inferred" not in v for v in r["versions"])  # its inferred outcome, clamp, has no test
-    assert r["real_fix"] == {"second_eye": "right", "findings": [], "not_counted": [], "reticle": "right"}
+    assert r["real_fix"] == {"second_eye": "right", "findings": [], "not_counted": [], "lowered": [], "reticle": "right"}
     assert r["versions"][0]["findings"] == ["blocker behavior: wrong cap"]  # what Second Eye said, kept with the result
     assert r["reticle_kept"] == {"asked": 1} and r["inferred"] == ["2"]
     assert r["cost_usd"] == pytest.approx(0.08)  # the intent and Reticle; the fake checker costs nothing
@@ -116,8 +116,8 @@ def test_the_seeded_run_stops_before_a_case_the_budget_cant_cover(proj, upstream
 def test_in_the_seeded_mode_second_eye_counts_only_behavior_and_scope_findings(proj, upstream):
     """No seeded version has tests (they're the hidden ones), so a missing test would flag every one."""
     from parallax.agents.base import Finding
-    no_test = Finding("major", "", "The diff has no test.", "missing_test")
-    paperwork = Finding("major", "CHANGELOG.md", "No changelog entry.", "housekeeping")
+    no_test = Finding("major", "", "The diff has no test.", "missing_test", ["outcome 1"])
+    paperwork = Finding("major", "CHANGELOG.md", "No changelog entry.", "housekeeping", ["outcome 1"])
     inferred = Finding("blocker", "calc.py:6", "clamp doesn't cap", "behavior", ["outcome 2"])  # 2 is inferred
     checker = FakeChecker(reviews=[Review("fail", [no_test, paperwork]), blocker("wrong cap", "calc.py:6"),
                                    Review("fail", [inferred]), Review("fail", [no_test])])
@@ -128,6 +128,7 @@ def test_in_the_seeded_mode_second_eye_counts_only_behavior_and_scope_findings(p
                                                "major housekeeping: No changelog entry."]
     assert r["versions"][1]["findings"] == ["blocker behavior: wrong cap"]
     assert r["versions"][2]["findings"] == [] and r["versions"][2]["not_counted"] == []  # its rule, by code: a note
+    assert r["versions"][2]["lowered"] == ["blocker, cites outcome 2: clamp doesn't cap"]  # kept, so a run shows why
     assert r["real_fix"]["second_eye"] == "right" and r["real_fix"]["not_counted"] == ["major missing_test: The diff has no test."]
     assert not hasattr(seeded, "test_only")  # no phrase matching: the kind decides
 

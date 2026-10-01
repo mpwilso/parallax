@@ -132,7 +132,7 @@ def test_a_reached_cap_can_be_raised_and_the_task_picks_up(proj):
 @pytest.mark.parametrize("answer,then", [("intent", "pilot"), ("plan", "check")])
 def test_intent_against_plan_is_yours_to_settle_either_way(proj, answer, then):
     tid = pilot.intake(proj, WANT)["task"]
-    scope = Finding("major", "tests/test_readme.py", "the intent says no new tests", kind="scope")
+    scope = Finding("major", "tests/test_readme.py", "the intent says no new tests", kind="scope", cites=["constraint"])
     maker = ScriptedAgent(steps=[("call", lambda cwd: (cwd / "tests").mkdir(exist_ok=True)),
                                  ("write", "tests/test_readme.py", "def test(): pass\n")])
     assert pilot_run(proj, tid, maker=maker, checker=FakeChecker(reviews=[Review("fail", [scope], "nothing")])) == "disputed"

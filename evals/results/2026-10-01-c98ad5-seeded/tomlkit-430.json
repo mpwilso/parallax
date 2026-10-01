@@ -1,0 +1,61 @@
+{
+ "case": "tomlkit-430",
+ "mode": "seeded",
+ "pr": "https://github.com/python-poetry/tomlkit/pull/520",
+ "issue": "https://github.com/python-poetry/tomlkit/issues/430",
+ "inferred": [
+  "4",
+  "5",
+  "6"
+ ],
+ "reticle_kept": {
+  "asked": 2
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "flip == to != at tomlkit/api.py:266",
+   "hidden": "150 of 152 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The condition is inverted. `len(keys) != 1` returns `keys[0]`, so a list of two or more returns only the first key and drops the rest, so `key([\"foo\",\"bar\"])` becomes `foo`. An empty list raises IndexError. A one-element list now falls thro"
+   ],
+   "not_counted": [],
+   "reticle": "catch"
+  },
+  {
+   "broken": "change 1 to 2 at tomlkit/api.py:266",
+   "hidden": "150 of 152 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The check is `len(keys) == 2`, not `== 1`. A one-element list like `key([\"my_key\"])` still returns a DottedKey, so the bug is not fixed. A two-element list like `key([\"foo\",\"bar\"])` now returns only the first key (`foo`) and drops `bar`, wh"
+   ],
+   "not_counted": [
+    "major missing_test: No test was added for the one-element case or the `in` check. A test would have caught the off-by-one."
+   ],
+   "reticle": "catch"
+  },
+  {
+   "broken": "change 0 to 1 at tomlkit/api.py:267",
+   "hidden": "151 of 152 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: Off-by-one: `keys[1]` on a one-element list raises IndexError. It should be `keys[0]`. As written, `key([\"my_key\"])` crashes instead of returning a SingleKey, so the one-element case is worse than before."
+   ],
+   "not_counted": [
+    "major missing_test: No test was added for the one-element list case or the `in doc` check. A test would have caught the IndexError."
+   ],
+   "reticle": "catch"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "findings": [],
+  "not_counted": [],
+  "reticle": "right"
+ },
+ "cost_usd": 0.0649,
+ "seconds": 44.7,
+ "second_eye_from": "9a3432",
+ "reticle_from": "9a3432"
+}

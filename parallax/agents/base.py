@@ -46,7 +46,7 @@ class Finding:
     kind: str = "behavior"  # behavior: the code does something wrong. missing_test: a test it needs isn't there.
     # scope: it does something the outcome or constraints don't allow, or leaves out what they require.
     # housekeeping: a changelog entry, docs, a version number. Seeded scoring counts only behavior and scope
-    cites: list[str] = field(default_factory=list)  # what it rests on: "outcome 3", "constraint"; empty for neither
+    cites: list[str] = field(default_factory=list)  # what it rests on: "outcome 3", "constraint". blocking needs an asked one
 
 
 @dataclass

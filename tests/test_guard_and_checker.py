@@ -243,6 +243,8 @@ def test_second_eye_sees_each_outcomes_mark_and_may_fail_a_change_only_on_an_ask
     assert ('A finding that fails the change (a severity REVIEW.md makes blocking) or any finding of kind "scope" '
             "may rest only on an asked outcome or a constraint.") in rule
     assert "never as a reason to fail" in rule and "An outcome with no mark counts as asked." in rule
+    assert ("A blocking finding must cite at least one asked outcome or a constraint, so for a plain bug cite the "
+            "asked outcome or constraint it breaks.") in rule
 
 
 def _approved_with_inferred(repo):
@@ -259,25 +261,33 @@ def _approved_with_inferred(repo):
     return proj, tid
 
 
-def test_a_blocking_finding_that_cites_only_inferred_outcomes_becomes_a_note_by_code(repo):
-    """Seen in the seeded eval: tabulate-190 failed a correct fix on inferred outcomes, against its rule."""
+@pytest.mark.parametrize("cites", [["outcome 2"], [], ["outcome 9"]])
+def test_a_blocking_finding_that_cites_no_asked_outcome_becomes_a_note_by_code_and_the_card_says_why(repo, cites):
+    """Seen in the seeded eval: tabulate-190 failed a correct fix on inferred outcomes, against its rule
+    (f5ff69), and in 9a3432 on an inferred outcome it didn't cite at all. Only inferred outcomes, none,
+    or a number the intent doesn't have: none of them is an outcome you asked for."""
+    from parallax import show
     from parallax.agents.base import Finding
     proj, tid = _approved_with_inferred(repo)
     maker = ScriptedAgent(steps=[("write", "README.md", "x\n")])
-    inferred_only = Finding("major", "README.md:1", "no WSL 1 steps", "scope", ["outcome 2"])
-    checker = FakeChecker(reviews=[Review("fail", [inferred_only])])
+    unasked = Finding("major", "README.md:1", "no WSL 1 steps", "scope", cites)
+    checker = FakeChecker(reviews=[Review("fail", [unasked])])
     build.run_build(proj, tid, lambda left, settings: maker, preflight_runner=good_probe)
     assert _check(proj, tid, maker, checker) == "ready"  # a note, not a reason to fail
     [down] = [e for e in proj.ledger.entries() if e["kind"] == "verdict.downgraded"]
     assert down["data"]["lowered"] == [{"text": "no WSL 1 steps", "where": "README.md:1", "from": "major", "to": "minor",
-                                        "cites": ["outcome 2"]}]
+                                        "cites": cites, "why": "cites no outcome you asked for"}]
+    assert down["reason"] == "1 of Second Eye's blocking findings cite no outcome you asked for, so they're notes"
     [v] = [e for e in proj.ledger.entries() if e["kind"] == "verdict.recorded"]
     assert v["data"]["verdict"] == "no_finding" and v["data"]["checker_verdict"] == "fail"  # nothing blocks, nothing confirmed
     assert v["data"]["findings"][0]["severity"] == "major"  # what Second Eye said, as it said it
+    assert (f"Major, at README.md:1: no WSL 1 steps (lowered: cites no outcome you asked for). (ledger {v['id']})"
+            in show.report(proj, tid))
 
 
-@pytest.mark.parametrize("cites", [["outcome 1"], ["outcome 2", "outcome 1"], ["outcome 2", "constraint"], []])
-def test_a_finding_resting_on_an_asked_outcome_a_constraint_or_nothing_still_blocks(repo, cites):
+@pytest.mark.parametrize("cites", [["outcome 1"], ["outcome 2", "outcome 1"], ["outcome 2", "constraint"], ["constraint"]])
+def test_a_finding_resting_on_an_asked_outcome_or_a_constraint_still_blocks(repo, cites):
+    from parallax import show
     from parallax.agents.base import Finding
     proj, tid = _approved_with_inferred(repo)
     maker = ScriptedAgent(steps=[("write", "README.md", "x\n")])
@@ -285,15 +295,18 @@ def test_a_finding_resting_on_an_asked_outcome_a_constraint_or_nothing_still_blo
     build.run_build(proj, tid, lambda left, settings: maker, preflight_runner=good_probe)
     assert _check(proj, tid, maker, checker) == "disputed"  # it stays blocking, through the 3 reworks
     assert not [e for e in proj.ledger.entries() if e["kind"] == "verdict.downgraded"]
+    assert "lowered" not in show.report(proj, tid)
 
 
 def test_enforce_reads_the_marks_and_an_unmarked_outcome_counts_as_asked():
     from parallax.agents.base import Finding
     intent = "## Outcome\n1. asked: a\n2. inferred: b\n3. c\n\n## Constraints\nnone\n"
     findings = [Finding("blocker", "", "b", "behavior", ["outcome 2"]), Finding("minor", "", "b too", "behavior", ["outcome 2"]),
-                Finding("major", "", "c", "behavior", ["outcome 3"])]
+                Finding("major", "", "c", "behavior", ["outcome 3"]), Finding("major", "", "a bug", "behavior", []),
+                Finding("nit", "", "a name", "behavior", [])]
     counted, lowered = review.enforce(findings, intent, ("blocker", "major"))
-    assert [f.severity for f in counted] == ["minor", "minor", "major"] and [x["from"] for x in lowered] == ["blocker"]
+    assert [f.severity for f in counted] == ["minor", "minor", "major", "minor", "nit"]
+    assert [(x["text"], x["from"]) for x in lowered] == [("b", "blocker"), ("a bug", "major")]
 
 
 def test_second_eyes_answer_is_pinned_each_finding_with_its_kind_and_what_it_cites():

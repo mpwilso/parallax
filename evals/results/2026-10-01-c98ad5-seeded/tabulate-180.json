@@ -1,0 +1,57 @@
+{
+ "case": "tabulate-180",
+ "mode": "seeded",
+ "pr": "https://github.com/astanin/python-tabulate/commit/20c6370d5da2dae89b305bfb6c7f12a0f8b7236c",
+ "issue": "https://github.com/astanin/python-tabulate/issues/180",
+ "inferred": [
+  "2",
+  "3",
+  "4"
+ ],
+ "reticle_kept": {
+  "asked": 0
+ },
+ "reticle_weak": [
+  "the file doesn't load on the base (collection failure)"
+ ],
+ "versions": [
+  {
+   "broken": "change 0 to 1 at tabulate/__init__.py:1507",
+   "hidden": "29 of 30 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: In _wrap_text_to_colwidths the column count is taken from list_of_lists[1] instead of list_of_lists[0]. Any non-empty table with exactly one row and maxcolwidths set now raises IndexError. It also picks the wrong row for ragged data. This b"
+   ],
+   "not_counted": [],
+   "reticle": "no test"
+  },
+  {
+   "broken": "undo the hunk at tabulate/__init__.py:1506",
+   "hidden": "29 of 30 pass",
+   "second_eye": "miss",
+   "findings": [],
+   "not_counted": [],
+   "reticle": "no test"
+  },
+  {
+   "broken": "undo the hunk at tabulate/__init__.py:2069",
+   "hidden": "29 of 30 pass",
+   "second_eye": "miss",
+   "findings": [],
+   "not_counted": [
+    "major missing_test: No regression test is in the diff. Outcome 4 is inferred, but REVIEW.md pass 3 and the major severity treat a missing test for new behavior as blocking. The test should call tabulate([], maxcolwidths=...) with an int and a list, with and wi"
+   ],
+   "reticle": "no test"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "findings": [],
+  "not_counted": [],
+  "reticle": "no test"
+ },
+ "cost_usd": 0.0679,
+ "seconds": 45.7,
+ "second_eye_from": "9a3432",
+ "reticle_from": "9a3432"
+}

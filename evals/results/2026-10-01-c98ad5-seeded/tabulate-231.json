@@ -1,0 +1,59 @@
+{
+ "case": "tabulate-231",
+ "mode": "seeded",
+ "pr": "https://github.com/astanin/python-tabulate/pull/232",
+ "issue": "https://github.com/astanin/python-tabulate/issues/231",
+ "inferred": [
+  "3",
+  "4",
+  "5"
+ ],
+ "reticle_kept": {
+  "asked": 2
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "flip == to != at tabulate/__init__.py:105",
+   "hidden": "55 of 159 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The new helper returns True when the value is a str that is NOT equal to SEPARATING_LINE (`!=`). The check is inverted. Ordinary rows like ['a', 1] are now treated as separating lines, and real SEPARATING_LINE rows are not. This breaks tabl",
+    "major scope: Only `_is_separating_line` was touched. Nothing changes how padding or alignment code handles a separating line row, which is what outcome 2 needs. The helper also drops the original exact comparison and uses strip(), which changes semantic"
+   ],
+   "not_counted": [],
+   "reticle": "catch"
+  },
+  {
+   "broken": "change 1 to 2 at tabulate/__init__.py:111",
+   "hidden": "155 of 159 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The first check changed from `len(row) >= 1 and row[0] == SEPARATING_LINE` to `len(row) >= 2 and ...`. A one-column row like `[SEPARATING_LINE]` is no longer seen as a separating line. In a single-column table it now renders as a malformed "
+   ],
+   "not_counted": [],
+   "reticle": "catch"
+  },
+  {
+   "broken": "undo the hunk at tabulate/__init__.py:104",
+   "hidden": "5 of 159 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The diff calls `_is_separating_line_value`, but the diff never defines or imports it. If it isn't already in the file, every call to `_is_separating_line` raises NameError, and that breaks all tables, including ones with no separating lines",
+    "major behavior: The only change is how a row is detected as a separating line. Nothing in the diff changes the padding or alignment code, which is where the malformed row for `psql` and other padded formats comes from. So the `|---------+-------|` third li"
+   ],
+   "not_counted": [],
+   "reticle": "catch"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "findings": [],
+  "not_counted": [],
+  "reticle": "right"
+ },
+ "cost_usd": 0.0792,
+ "seconds": 76.1,
+ "second_eye_from": "9a3432",
+ "reticle_from": "9a3432"
+}

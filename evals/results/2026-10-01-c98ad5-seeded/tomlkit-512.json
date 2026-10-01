@@ -1,0 +1,49 @@
+{
+ "case": "tomlkit-512",
+ "mode": "seeded",
+ "pr": "https://github.com/python-poetry/tomlkit/pull/514",
+ "issue": "https://github.com/python-poetry/tomlkit/issues/512",
+ "inferred": [
+  "4",
+  "5",
+  "6"
+ ],
+ "reticle_kept": {
+  "asked": 2
+ },
+ "reticle_weak": [
+  "it fails on UnexpectedCharError, not an assertion, a wait for the behavior, or a crash the request shows (Unexpected character: 'a' at line 4 col 0)"
+ ],
+ "versions": [
+  {
+   "broken": "undo the hunk at tomlkit/items.py:2120",
+   "hidden": "79 of 80 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: `last_value_end` is added and updated, but nothing in the diff reads it. The code that emits the deferred separator comma is unchanged, so it still appends the comma after the comment. The only functional change is splitting one `buf +=` in"
+   ],
+   "not_counted": [],
+   "reticle": "catch"
+  },
+  {
+   "broken": "undo the hunk at tomlkit/items.py:2138",
+   "hidden": "78 of 80 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: `last_value_end` is set once to `len(buf)` before the loop and the diff never updates it after a value is rendered. The deferred comma is then inserted at the position where the first entry starts, not after the previous value. This puts th"
+   ],
+   "not_counted": [],
+   "reticle": "catch"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "findings": [],
+  "not_counted": [],
+  "reticle": "right"
+ },
+ "cost_usd": 0.069,
+ "seconds": 53.1,
+ "second_eye_from": "9a3432",
+ "reticle_from": "9a3432"
+}

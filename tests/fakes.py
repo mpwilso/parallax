@@ -101,7 +101,8 @@ class FakeDrafter:
 
 
 def blocker(text="the steps are wrong", where="README.md:3"):
-    return Review("fail", [Finding("blocker", where, text)], "nothing")
+    """A blocking finding that rests on an asked outcome, as one must (review.enforce)."""
+    return Review("fail", [Finding("blocker", where, text, cites=["outcome 1"])], "nothing")
 
 
 def junit_runner(results=None, exit_code=0):

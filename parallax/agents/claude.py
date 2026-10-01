@@ -76,8 +76,9 @@ Some docs are protected: the author can't edit them, so the person updates them 
 REVIEW.md, mission.md and docs/parallax.md, wherever they sit, and Markdown under .claude/. A change that
 makes one of them wrong or out of date is a note at a severity that doesn't block, never a reason to fail.
 Give each finding what it cites: "outcome <n>" for each outcome it rests on, and "constraint" if it rests
-on a constraint. Leave it empty for a problem that rests on neither, like a plain bug. Code checks it: a
-blocking finding that cites only inferred outcomes becomes a note.
+on a constraint. A blocking finding must cite at least one asked outcome or a constraint, so for a plain
+bug cite the asked outcome or constraint it breaks. Code checks it: a blocking finding that cites none, or
+only inferred outcomes, becomes a note.
 - pass: it achieves the outcome within the constraints.
 - fail: it doesn't, or it has a problem.
 - no_finding: you found nothing wrong, but can't confirm the outcome from the diff alone.

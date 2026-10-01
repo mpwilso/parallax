@@ -349,7 +349,7 @@ def test_preflight_runs_in_one_place_for_every_way_an_agent_can_launch(proj, mon
         assert mine.index("preflight.recorded") < mine.index("maker.started")
     # a rework is a maker run too
     proj.ledger.append("task.redraft", "human", "again", task=tid)
-    checker = FakeChecker(reviews=[Review("fail", [Finding("blocker", "README.md:1", "wrong")], "nothing"), Review("pass")])
+    checker = FakeChecker(reviews=[Review("fail", [Finding("blocker", "README.md:1", "wrong", cites=["outcome 1"])], "nothing"), Review("pass")])
     assert build.run_mode(proj, tid, "pilot", fakes["drafter_for"], maker, checker,
                           test_runner=junit_runner(), preflight_runner=good_probe) == "ready"
     assert ran == [tid, t2, tid, tid]

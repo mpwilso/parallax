@@ -68,10 +68,10 @@ def rescore_case(case, run_id: str, r: dict, checker_for, model: str) -> dict:
             raise ParallaxError(f"{case.id}: the version \"{v['broken']}\" can't be made again")
         se = judge(made[v["broken"]])
         out["versions"].append({**v, "second_eye": "catch" if se["flags"] else "miss", "findings": se["findings"],
-                                "not_counted": se["not_counted"]})
+                                "not_counted": se["not_counted"], "lowered": se["lowered"]})
     se = judge(seeded.fix_files(cache, case))
     out["real_fix"] = {**r["real_fix"], "second_eye": "false alarm" if se["flags"] else "right",
-                       "findings": se["findings"], "not_counted": se["not_counted"]}
+                       "findings": se["findings"], "not_counted": se["not_counted"], "lowered": se["lowered"]}
     out["cost_usd"] = round(cost, 4)
     return out
 

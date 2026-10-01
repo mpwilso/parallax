@@ -1,0 +1,41 @@
+{
+ "case": "boltons-348",
+ "mode": "seeded",
+ "pr": "https://github.com/mahmoud/boltons/pull/349",
+ "issue": "https://github.com/mahmoud/boltons/issues/348",
+ "inferred": [
+  "3",
+  "4",
+  "5",
+  "6"
+ ],
+ "reticle_kept": {
+  "asked": 2
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "undo the hunk at boltons/cacheutils.py:240",
+   "hidden": "11 of 18 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The change deletes the `super().__setitem__(key, value)` call in the new-key branch and adds nothing to the replacement (`else`) branch, where `link[VALUE] = value` still only updates the link. As far as the diff shows, the underlying dict ",
+    "major scope: The CI workflow change (moving the py27 job to a container) has nothing to do with the replacement bug. The outcome and constraints don't ask for it."
+   ],
+   "not_counted": [
+    "major missing_test: No regression test was added for replacing a value and checking `dict(cache)` and `values()`."
+   ],
+   "reticle": "catch"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "findings": [],
+  "not_counted": [],
+  "reticle": "right"
+ },
+ "cost_usd": 0.05,
+ "seconds": 44.4,
+ "second_eye_from": "9a3432",
+ "reticle_from": "9a3432"
+}

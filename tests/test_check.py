@@ -355,7 +355,7 @@ def test_the_checkers_cost_can_stop_a_rework_before_it_starts(repo):
     maker = built(proj, tid, [("write", "README.md", "ok\n")])
     maker.cost = 1.4
     proj.ledger.append("maker.finished", "maker", "", task=tid, stage="build", status="done", cost_usd=1.4)
-    costly = Review("fail", [Finding("blocker", "README.md:1", "wrong")], "nothing", cost_usd=0.5)
+    costly = Review("fail", [Finding("blocker", "README.md:1", "wrong", cites=["outcome 1"])], "nothing", cost_usd=0.5)
     assert run(proj, tid, maker, FakeChecker(reviews=[costly])) == "stuck"
     assert len(maker.goals) == 1 and not kinds(proj, "rework.started")  # the maker wasn't launched again
     assert "budget cap ran out" in proj.inbox()[0]["reason"]
@@ -393,14 +393,14 @@ def test_approval_refuses_a_cap_drafting_already_spent(repo):
 
 MKDIR_TESTS = ("call", lambda cwd: (cwd / "tests").mkdir(exist_ok=True))
 SCOPE = Finding("major", "tests/test_readme.py", "the intent says the test suite stays unchanged; this adds a test",
-                kind="scope")
+                kind="scope", cites=["constraint"])
 
 
 def test_a_finding_against_the_approved_plan_comes_to_you_without_rework(repo):
     """003876's case: the checker says the intent forbids a file the approved plan lists."""
     proj, tid, wt = approved(repo)
     maker = built(proj, tid, [("write", "README.md", "ok\n"), MKDIR_TESTS, ("write", "tests/test_readme.py", "def test(): pass\n")])
-    other = Finding("major", "README.md:7", "step 7 is wrong")
+    other = Finding("major", "README.md:7", "step 7 is wrong", cites=["outcome 1"])
     checker = FakeChecker(reviews=[Review("fail", [SCOPE, other], "nothing")])
     assert run(proj, tid, maker, checker) == "disputed"
     assert len(maker.goals) == 1 and not kinds(proj, "rework.started")  # the maker never touched it
@@ -423,7 +423,7 @@ def test_when_the_plan_wins_that_finding_stops_blocking(repo):
 def test_scope_findings_off_the_plan_and_defects_still_go_to_rework(repo):
     proj, tid, wt = approved(repo)
     maker = built(proj, tid, [("write", "README.md", "ok\n")])
-    whole = Finding("major", "", "the change doesn't cover the Linux steps", kind="scope")
+    whole = Finding("major", "", "the change doesn't cover the Linux steps", kind="scope", cites=["outcome 1"])
     assert run(proj, tid, maker, FakeChecker(reviews=[Review("fail", [whole], "nothing"), Review("pass")])) == "ready"
     assert len(kinds(proj, "rework.started")) == 1
 

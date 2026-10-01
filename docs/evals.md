@@ -8,21 +8,22 @@ Eleven real fixes hold only one bad one, which gives no catch rate. So `parallax
 
 **Seeded versions are mechanical edits, not real mistakes.** The rates describe that kind of error: one wrong operator, constant or missing hunk inside a fix that is otherwise the maintainers' own. They don't say how often the checkers catch the mistakes Maker actually makes.
 
-23 broken versions from 10 of the 11 cases (cachetools-387 gave none that failed the hidden tests), and 11 real fixes. The latest run is [9a3432-seeded](../evals/results/2026-10-01-9a3432-seeded/summary.md) (2026-10-01), a full seeded run: Focus drafted each intent again, Reticle wrote its tests again, and Second Eye reviewed against those intents. The earlier figures are kept for comparison: Reticle from [9ba608-seeded](../evals/results/2026-09-30-9ba608-seeded/summary.md) and [48a3a5-seeded](../evals/results/2026-09-30-48a3a5-seeded/summary.md), with Second Eye reviewing those runs' intents in [cbcd0e-seeded](../evals/results/2026-09-30-cbcd0e-seeded/summary.md) and again in [e1f0a0-seeded](../evals/results/2026-10-01-e1f0a0-seeded/summary.md).
+23 broken versions from 10 of the 11 cases (cachetools-387 gave none that failed the hidden tests), and 11 real fixes. The latest run is [c98ad5-seeded](../evals/results/2026-10-01-c98ad5-seeded/summary.md) (2026-10-01): Second Eye alone again, after the cite-or-note rule (below), on [9a3432-seeded](../evals/results/2026-10-01-9a3432-seeded/summary.md)'s versions, intents and Reticle results. 9a3432 was a full seeded run: Focus drafted each intent again, Reticle wrote its tests again, and Second Eye reviewed against those intents. The earlier figures are kept for comparison: Reticle from [9ba608-seeded](../evals/results/2026-09-30-9ba608-seeded/summary.md) and [48a3a5-seeded](../evals/results/2026-09-30-48a3a5-seeded/summary.md), with Second Eye reviewing those runs' intents in [cbcd0e-seeded](../evals/results/2026-09-30-cbcd0e-seeded/summary.md) and again in [e1f0a0-seeded](../evals/results/2026-10-01-e1f0a0-seeded/summary.md).
 
 | | Broken versions caught | Real fixes blocked (false alarms) |
 |---|---|---|
-| **Reticle or Second Eye, now (9a3432)** | **21 of 23** | **3 of 11** |
-| Reticle or Second Eye, before (9ba608 and 48a3a5, Second Eye in cbcd0e) | 22 of 23 | 2 of 11 |
+| **Reticle or Second Eye, now (c98ad5, Reticle from 9a3432)** | **20 of 23** | **2 of 11** |
+| Reticle or Second Eye, before the cite-or-note rule (9a3432) | 21 of 23 | 3 of 11 |
+| Reticle or Second Eye, earlier (9ba608 and 48a3a5, Second Eye in cbcd0e) | 22 of 23 | 2 of 11 |
 
-By hand both are 21 of 23: see boltons-337 and humanize-174 below.
+By hand c98ad5 is 20 of 23 and 9a3432 is 21 of 23: see boltons-337 and humanize-174 below.
 
-- **Missed by both, now:** tabulate-180's two versions with a hunk undone, each removing one of the fix's guards for an empty table with `maxcolwidths`. Second Eye passed both, as in every run, and this time Reticle kept no test that reaches them. boltons-337's version with a hunk undone at dictutils.py:194, missed by both before, is caught by Second Eye now.
-- **False alarms, now:** all three are Second Eye's.
+- **Missed by both, now:** tabulate-180's two versions with a hunk undone, each removing one of the fix's guards for an empty table with `maxcolwidths`. Second Eye passed both, as in every run, and Reticle kept no test that reaches them. boltons-337's version with a hunk undone at dictutils.py:194 is missed by both again: Second Eye caught it in 9a3432, and missed it in f5ff69, cbcd0e and e1f0a0.
+- **False alarms, now:** both are Second Eye's.
   - humanize-174, on the same constraint as before: Focus wrote that results under an hour stay the same, and the maintainers' broader fix changes them.
-  - tabulate-190: Focus inferred an outcome (4: blank lines inside a cell are kept) that the maintainers' fix doesn't meet. Second Eye's blocking finding rests on it but doesn't cite it, so the code that lowers a finding resting only on inferred outcomes to a note never saw it. The citation is the checker's own, and nothing checks it against the finding's text.
-  - boltons-337: a pickle of an empty dict made before the fix doesn't load the same way after it. The outcome didn't ask about old pickles, and the maintainers' fix passes every hidden test.
-  - tabulate-231's false alarm before was Reticle's. Its test this time passes the real fix.
+  - boltons-337: a pickle of an empty dict made before the fix doesn't load the same way after it. The outcome didn't ask about old pickles, and the maintainers' fix passes every hidden test. Second Eye's finding cites what it rests on, so the cite-or-note rule keeps it blocking.
+  - tabulate-190's false alarm in 9a3432 is gone in c98ad5 (below).
+  - tabulate-231's false alarm in 9ba608 was Reticle's. Its test in 9a3432 passes the real fix.
 
 ## Each checker on its own
 
@@ -34,7 +35,8 @@ By hand both are 21 of 23: see boltons-337 and humanize-174 below.
 | Second Eye in f5ff69: marked outcomes, asked-only by instruction | 20 of 23 by the rule and by hand | 4 of 11 by the rule, 3 by hand |
 | Second Eye in cbcd0e: asked-only enforced by code, findings by kind | 20 of 23 by the rule, 19 by hand | 1 of 11 (humanize-174) |
 | Second Eye in e1f0a0: the same, and a stale protected doc is a note, on cbcd0e's intents | 19 of 23 by the rule and by hand | 1 of 11 (humanize-174), by the rule and by hand |
-| Second Eye now (9a3432): the same rules, on intents Focus drafted again | 20 of 23 by the rule, 19 by hand | 3 of 11 (humanize-174, tabulate-190, boltons-337), by the rule and by hand |
+| Second Eye in 9a3432: the same rules, on intents Focus drafted again | 20 of 23 by the rule, 19 by hand | 3 of 11 (humanize-174, tabulate-190, boltons-337), by the rule and by hand |
+| Second Eye now (c98ad5): a blocking finding must cite an asked outcome or a constraint, on 9a3432's intents | 19 of 23 by the rule and by hand | 2 of 11 (humanize-174, boltons-337), by the rule and by hand |
 
 - **Reticle** before missed three versions its tests didn't reach, and had no test at all for tabulate-190. In 9a3432 it kept no test that reaches tabulate-180's three versions, missed boltons-337's hunk at dictutils.py:194 and humanize-174's `<` flipped to `<=`, and blocked no real fix. It costs about $0.02 to $0.08 a task. It's on by default since these results (`[reticle] enabled = true`).
 - **What changed for Second Eye, and why.** In 221c3e most of its false alarms were correct fixes doing less than Focus's intent asked, and much of that intent was Focus's own inferred outcomes, the same ones behind Reticle's early false alarms. Three changes followed, each rerun on the same versions and intents:
@@ -51,6 +53,11 @@ By hand both are 21 of 23: see boltons-337 and humanize-174 below.
   - Second Eye caught 20 of 23 by the rule, the same count as cbcd0e. By hand it's 19: its catch of boltons-337's hunk undone at dictutils.py:74 rests only on the old-pickle finding above, which applies to the real fix too, and says nothing of the `PY3` flag that undoing the hunk leaves undefined. Reticle still catches that version.
   - The two new false alarms come from what the intents say: an inferred outcome the real fix doesn't meet (tabulate-190) and a question the outcome never raised (boltons-337). The tabulate-190 one shows a gap in how the asked-only rule is enforced: it trusts the finding's own citation.
   - The run cost $1.57 for all 11 cases.
+- **The cite-or-note rerun on 2026-10-01 (c98ad5)** closed that gap in code. A blocking finding must now cite at least one asked outcome or a constraint. One that cites none, or only inferred outcomes, becomes a note, as the old rule did for inferred-only citations, and the card says why ("lowered: cites no outcome you asked for"). Second Eye's brief is unchanged. Its fixed rules no longer say to leave a plain bug's citation empty: they say to cite the asked outcome or constraint it breaks. Second Eye ran alone on 9a3432's versions, intents and Reticle results, on 08a0dd3 with this change applied before it was committed.
+  - tabulate-190's false alarm is gone: Second Eye raised no blocking finding on the real fix. It still caught tabulate-190's broken version.
+  - Second Eye caught 19 of 23 by the rule, one fewer than 9a3432: boltons-337's hunk undone at dictutils.py:194. By hand it's 19 too, the same as 9a3432's 19: its catch of the hunk undone at dictutils.py:74 now names the `PY3` flag left undefined, a real catch, where in 9a3432 it rested only on the old-pickle finding.
+  - c98ad5 didn't record which findings the rule lowered, so the scorer now keeps them, with what each cited. A second rerun of the two cases that moved, [ab4ae5-seeded](../evals/results/2026-10-01-ab4ae5-seeded/summary.md), shows the same results, and the rule lowered nothing in either change: Second Eye raised no blocking finding on tabulate-190's real fix or on boltons-337's dictutils.py:194 version. The only findings it lowered were two missing-test findings on boltons-337 that cite inferred outcome 7, which the seeded mode doesn't count anyway. So in ab4ae5 no catch was lost to the rule; c98ad5 can't show it either way. The boltons-337 miss looks like run-to-run variance: Second Eye missed that version in f5ff69, cbcd0e and e1f0a0 too. Whether tabulate-190's false alarm went away because of the new rules or by chance, one run can't say. If Second Eye raises it again without an asked citation, code lowers it, and a test pins that.
+  - The rerun cost $0.77, and the second rerun $0.16.
 - **Inferred-outcome notes were tried and rejected.** With Reticle also testing the outcomes Focus inferred, failures shown as notes on the card and never sent back, the seeded runs showed 5 notes on the 11 real fixes, all noise by definition, for 3 more catches (22 of 23). On humanize-174 run through the whole pipeline (7eb145), the one case where a note could have mattered, there was none. Reticle now tests only what you asked.
 
 **Why humanize-174 gets past every checker:** the rule the fix broke wasn't in the request. The issue asks that `naturaldelta(10799)` say "3 hours", not "2 hours". The maintainers went further and made every unit round to the nearest one, minutes and months too, and their hidden tests check that. Reticle tests what you asked, and Maker gets hours right, so its tests pass. Focus inferred the other units as an outcome, but Reticle doesn't test inferred outcomes, and the inferred-outcome test it wrote in 7eb145 was for hours, which passed. Second Eye sees only the diff, which looks right for hours. A checker can only hold a fix to a rule that someone wrote down.
@@ -126,8 +133,8 @@ The last four cases first ran in 41250f and stopped at caps of $0.67 to $0.80, w
 ## What they don't show
 
 - **How often Second Eye catches a bad fix Maker made.** Only one fix was bad, and it wasn't caught. One case can't give a rate. The seeded rates above are for mechanical edits.
-- **Its false-alarm rate on Maker's fixes.** None in 11 judgments, in either full run, is too few to say it's rare. On the maintainers' real fixes, seeded, it went from 6 of 11 to 1 of 11 as its rule changed, stayed at 1 of 11 in e1f0a0, and was 3 of 11 in 9a3432 on intents drafted again (above).
-- **Variance.** Each seeded run is one run. Second Eye's catches on the same versions moved between runs (boltons-319's undone hunk was missed in f5ff69 and caught in cbcd0e; pathspec-77's was caught in cbcd0e and missed in e1f0a0), so a difference of one or two isn't a trend.
+- **Its false-alarm rate on Maker's fixes.** None in 11 judgments, in either full run, is too few to say it's rare. On the maintainers' real fixes, seeded, it went from 6 of 11 to 1 of 11 as its rule changed, stayed at 1 of 11 in e1f0a0, was 3 of 11 in 9a3432 on intents drafted again, and 2 of 11 in c98ad5 with the cite-or-note rule (above).
+- **Variance.** Each seeded run is one run. Second Eye's catches on the same versions moved between runs (boltons-319's undone hunk was missed in f5ff69 and caught in cbcd0e; pathspec-77's was caught in cbcd0e and missed in e1f0a0; boltons-337's at dictutils.py:194 was caught in 9a3432 and missed in e1f0a0 and c98ad5), so a difference of one or two isn't a trend.
 - **Anything beyond small, pure-Python repos,** or any variance: each case ran once.
 - **An independent test of the cap floor.** Its $2.00 default came from Maker's costs on these same cases, so the rerun succeeding is expected.
 - **One consistent version, before.** The previous results span three commits of Parallax. 8e3074 and 9a3432 are each one run on one commit (ba09b02).

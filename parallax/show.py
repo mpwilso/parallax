@@ -42,18 +42,35 @@ def _tests(e: dict | None, staged: dict | None = None) -> list[str]:
     return out
 
 
-def _checker(v: dict | None) -> tuple[list[str], list[str], list[tuple[str, str]]]:
-    """(the verdict line, one line per finding, the checker's Not looked at as a gap)."""
+def _lowered(entries: list[dict], v: dict) -> dict[tuple[str, str], str]:
+    """(text, where) -> why code lowered that finding of this verdict to a note. Its downgrades come
+    right before it in the ledger. An older downgrade without a why was the asked-only rule's."""
+    from .review import UNASKED
+    out = {}
+    for e in reversed(entries[:entries.index(v)] if v in entries else []):
+        if e["kind"] == "verdict.recorded":
+            break
+        if e["kind"] == "verdict.downgraded":
+            for x in e["data"].get("lowered") or []:
+                out.setdefault((x["text"], x["where"]), x.get("why") or UNASKED)
+    return out
+
+
+def _checker(v: dict | None, entries: list[dict] = ()) -> tuple[list[str], list[str], list[tuple[str, str]]]:
+    """(the verdict line, one line per finding, the checker's Not looked at as a gap). A finding code
+    lowered to a note says why."""
     if not v:
         return [], [], []
+    lowered = _lowered(list(entries), v)
     d, cite = v["data"], f"(ledger {v['id']})"
     n = len(d.get("findings", []))
     said = {"pass": "passed it", "fail": "failed it", "no_finding": "found nothing wrong, but couldn't confirm the outcome",
             "error": "gave no usable answer"}.get(d["verdict"], d["verdict"])
     points = "" if not n else f", with {n} point" + ("s" if n > 1 else "") + " below"
     head = f"Second Eye, the blind checker, {said}{points}. {cite}"
+    why = lambda f: f" (lowered: {lowered[f['text'], f['where']]})" if (f["text"], f["where"]) in lowered else ""  # noqa: E731
     findings = [f"{f['severity'].capitalize()}, at {f['where'] or 'the change as a whole'}: "
-                f"{' '.join(f['text'].split()).rstrip('.')}. {cite}" for f in d.get("findings", [])]
+                f"{' '.join(f['text'].split()).rstrip('.')}{why(f)}. {cite}" for f in d.get("findings", [])]
     nla = " ".join(str(d.get("not_looked_at") or "nothing").split())
     gaps = [] if nla.rstrip(".").lower() == "nothing" else [(f"Second Eye says: {nla}", f"Second Eye didn't check: {nla} {cite}")]
     return [head], findings, gaps
@@ -274,7 +291,7 @@ def report(project: Project, task_id: str) -> str:
     tests = _last(entries, "tests.recorded")
     verdict = _last(entries, "verdict.recorded", stage="check")
     staged = _last(entries, "check.staged")
-    head, findings, gaps = _checker(verdict)
+    head, findings, gaps = _checker(verdict, entries)
     ui_found, ui_gaps = _ui(_attempt(entries, task_id))
     gaps = gaps + ui_gaps
     found = _tests(tests, staged) + ui_found + head
