@@ -867,7 +867,7 @@ def test_the_strip_says_when_no_reticle_tests_counted(page, proj):
     proj.ledger.append("reticle.recorded", "reticle", "0 tests kept, 1 weak ones dropped.", task=tid, kept=[],
                        weak=[{"name": "test_reticle", "why": "the file doesn't load on the base (collection failure)"}])
     open_card(page, tid)
-    expect(page.locator("#card .strip")).to_contain_text("no Reticle tests counted", timeout=WAIT)
+    expect(page.locator("#card").get_by_role("img", name="Reticle: no Reticle tests counted")).to_be_visible(timeout=WAIT)
     expect(page.locator("#card")).to_contain_text("no Reticle tests counted.")
 
 

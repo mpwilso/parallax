@@ -125,7 +125,10 @@ def test_the_page_has_no_inline_code_and_never_writes_agent_text_as_html():
     js = (WEB / "app.js").read_text()
     for risky in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "new Function"):
         assert risky not in js, risky
-    assert "localStorage" not in js  # the token lives in the tab only
+    # the token lives in the tab only (sessionStorage); what outlasts the tab holds the theme you picked, nothing else
+    assert "indexedDB" not in js and "document.cookie" not in js
+    used = re.findall(r"localStorage\.(\w+)\(([^,)]*)", js)
+    assert used and {key for _, key in used} == {"THEME_KEY"} and 'const THEME_KEY = "parallax-theme";' in js
     assert "\u2014" not in html + js + (WEB / "app.css").read_text()
 
 

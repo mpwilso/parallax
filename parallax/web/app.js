@@ -19,6 +19,25 @@ const slug = (name) => name.replace(/[^\w-]+/g, "-");  // an option's name as an
 const CHIP = { Merging: "info", Working: "info", Ready: "good", "Needs you": "wait", Failed: "bad", "Can't display": "bad" };
 const MARK = { done: "\u2713", working: "\u25CF", failed: "\u2715", skipped: "\u25CB", none: "\u2205" };  // check, dot, cross, ring, empty set
 const SAID = { done: "done", working: "working", failed: "failed", skipped: "didn't run", none: "no Reticle tests counted" };
+// the theme: the system's unless you pick one; kept in this browser only, never on the server
+const THEME_KEY = "parallax-theme";
+function savedTheme() {
+  try { return localStorage.getItem(THEME_KEY) || "system"; } catch (err) { return "system"; }
+}
+function applyTheme(theme) {
+  if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+  else delete document.documentElement.dataset.theme;
+}
+applyTheme(savedTheme());  // before anything draws
+function setupTheme() {
+  const pick = document.getElementById("theme");
+  pick.value = savedTheme();
+  pick.addEventListener("change", () => {
+    try { if (pick.value === "system") localStorage.removeItem(THEME_KEY); else localStorage.setItem(THEME_KEY, pick.value); } catch (err) { /* private window: this page only */ }
+    applyTheme(pick.value);
+  });
+}
+
 const LIVE_EVERY = 15000;  // working lines carry a clock: refresh them even when nothing new happened
 
 const state = {
@@ -144,8 +163,8 @@ function strip(task, stages, withTile) {
   if (!stages || !stages.length) return null;
   const box = el("div", { class: "strip-wrap" }, withTile ? tile("card:" + task, stages) : null,
     el("ol", { class: "strip", "aria-label": "Stages" }, stages.map(s => el("li", { class: "st s-" + s.state, "data-stage": s.stage, "data-state": s.state },
-      el("span", { class: "mark", "aria-hidden": "true" }, MARK[s.state] || ""), el("span", { class: "name" }, s.name),
-      el("span", { class: "vh" }, `: ${SAID[s.state] || s.state}`)))));
+      el("span", { class: "mark", role: "img", "aria-label": `${s.name}: ${SAID[s.state] || s.state}` }, MARK[s.state] || ""),
+      el("span", { class: "name", "aria-hidden": "true" }, s.name)))));  // the symbol's name says both: "Maker: failed"
   return box;
 }
 
@@ -785,4 +804,5 @@ const link = readHash();
 state.token = link.token || sessionStorage.getItem("parallax-token") || "";
 state.wanted = link.task || null;
 if (location.hash) sessionStorage.setItem("parallax-token", state.token);
+setupTheme();
 if (!state.token) lock(); else { loadBrand(); poll(); }

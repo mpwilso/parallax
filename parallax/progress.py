@@ -16,7 +16,7 @@ STAGES = (("focus", "Focus"), ("reticle", "Reticle"), ("maker", "Maker"), ("chec
 WORKING = ("drafting", "building", "checking", "merging")
 # a decision's kind -> the stage that stopped. cap, error and stuck stop whichever stage was running
 STOPPED_AT = {"drafting": "focus", "budget": "focus", "turns": "maker", "guard": "maker", "scope": "check", "conflict": "check",
-              "flows": "check", "rework": "check", "checker": "check", "tests": "check"}
+              "flows": "check", "rework": "check", "checker": "check", "tests": "check", "loop": "check"}
 FAILED_KINDS = {"cap", "rework", "checker", "tests", "turns", "error", "stuck", "drafting", "loop"}  # the work failed: chip Failed
 SUMMARY = 110  # characters a row's sentence gets before it's shortened, at a word
 

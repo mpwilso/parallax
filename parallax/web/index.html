@@ -16,6 +16,13 @@
     <label for="work" class="vh">Describe the work</label>
     <input id="work" name="work" placeholder="Describe the work, then press Enter" enterkeyhint="send">
   </form>
+  <label class="theme"><span class="vh">Color theme</span>
+    <select id="theme">
+      <option value="system">System theme</option>
+      <option value="light">Light</option>
+      <option value="dark">Dark</option>
+    </select>
+  </label>
 </header>
 <p id="status" class="status" role="status" aria-live="polite"></p>
 <p id="offline" class="offline" role="alert" hidden>Parallax isn't answering: the <code>parallax ui</code> server has stopped. Start it again with <code>parallax ui</code> in a terminal, then reload this page.</p>

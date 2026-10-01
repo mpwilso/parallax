@@ -61,4 +61,4 @@ Real task records live in the ledger (`.parallax/ledger.jsonl`) and `docs/tasks/
 
 ## Accessibility & Inclusion
 
-Usable by keyboard alone. Works in a narrow window. (No other requirement stated.)
+Usable by keyboard alone, with a visible focus outline on everything you can tab to. Works in a narrow window. Follows the system's light or dark theme, or the one picked in the header (kept in the browser only). Body and status text meet WCAG AA contrast (4.5:1) in both themes. Every stage symbol has a name, like "Maker: failed". With reduced motion on, nothing moves, the Merging spinner included.
