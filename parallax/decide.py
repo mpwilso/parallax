@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable
 
-from . import budgets, costs, lifecycle, pilot, status
+from . import budgets, costs, lifecycle, lint, pilot, status, tools
 from .core import ParallaxError, Project
 
 
@@ -137,7 +137,7 @@ def decision(project: Project, task_id: str) -> Decision | None:
                         [Option("approve", "starts the build now"), REJECT, DROP], "approve", "the build",
                         extra=cited)
     if item is None:
-        return None
+        return _idle(project, task_id, t)
 
     d, why = item["data"], " ".join(item["reason"].split())
     stage = d.get("stage")
@@ -205,6 +205,26 @@ def decision(project: Project, task_id: str) -> Decision | None:
                         [RETRY, REJECT, DROP], "drop" if again else "retry", "the whole task", item)
     return Decision("stuck", "It stopped: run it again, or redraft?", [RETRY, REJECT, DROP], "retry",
                     "the whole task", item)
+
+
+IDLE_QUESTION = "Nothing is running and it isn't finished: run it again, or redraft?"
+
+
+def _idle(project: Project, task_id: str, t: dict) -> Decision | None:
+    """Needs you, with nothing open and nothing running: an answer whose follow-up never started (a
+    retry whose setup failed, say). Never a card without buttons: run it again, redraft, or drop."""
+    from .build import running_builds
+    if status.board(t["status"]) != "needs you" or t["status"] == "needs you" or task_id in running_builds(project):
+        return None
+    entries = status.attempt(project.ledger.entries(), task_id)
+    stops = [e for e in entries if e["kind"] in ("stuck.raised", "disagreement.raised", "build.finished")]
+    if not stops:
+        return None  # it never started: there's nothing to run again
+    last = stops[-1]
+    answered = [e for e in entries if e["kind"] == "decision.resolved" and e["data"].get("decision") == last["id"]]
+    return Decision("stuck", IDLE_QUESTION, [RETRY, REJECT, DROP], "retry", "the whole task",
+                    extra={"why": " ".join((last["reason"] or last["data"].get("status") or "it stopped").split()),
+                           "last": last["id"], "answered": answered[-1]["id"] if answered else ""})
 
 
 SANDBOX_START = ("sandbox runtime", "srt:", "bwrap", "namespace")  # words of a sandbox that never started
@@ -282,7 +302,16 @@ def apply(project: Project, task_id: str, name: str, reason: str = "", spawn: Ca
             return f"accepted the risk on {task_id}. it's Ready: parallax accept {task_id} commits it."
     elif dec.item:  # retry, plan
         project.resolve(dec.item["id"], True, said)
-    mode = pilot.resume(project, task_id, spawn, preflight_runner)
+    try:
+        mode = pilot.resume(project, task_id, spawn, preflight_runner)
+    except tools.MissingTool as err:  # back in the inbox, naming the program and the fix
+        project.ledger.append("stuck.raised", "parallax", err.missing.text, task=task_id,
+                              missing_tool=err.missing.tool, fix=err.missing.fix)
+        raise ParallaxError(f"{err.missing.text}. it's back in the inbox: {err.missing.fix}, then retry") from None
+    except ParallaxError as err:  # setup failed again, say: never a Needs you card with no buttons
+        project.ledger.append("stuck.raised", "parallax", lint.one_sentence(f"{str(err).rstrip('.')}, when you chose {name}"),
+                              task=task_id, error=True)
+        raise ParallaxError(f"{name} didn't start: {err}. it's back in the inbox: retry, redraft or drop it") from None
     what = {"pilot": "drafting", "build": "building", "check": "checking"}[mode]
     return f"{what} {task_id} without you. it comes back to the inbox."
 

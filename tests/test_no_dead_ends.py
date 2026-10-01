@@ -163,6 +163,17 @@ STOPS = [  # (ledger kind, data, reason): one per kind of stop the card, the inb
 ]
 
 
+def _actions(proj, tid, why):
+    """The card's buttons. A Needs you card with none is a dead end: the walk fails on it."""
+    card = views.card(proj, tid)
+    if card["state"] != "needs you":
+        return []
+    acts = card["actions"]
+    if acts.get("kind") != "decide" or not acts.get("options"):
+        return [f"{card['status']} card has no actions: {why}"]
+    return []
+
+
 def _quoted(name):
     return f'"{name}"' if " " in name else name
 
@@ -190,10 +201,72 @@ def test_every_kind_of_stop_names_what_happened_why_and_one_action(repo):
         row = next(i for i in views.board(proj)["waiting"] if i["task"] == tid)
         if not row["line"]:
             missing.append(f"{dec.kind} row: {why}")
+        missing += _actions(proj, tid, why)
         if kind != "review.requested":
             proj.resolve(item["id"], False, "next case")
     assert not missing, "these stops name no action: " + "; ".join(missing)
     assert seen == set(decide.WHY_HUMAN), f"add a case for: {sorted(set(decide.WHY_HUMAN) - seen)}"
+
+
+AFTERMATHS = [  # what's left once a stop is answered and nothing started: (stop, its data, the answer)
+    ("stuck.raised", {}, True),                        # retry chosen, then the restart failed: status "open"
+    ("stuck.raised", {"error": True}, True),
+    ("disagreement.raised", {"stage": "check"}, False),  # sent back, then the redraft never started: "needs work"
+    ("disagreement.raised", {"stage": "conflict"}, True),  # the plan won: "plan approved"
+    ("disagreement.raised", {"stage": "scope"}, True),   # the risk accepted: "risk accepted"
+]
+
+
+def test_a_needs_you_card_always_has_an_action_even_after_an_answer_that_went_nowhere(repo):
+    """A failed setup retry left the card on Needs you with no buttons."""
+    make_key()
+    proj = Project.init(repo)
+    tid = pilot.intake(proj, WANT)["task"]
+    pilot_once(proj, tid, FakeDrafter(docs()))
+    missing = []
+    for kind, data, answer in AFTERMATHS:
+        item = proj.ledger.append(kind, "parallax", "it stopped", task=tid, **data)
+        proj.resolve(item["id"], answer, "an answer whose follow-up never started")
+        proj.ledger.append("builder.finished", "parallax", "", task=tid, status="stuck")  # nothing is running
+        missing += _actions(proj, tid, f"{kind} {data} answered {answer}")
+        for status in ("maker failed", "blocked", "over budget", "disputed"):
+            proj.ledger.append("build.finished", "parallax", "", task=tid, status=status)
+            missing += _actions(proj, tid, f"build.finished {status}")
+    assert not missing, "; ".join(missing)
+
+
+def test_a_failed_setup_retry_comes_back_with_its_actions(repo):
+    from parallax.core import POLICY_FILE
+    (repo / POLICY_FILE).write_text('[build]\nsetup = "echo the mirror is down >&2; exit 3"\n')
+    make_key()
+    proj = Project.init(repo)
+    tid = pilot.intake(proj, WANT)["task"]
+    assert pilot_once(proj, tid, FakeDrafter(docs())) == "stuck"
+    assert decide.decision(proj, tid).kind == "error"
+    with pytest.raises(ParallaxError) as err:
+        decide.apply(proj, tid, "retry")  # setup fails again, in the retry itself
+    assert "the [build] setup command failed: the mirror is down" in str(err.value)
+    assert "back in the inbox" in str(err.value)
+    card = views.card(proj, tid)
+    assert card["state"] == "needs you" and card["actions"]["kind"] == "decide"
+    assert [o["name"] for o in card["actions"]["options"]] == ["retry", "reject", "drop"]
+    report = show.report(proj, tid)
+    assert "the mirror is down" in report and f"Next: you run parallax decide {tid} " in report
+
+
+def test_a_retry_that_hits_a_missing_program_names_it(repo, monkeypatch):
+    from parallax import tools
+    proj, tid, wt = approved(repo)
+    proj.ledger.append("stuck.raised", "parallax", "it stopped", task=tid)
+
+    def lacking(*a, **k):
+        raise tools.MissingTool(tools.Missing("uv", "the [build] setup command"))
+
+    monkeypatch.setattr(pilot, "resume", lacking)
+    with pytest.raises(ParallaxError):
+        decide.apply(proj, tid, "retry")
+    dec = decide.decision(proj, tid)
+    assert dec.kind == "tool" and [o.name for o in dec.options] == ["retry", "drop"]
 
 
 def test_stops_after_accept_and_a_broken_card_name_an_action_too(repo, monkeypatch):

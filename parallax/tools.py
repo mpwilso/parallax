@@ -26,8 +26,9 @@ SANDBOX = ("srt", "node", "bwrap", "socat")  # sandbox.TOOLS: srt is a node scri
 INSTALL = {"uv": "curl -LsSf https://astral.sh/uv/install.sh | sh",
            "claude": "curl -fsSL https://claude.ai/install.sh | bash",
            "git": "sudo apt install -y git"}
-BUILTINS = {"export", "cd", "set", "unset", "source", ".", "true", "false", "echo", "printf", "test", "[", "fi",
-            "done", "esac", "for", "case", "}", ")"}  # a step that starts with one of these runs no program by name
+BUILTINS = {"export", "cd", "set", "unset", "source", ".", "true", "false", "echo", "printf", "test", "[", "[[",
+            "exit", "return", "shift", "wait", "read", "trap", "umask", "ulimit", "alias", "local", "declare",
+            "eval", "pushd", "popd", "type", "hash", ":", "fi", "done", "esac", "for", "case", "}", ")"}  # a step that starts with one of these runs no program by name
 PREFIXES = {"exec", "env", "sudo", "time", "command", "if", "then", "else", "elif", "do", "while", "until", "!", "{", "("}
 NOT_FOUND = (re.compile(r"command not found: ([\w.+-]+)"), re.compile(r"([\w.+-]+): (?:command )?not found"))  # zsh, then sh and bash
 RESTART = 'add its folder to PATH in ~/.bashrc, for example export PATH="$HOME/.local/bin:$PATH", then restart parallax ui from a new terminal'

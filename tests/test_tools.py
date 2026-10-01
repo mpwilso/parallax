@@ -66,6 +66,7 @@ def test_the_programs_a_command_runs_are_read_from_it():
     assert tools.commands("export X=1; cd src && make -j2 2>&1 | tee log > out.txt") == ["make", "tee"]
     assert tools.commands("python3 -c 'import time; time.sleep(0.2)'") == ["python3"]  # a ; inside quotes runs nothing
     assert tools.commands("uv venv\nnpm ci") == ["uv", "npm"]
+    assert tools.commands("echo no >&2; exit 3") == []  # builtins run no program
     from parallax.policy import Policy
     policy = Policy(build={"setup": SETUP}, ui_tester={"enabled": True, "start": "npm run dev", "url": "http://127.0.0.1:5173/"})
     want = dict(tools.needed(policy, "linux"))

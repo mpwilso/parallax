@@ -209,6 +209,11 @@ def _decision(project: Project, task_id: str, dec, found: list[str], gaps: list[
         if dec.kind == "tool":
             hint = [f"Fix: {dec.extra['fix'].rstrip('.')}, then retry."]
         found = [f"{why} {cite}"] + [f"{h} {cite}" for h in hint] + list(found)
+    elif dec.question == decide.IDLE_QUESTION:  # answered, but what came next never started
+        bottom = "Needs you: nothing is running, and the task isn't finished."
+        found = [f"It last stopped on: {dec.extra['why'].rstrip('.')}. (ledger {dec.extra['last']})"]
+        if dec.extra.get("answered"):
+            found.append(f"You answered it, but nothing has run since. (ledger {dec.extra['answered']})")
     else:
         bottom = "The plan waits for you before it runs."
         plan = lifecycle.plan_data(project, task_id) or {}
