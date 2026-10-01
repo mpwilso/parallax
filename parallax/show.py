@@ -94,6 +94,17 @@ def _changed(project: Project, task_id: str, entries: list[dict]) -> list[str]:
     return out
 
 
+def _points_listed(found: list[str], findings: list[str]) -> tuple[list[str], list[str]]:
+    """Second Eye's points go right under its line in Found, never off to Details. When that makes
+    the body too long, the outcome lines move to Details instead: (found, what moves first)."""
+    at = next((i + 1 for i, f in enumerate(found) if f.startswith("Second Eye, the blind checker,")), len(found))
+    found = found[:at] + findings + found[at:]
+    outcomes = [f for f in found if f.startswith("Outcome ")]
+    if findings and any("body is" in m for _, m in lint.lint_report(lint.report("FYI", "x.", "nothing", "x.", found))):
+        return [f for f in found if f not in outcomes], outcomes
+    return found, []
+
+
 def _the_work(project: Project, task_id: str, staged: dict | None) -> list[str]:
     """What the work was, and what changed: the first two lines of a Ready card."""
     intent = lifecycle._read(project, task_id, "intent")
@@ -264,9 +275,13 @@ def report(project: Project, task_id: str) -> str:
         how = "passed" if verdict and verdict["data"]["verdict"] == "pass" else "found nothing blocking"
         if verdict and verdict["data"]["verdict"] in ("error", "fail"):
             how = f"said {verdict['data']['verdict']} and you accepted the risk"
-        bottom = f"Ready: Second Eye {how} and {passed} of {total} plan tests pass."
+        from .progress import reticle_counted
+        attempt_entries = _attempt(entries, task_id)
+        none = any(e["kind"] == "reticle.recorded" for e in attempt_entries) and not reticle_counted(attempt_entries)
+        tail = "; no Reticle tests counted." if none else "."  # never a quiet pass when none of its tests counted (7ac365)
+        bottom = f"Ready: Second Eye {how} and {passed} of {total} plan tests pass{tail}"
         if lead:
-            bottom = f"Ready again after your reject: Second Eye {how} and {passed} of {total} plan tests pass."
+            bottom = f"Ready again after your reject: Second Eye {how} and {passed} of {total} plan tests pass{tail}"
         disputed = _last(_attempt(entries, task_id), "reticle.disputed")
         if disputed and staged and disputed["data"]["tree"] == staged["data"]["tree"]:  # Reticle disagrees: yours to judge
             outs = sorted({t["outcome"] for t in disputed["data"]["failed"]})
@@ -275,8 +290,9 @@ def report(project: Project, task_id: str) -> str:
             found = [f"Reticle, outcome {t['outcome']}: its test still fails after one rework: "
                      f"{' '.join(t['message'].split())[:120]} (ledger {disputed['id']})"
                      for t in disputed["data"]["failed"]] + found
+        found, rest = _points_listed(found, findings)  # "with 2 points below" always has them below (7ac365)
         return lint.shaped("Decision needed", bottom, gaps, f"you run parallax accept {task_id}, or reject it with a reason.",
-                           found, changed, "the checker", boundary + findings)
+                           found, changed, "the checker", rest + boundary)
     if status == "merging":  # Accept and merge is running: never "merging is yours" while it is
         from . import merging
         m = merging.info(project, task_id) or {"line": "Merging."}

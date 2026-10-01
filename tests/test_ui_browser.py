@@ -795,3 +795,13 @@ def test_a_stopped_server_says_so_and_how_to_get_it_back(page):
     expect(page.locator("#status")).to_have_text(
         "Parallax isn't answering: the parallax ui server has stopped. Start it again with parallax ui in a terminal, "
         "then reload this page.", timeout=WAIT)
+
+
+def test_the_strip_says_when_no_reticle_tests_counted(page, proj):
+    """7ac365: Reticle showed a green tick though none of its tests loaded."""
+    tid, _ = run_to_ready(proj)
+    proj.ledger.append("reticle.recorded", "reticle", "0 tests kept, 1 weak ones dropped.", task=tid, kept=[],
+                       weak=[{"name": "test_reticle", "why": "the file doesn't load on the base (collection failure)"}])
+    open_card(page, tid)
+    expect(page.locator("#card .strip")).to_contain_text("no Reticle tests counted", timeout=WAIT)
+    expect(page.locator("#card")).to_contain_text("no Reticle tests counted.")

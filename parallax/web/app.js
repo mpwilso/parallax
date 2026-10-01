@@ -17,8 +17,8 @@ const SEND = { reject: "Reject and redraft", "send back": "Send it back", drop: 
 const LABEL = { "send back": "Send back with a note", merge: "Accept and merge", allow: "Allow it", "use limit": "Use the limit" };  // a button's words, where its name alone says too little
 const slug = (name) => name.replace(/[^\w-]+/g, "-");  // an option's name as an id: "send back" -> "send-back"
 const CHIP = { Merging: "info", Working: "info", Ready: "good", "Needs you": "wait", Failed: "bad", "Can't display": "bad" };
-const MARK = { done: "\u2713", working: "\u25CF", failed: "\u2715", skipped: "\u25CB" };  // check, dot, cross, ring
-const SAID = { done: "done", working: "working", failed: "failed", skipped: "didn't run" };
+const MARK = { done: "\u2713", working: "\u25CF", failed: "\u2715", skipped: "\u25CB", none: "\u2205" };  // check, dot, cross, ring, empty set
+const SAID = { done: "done", working: "working", failed: "failed", skipped: "didn't run", none: "no Reticle tests counted" };
 const LIVE_EVERY = 15000;  // working lines carry a clock: refresh them even when nothing new happened
 
 const state = {

@@ -36,6 +36,12 @@ def _running(kinds: list[str]) -> str:
     return at
 
 
+def reticle_counted(entries: list[dict]) -> int:
+    """How many of Reticle's tests count in this attempt: the ones it kept."""
+    rec = next((e for e in reversed(entries) if e["kind"] == "reticle.recorded"), None)
+    return len(rec["data"].get("kept") or []) if rec else 0
+
+
 def strip(project: Project, task_id: str, dec=None) -> list[dict]:
     """[{stage, name, state, agent}], in order. agent: the portrait to show when that stage is working."""
     t = project.task(task_id)
@@ -47,6 +53,8 @@ def strip(project: Project, task_id: str, dec=None) -> list[dict]:
     working = {"focus": "focus", "reticle": "reticle", "maker": "maker", "second_eye": "check", "field": "check"}.get(agent or "")
     if board in WORKING and not working and what.startswith(("running", "checking", "preparing the build")):
         working = "check" if what.startswith(("running", "checking")) else None
+    if board == "drafting":  # drafting and redrafting are Focus's, whatever the live line says (fb461d)
+        working = "focus"
     failed = None
     if dec is not None and dec.item is not None:
         failed = STOPPED_AT.get(dec.kind) or _running(kinds)
@@ -68,6 +76,8 @@ def strip(project: Project, task_id: str, dec=None) -> list[dict]:
             state = "working"
         elif key == failed or (key == "reticle" and "reticle.failed" in kinds):
             state = "failed"
+        elif key == "reticle" and done[key] and not reticle_counted(entries):
+            state = "none"  # it ran, but none of its tests counted: never a green tick (7ac365)
         elif done[key]:
             state = "done"
         else:
