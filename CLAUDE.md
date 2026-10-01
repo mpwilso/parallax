@@ -10,7 +10,7 @@ The test for every feature: "Parallax is hands-free. Execution happens without m
 2. Merging is always a human decision. It can't be set in policy.
 3. The checker gets exactly: the intent's outcome and constraints, REVIEW.md, and the cached diff of the reviewed tree without `docs/tasks/`. Nothing else. One test pins it.
 4. Maker/checker disagreement is reworked up to 3 recorded cycles. On re-review the checker gets only its brief input plus the new diff, never the maker's reply. The 4th fail goes to the human. Never retried silently.
-5. A model never approves anything. Code may approve a plan or a launch only under rules the human set in the policy file (`auto_launch_usd`, `review_paths`, `review_plans`); each such approval is signed, recorded, and names its rule.
+5. A model never approves anything. Code may approve a plan or a launch only under rules the human set in the policy file (`auto_launch_usd`, `review_paths`, `review_plans`, `[budget] mode`); each such approval is signed, recorded, and names its rule.
 6. The ledger is append-only and hash-chained. Nothing edits or deletes entries.
 7. Rejects, overrides, and accepted risks need a reason. Approvals don't.
 8. "No finding" is a valid result. Don't pad output to look busy.
@@ -28,7 +28,7 @@ Search the repo for an existing helper, test fixture, or pattern first. Reuse be
 - Tests in `tests/`, pytest. Tests never call a model. Run `scripts/test.sh` before calling anything done: it runs ruff and the full suite exactly as CI does, with the Playwright version pinned in it. New behavior gets a test.
 - When CI fails, the report says "reproduced" or "not reproduced". A fix is never claimed without a reproduction that failed and then passed; without one, only capture more evidence for the next run.
 - Keep modules small. New milestones get new modules, not bigger old ones.
-- The ledger holds who decided what, plus the hash of every approved file. Files in `docs/tasks/` hold the work. A hash mismatch blocks accept. Derive views (inbox, task status) from the ledger.
+- The ledger holds who decided what, plus the hash of every approved file. Drafts live in the task's data folder, and accept commits them to `docs/tasks/TASKID/`. A hash mismatch blocks accept. Derive views (inbox, task status) from the ledger.
 
 ## Writing
 
