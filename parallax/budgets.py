@@ -64,6 +64,19 @@ def just_decided(project: Project, task_id: str) -> bool:
     return False
 
 
+def launch_answer(project: Project, task_id: str) -> dict | None:
+    """Your "allow and launch", when it still holds: the last budget answer this attempt, and the plan
+    is byte for byte the one you could read when you gave it. Then the launch is yours, already given."""
+    from .status import attempt
+    answers = [e for e in attempt(project.ledger.entries(), task_id) if e["kind"] in ("budget.allowed", "budget.limited")]
+    if not answers or not answers[-1]["data"].get("launch"):
+        return None
+    plan = lifecycle.doc_path(project, task_id, "plan")
+    if not plan.exists() or lifecycle.file_hash(plan) != answers[-1]["data"].get("plan_sha"):
+        return None
+    return answers[-1]
+
+
 def use_limit(project: Project, task_id: str, cap: float, reason: str) -> None:
     """You chose the limit: the intent's budget and the plan's cap become it, written by code, and
     each file's new hash is recorded, as when code raises a cap before approval."""

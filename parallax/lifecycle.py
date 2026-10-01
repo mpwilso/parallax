@@ -266,10 +266,11 @@ def lint_problems(project: Project, task_id: str, docs) -> list[str]:
     return out
 
 
-def approve(project: Project, task_id: str, rule: str = "") -> dict:
+def approve(project: Project, task_id: str, rule: str = "", answer: dict | None = None) -> dict:
     """Approve the pending gate: hash every file in it and sign the approval with the approval key.
 
-    rule: code approving under the policy's launch rule, named here. Otherwise it's you."""
+    rule: code approving under the policy's launch rule, named here. Otherwise it's you: now, or by
+    an answer you gave before the launch (answer: your "allow and launch" entry, for this exact plan)."""
     refuse_inside_task(project.root)
     lifecycle_task(project, task_id)
     key = approvals.load_key()
@@ -296,9 +297,12 @@ def approve(project: Project, task_id: str, rule: str = "") -> dict:
     files = {doc: file_hash(doc_path(project, task_id, doc)) for doc in st.gate}
     gate = "+".join(st.gate)
     extra = {"rule": rule} if rule else {}
+    if answer and not rule:  # yours, given in advance: it names the answer, so the ledger shows where it came from
+        extra["answer"] = answer["id"]
     if "plan" in st.gate and (plan := plan_data(project, task_id)):
         extra["cap_usd"] = float(plan["budget_cap_usd"])  # a redraft never lowers it (budgets.approved_cap)
-    return project.ledger.append("gate.approved", "parallax" if rule else "human", rule, task=task_id, gate=gate,
+    why = rule or (answer["reason"] if answer else "")
+    return project.ledger.append("gate.approved", "parallax" if rule else "human", why, task=task_id, gate=gate,
                                  files=files, sig=approvals.sign(key, task_id, gate, files), **extra)
 
 

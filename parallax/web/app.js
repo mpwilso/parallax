@@ -508,7 +508,7 @@ function actions(c) {
       el("button", { id: "opt-" + slug(o.name), "data-focus": "opt-" + slug(o.name), disabled: state.acting === c.task || null,
         class: (o.name === (recommend || "accept") ? "primary" : "") + (o.name === "drop" ? " danger" : "") + (p && p.option === o.name ? " picked" : ""),
         "aria-describedby": "does-" + slug(o.name), "aria-expanded": o.needs_reason ? String(!!(p && p.option === o.name)) : null,
-        onclick: () => choose(c, o) }, LABEL[o.name] || cap(o.name)),
+        onclick: () => choose(c, o) }, o.label || LABEL[o.name] || cap(o.name)),
       el("span", { class: "does", id: "does-" + slug(o.name) },
         o.does, o.needs_reason ? el("span", { class: "hint" }, " Needs a reason.") : null,
         o.name === recommend ? el("span", { class: "tag rec" }, "Recommended") : null),
@@ -533,7 +533,7 @@ function mergingNow(c) {
     el("p", { class: "hint" }, el("span", { id: "merge-elapsed", "data-started": m.started || "" }, elapsedFine(m.started)),
       m.usual_seconds ? ` so far; it usually takes about ${fine(m.usual_seconds)}.` : " so far."),
     el("ol", { class: "options" }, READY_OPTIONS.map(o => el("li", {},
-      el("button", { id: "opt-" + slug(o.name), disabled: true }, LABEL[o.name] || cap(o.name)),
+      el("button", { id: "opt-" + slug(o.name), disabled: true }, o.label || LABEL[o.name] || cap(o.name)),
       el("span", { class: "does" }, o.does)))));
 }
 

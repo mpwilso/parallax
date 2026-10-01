@@ -159,6 +159,17 @@ def launch_rule(project: Project, task_id: str) -> tuple[bool, str]:
     return True, f"launch rule: a small task, cap ${cap:.2f} within auto_launch_usd ${limit:.2f}, nothing in review_paths"
 
 
+def _launch_answered(project: Project, task_id: str) -> dict | None:
+    """Your "allow and launch" covers this launch: only the cap stood in the way (every other launch
+    rule passed), the plan is the one you could read, and its cap is within what you allowed."""
+    from . import budgets
+    answer = budgets.launch_answer(project, task_id)
+    plan = lifecycle.plan_data(project, task_id) or {}
+    if answer is None or float(plan.get("budget_cap_usd", 0)) > float(answer["data"]["amount_usd"]) + 0.005:
+        return None
+    return answer
+
+
 def go(project: Project, task_id: str, maker_for, checker_for, test_runner=None, preflight_runner=None) -> str:
     """After an approval, by the rule or by you: setup, then the build (which preflights first), then the check."""
     p = build.prepare(project, task_id, setup=True, launching=False)  # the venv, once, as you
@@ -176,10 +187,14 @@ def run(project: Project, task_id: str, drafter_for, maker_for, checker_for, *,
     if draft_until_fit(project, task_id, drafter_for) != "fit":
         return "stuck"
     auto, why = launch_rule(project, task_id)
-    if not auto:
+    answer = None if auto or "auto_launch_usd" not in why else _launch_answered(project, task_id)
+    if answer:  # you chose "allow and launch" for exactly this plan: your approval, recorded as yours
+        lifecycle.approve(project, task_id, answer=answer)
+    elif not auto:
         project.ledger.append("review.requested", "parallax", why, task=task_id)
         return "needs you"
-    lifecycle.approve(project, task_id, rule=why)
+    else:
+        lifecycle.approve(project, task_id, rule=why)
     return go(project, task_id, maker_for, checker_for, test_runner, preflight_runner)
 
 

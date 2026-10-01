@@ -26,7 +26,8 @@ def touches(project: Project) -> dict[str, int]:
             continue
         if e["kind"] == "draft.recorded":
             drafted[(tid, d["doc"])] = d.get("sha", "")
-        if e["kind"] in TOUCH_KINDS and e["actor"] == "human":
+        if e["kind"] in TOUCH_KINDS and e["actor"] == "human" and not (e["kind"] == "gate.approved" and d.get("answer")):
+            # an approval carrying out your "allow and launch" is the same touch as that answer, not a second one
             out[tid] += 1
         if e["kind"] == "gate.approved":  # a hand edit shows as a hash the drafter never wrote
             out[tid] += sum(1 for doc, sha in d["files"].items() if drafted.get((tid, doc), sha) != sha)

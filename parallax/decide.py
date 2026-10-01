@@ -19,6 +19,7 @@ class Option:
     name: str
     does: str
     needs_reason: bool = False
+    label: str = ""  # the button's words, when the name alone says too little
 
 
 @dataclass
@@ -188,10 +189,20 @@ def decision(project: Project, task_id: str) -> Decision | None:
                         "reject", "Ready", item)
     if d.get("over_limit"):  # a budget you named, over the limit: one question, no redraft (786e71)
         named, cap = budgets.money(d["named"]), budgets.money(d["limit"])
+        extra = {"named": d["named"], "limit": d["limit"]}
+        if d["named"] > float(project.policy.launch["auto_launch_usd"]) + 0.005:  # one answer, not a launch question after
+            return Decision("budget", f"Your budget of {named} is over the {cap} limit for {d['size']} tasks: "
+                                      f"allow {named} and launch it, or use {cap}?",
+                            [Option("allow and launch", f"allows {named} for this task only and launches it once the plan "
+                                                        f"fits, the plan you can read now; no second question",
+                                    label=f"Allow {named} and launch"),
+                             Option("allow", f"allows {named} for this task only; the launch still waits for you"),
+                             Option("use limit", f"uses {cap}, and drafting goes on"), DROP],
+                            "allow and launch", "the whole task", item, extra)
         return Decision("budget", f"Your budget of {named} is over the {cap} limit for {d['size']} tasks: allow {named}, or use {cap}?",
                         [Option("allow", f"allows {named} for this task only, and drafting goes on"),
                          Option("use limit", f"uses {cap}, and drafting goes on"), DROP],
-                        "allow", "the whole task", item, {"named": d["named"], "limit": d["limit"]})
+                        "allow", "the whole task", item, extra)
     if why.startswith("drafting"):
         return Decision("drafting", "Focus couldn't get the plan right: redraft with a hint from you?",
                         [REJECT, DROP], "reject", "the whole task", item)
@@ -285,9 +296,13 @@ def apply(project: Project, task_id: str, name: str, reason: str = "", spawn: Ca
         project.ledger.append("budget.raised", "human", said, task=task_id,
                               amount_usd=round(dec.extra["to"] - costs.budget(project, task_id, lifecycle.plan_data(project, task_id))[0], 2))
         project.resolve(dec.item["id"], True, said)
-    elif name == "allow":
+    elif name in ("allow", "allow and launch"):
+        # and launch: your launch, given now, for the plan you can read now. The pilot launches only if
+        # that plan is still the one there once it fits (budgets.launch_answer); otherwise it asks again
+        plan = lifecycle.doc_path(project, task_id, "plan")
+        launch = {"launch": True, "plan_sha": lifecycle.file_hash(plan)} if name == "allow and launch" and plan.exists() else {}
         project.ledger.append("budget.allowed", "human", said, task=task_id, amount_usd=dec.extra["named"],
-                              limit_usd=dec.extra["limit"])
+                              limit_usd=dec.extra["limit"], **launch)
         project.resolve(dec.item["id"], True, said)
     elif name == "use limit":
         budgets.use_limit(project, task_id, dec.extra["limit"], said)

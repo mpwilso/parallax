@@ -174,7 +174,8 @@ def _card(project: Project, task_id: str) -> dict:
     if dec is not None:
         actions = {"kind": "decide", "question": dec.question, "recommend": dec.recommend,
                    "owner": dec.owner, "why_human": dec.why_human,
-                   "options": [{"name": o.name, "does": o.does, "needs_reason": o.needs_reason} for o in dec.options]}
+                   "options": [{"name": o.name, "does": o.does, "needs_reason": o.needs_reason, "label": o.label}
+                               for o in dec.options]}
         files = decide.scope_files(dec.item)
     elif t["status"] == "ready":
         actions = {"kind": "ready"}

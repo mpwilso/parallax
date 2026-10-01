@@ -1,4 +1,5 @@
 """Every stop names an action (real use, 2026-10-01: 786e71, fb461d, 89bc50)."""
+import re
 import shutil
 
 import pytest
@@ -68,12 +69,12 @@ def test_a_budget_over_the_limit_asks_once_and_never_redrafts(repo):
     proj, tid, drafter = over_limit_task(repo)
     assert len(drafter.requests) == 2 and not kinds(proj, "draft.misfit")  # one intent, one plan, no redraft
     dec = decide.decision(proj, tid)
-    assert dec.kind == "budget" and dec.recommend == "allow"
-    assert dec.question == "Your budget of $8 is over the $5 limit for small tasks: allow $8, or use $5?"
-    assert [o.name for o in dec.options] == ["allow", "use limit", "drop"]
+    assert dec.kind == "budget" and dec.recommend == "allow and launch"  # $8 is over auto_launch_usd too: one answer
+    assert dec.question == "Your budget of $8 is over the $5 limit for small tasks: allow $8 and launch it, or use $5?"
+    assert [o.name for o in dec.options] == ["allow and launch", "allow", "use limit", "drop"]
     card = show.report(proj, tid)
     assert "Bottom line: Needs you: your budget of $8 is over the $5 limit for small tasks." in card
-    assert f"Next: you run parallax decide {tid} allow." in card
+    assert f'Next: you run parallax decide {tid} "allow and launch".' in card
 
 
 def test_allowing_the_budget_goes_on_without_new_drafts_and_the_launch_still_asks_you(repo):
@@ -291,3 +292,43 @@ def test_stops_after_accept_and_a_broken_card_name_an_action_too(repo, monkeypat
     broken = views.card(proj, bad)
     assert broken["broken"] and broken["report"]["bottom"] == (
         f"Task {bad}: couldn't display this task. To see why, run parallax show {bad} in a terminal; every other task still works.")
+
+
+# one question when you allow a higher budget ------------------------------------------------------------
+
+def test_over_auto_launch_the_budget_question_offers_allow_and_launch_as_one_answer(repo):
+    proj, tid, drafter = over_limit_task(repo)  # $8 named, auto_launch_usd is $5
+    dec = decide.decision(proj, tid)
+    assert dec.question == "Your budget of $8 is over the $5 limit for small tasks: allow $8 and launch it, or use $5?"
+    assert [o.name for o in dec.options] == ["allow and launch", "allow", "use limit", "drop"]
+    assert dec.recommend == "allow and launch" and dec.option("allow and launch").label == "Allow $8 and launch"
+    assert views.card(proj, tid)["actions"]["options"][0]["label"] == "Allow $8 and launch"
+    decide.apply(proj, tid, "allow and launch")
+    pilot_once(proj, tid, drafter)
+    assert len(drafter.requests) == 2 and not kinds(proj, "review.requested")  # no second stop to launch
+    [gate] = kinds(proj, "gate.approved")
+    [allowed] = kinds(proj, "budget.allowed")
+    assert gate["actor"] == "human" and gate["data"]["answer"] == allowed["id"] and "rule" not in gate["data"]
+    assert proj.task(tid)["status"] == "ready"
+    from parallax import stats
+    assert stats.touches(proj)[tid] == 1  # your one answer; the launch it carries out adds none
+
+
+def test_allow_and_launch_asks_again_if_the_plan_changed_after_your_answer(repo):
+    proj, tid, drafter = over_limit_task(repo)
+    decide.apply(proj, tid, "allow and launch")
+    plan = lifecycle.doc_path(proj, tid, "plan")
+    plan.write_text(plan.read_text().replace("## Steps", "## Steps\n0. Something you never read."))
+    pilot_once(proj, tid, drafter)
+    assert not kinds(proj, "gate.approved") and decide.decision(proj, tid).kind == "launch"
+
+
+def test_under_auto_launch_the_budget_question_is_as_before(repo, monkeypatch):
+    proj, tid, drafter = over_limit_task(repo)
+    from parallax.core import POLICY_FILE
+    text = (proj.root / POLICY_FILE).read_text()
+    (proj.root / POLICY_FILE).write_text(re.sub(r"(?m)^auto_launch_usd\s*=\s*[0-9.]+", "auto_launch_usd = 10.00", text))
+    proj.reload_policy()
+    dec = decide.decision(proj, tid)
+    assert [o.name for o in dec.options] == ["allow", "use limit", "drop"] and dec.recommend == "allow"
+    assert dec.question == "Your budget of $8 is over the $5 limit for small tasks: allow $8, or use $5?"
