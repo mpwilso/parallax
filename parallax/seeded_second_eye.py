@@ -44,7 +44,8 @@ def rescore_case(case, run_id: str, r: dict, checker_for, model: str) -> dict:
         raise ParallaxError(f"run {run_id}'s scratch repo for {case.id} is gone, so its intent is too")
     [created] = [e for e in Ledger(repo / STATE_DIR / "ledger.jsonl").entries() if e["kind"] == "task.created"]
     tid, base = created["data"]["task"], created["data"]["base"]
-    intent = (repo / "docs" / "tasks" / tid / "intent.md").read_text(encoding="utf-8")
+    from .drafts import resolve
+    intent = resolve(repo, f"docs/tasks/{tid}/intent.md").read_text(encoding="utf-8")
     review_text = review.TEMPLATE
     blocking = review.blocking(review_text)
     cache = evals.cache_repo(case)

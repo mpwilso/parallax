@@ -1,7 +1,8 @@
 """The lifecycle files and their gates: docs/tasks/<id>/intent.md, spec.md and plan.md.
 
-Drafters (read-only agents) write the text; only Parallax writes the files, in the repo's own
-docs/tasks/<id>/, which the maker can never write. Parallax normalizes what they write before
+Drafters (read-only agents) write the text; only Parallax writes the files, in the task's data folder
+outside your checkout (drafts.py), named docs/tasks/<id>/ as they are in the task's commit. The maker
+can never write them. Parallax normalizes what they write before
 saving it, and you never edit a drafted file: if one is wrong, you reject with a reason.
 - small task: intent and plan are approved together, by code under the policy's launch rule or by you;
 - large task: intent, then spec and plan together; the plan always waits for you.
@@ -110,7 +111,9 @@ class State:
 
 
 def task_dir(project: Project, task_id: str) -> Path:
-    return project.root / "docs" / "tasks" / task_id
+    """The task's drafts: its data folder, outside your checkout (drafts.py)."""
+    from .drafts import task_dir as where
+    return where(project.root, task_id)
 
 
 def doc_path(project: Project, task_id: str, doc: str) -> Path:
@@ -118,7 +121,9 @@ def doc_path(project: Project, task_id: str, doc: str) -> Path:
 
 
 def rel(project: Project, path: Path) -> str:
-    return path.relative_to(project.root).as_posix()
+    """A file's name for messages and the ledger: docs/tasks/<task>/... for a draft, wherever it's kept."""
+    from .drafts import logical
+    return logical(project.root, path)
 
 
 def file_hash(path: Path) -> str:
@@ -316,7 +321,8 @@ def reject(project: Project, task_id: str, reason: str) -> dict:
         status = project.task(task_id)["status"]
         if status not in ("ready", "built", "risk accepted", "needs work"):
             raise ParallaxError(f"task {task_id} is {status}; there's nothing to reject right now")
-        return project.ledger.append("task.rejected", "human", reason, task=task_id, was=status)
+        from .cleanup import dropped
+        return dropped(project, task_id, reason)
     files = {d: file_hash(doc_path(project, task_id, d)) for d in st.gate if doc_path(project, task_id, d).exists()}
     return project.ledger.append("gate.rejected", "human", reason, task=task_id, gate="+".join(st.gate), files=files)
 

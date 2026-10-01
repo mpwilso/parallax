@@ -1,6 +1,5 @@
 """Every stop names an action (real use, 2026-10-01: 786e71, fb461d, 89bc50)."""
 import re
-import shutil
 
 import pytest
 
@@ -31,7 +30,7 @@ def test_a_merged_card_after_rework_shows_without_its_worktree(repo):
     proj, tid, wt = reworked_to_ready(repo)
     act(proj, "/api/accept", {"task": tid, "merge": True})
     assert proj.task(tid)["status"] == "merged"
-    shutil.rmtree(wt)
+    assert not wt.exists()  # Parallax removed it once the merge was confirmed
     card = show.report(proj, tid)
     assert card.startswith("Type: FYI\nBottom line: Task ") and "you merged it unchanged" in card
     assert not views.card(proj, tid).get("broken")

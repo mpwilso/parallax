@@ -119,10 +119,13 @@ def accept(project: Project, task_id: str, reason: str = "", merging: bool = Fal
 
     # the commit now holds docs/tasks/<id>/. git won't merge over untracked copies of the same files,
     # even identical ones, so they move out of your checkout; the merge brings them back, tracked
-    kept = sandbox.task_home(project.root, task_id) / "docs-at-accept"
-    if kept.exists():
-        shutil.rmtree(kept)
-    shutil.move(str(lifecycle.task_dir(project, task_id)), str(kept))
+    # (drafts kept in the task's data folder were never in your checkout: they stay where they are)
+    kept = lifecycle.task_dir(project, task_id)
+    if kept.is_relative_to(project.root):
+        kept = sandbox.task_home(project.root, task_id) / "docs-at-accept"
+        if kept.exists():
+            shutil.rmtree(kept)
+        shutil.move(str(lifecycle.task_dir(project, task_id)), str(kept))
 
     target = subprocess.run(["git", "-C", str(project.root), "symbolic-ref", "--short", "-q", "HEAD"],
                             capture_output=True, text=True).stdout.strip()
@@ -339,6 +342,8 @@ def confirm_merges(project: Project) -> list[str]:
                                    capture_output=True).returncode == 0:
             project.ledger.append("merge.confirmed", "parallax", "the accepted commit is in the branch unchanged",
                                   task=d["task"], commit=d["commit"], target=d.get("target"), head=head)
+            from .cleanup import merged
+            merged(project, d["task"], d.get("target"))  # its worktree and branch aren't needed any more
             confirmed.add(d["task"])
             out.append(d["task"])
     return out

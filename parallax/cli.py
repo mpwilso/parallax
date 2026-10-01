@@ -392,7 +392,8 @@ def _gate(proj: Project, task_id: str, args) -> None:
                 return
             if not args.reason.strip():
                 raise ParallaxError("dropping a task needs a reason")
-            proj.ledger.append("task.rejected", "human", args.reason, task=task_id, was=proj.task(task_id)["status"])
+            from .cleanup import dropped
+            dropped(proj, task_id, args.reason)
             print(f"dropped {task_id}. it's out of the inbox.")
             return
         if dec is not None and any(o.name == "reject" for o in dec.options):
@@ -409,14 +410,16 @@ def _gate(proj: Project, task_id: str, args) -> None:
 
 
 def _lint(path: Path, cwd: Path) -> int:
-    if not path.is_file():
-        raise ParallaxError(f"no file {path}")
     try:
         proj = Project.find(cwd)
         root, ids = proj.root, {e["id"] for e in proj.ledger.entries()}
     except ParallaxError:
         root, ids = cwd, None
-    problems = lint.lint_file(path, root, ids)
+    from .drafts import resolve  # a draft, named by its path in the task's commit, is kept outside the repo
+    real = path if path.is_file() or path.is_absolute() else resolve(root, path.as_posix())
+    if not real.is_file():
+        raise ParallaxError(f"no file {path}")
+    problems = lint.lint_file(real, root, ids)
     for n, msg in problems:
         print(f"{path}:{n} {msg}")
     if not problems:

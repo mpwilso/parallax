@@ -86,7 +86,8 @@ def test_drafting_writes_intent_and_plan_for_a_small_task(proj, monkeypatch, cap
     """Drafting itself; `parallax do` (M12) is what runs it now. See test_pilot.py."""
     drafter = FakeDrafter(docs())
     tid = lifecycle.new_intent(proj, WANT, drafter)["task"]
-    folder = proj.root / "docs" / "tasks" / tid
+    folder = lifecycle.task_dir(proj, tid)
+    assert not folder.is_relative_to(proj.root) and not (proj.root / "docs" / "tasks").exists()  # never in your checkout
     assert (folder / "intent.md").read_text() == docs()["intent"]
     assert sorted(p.name for p in folder.iterdir()) == ["intent.md", "plan.md"]
     assert WANT in drafter.requests[0] and "The intent:" in drafter.requests[1]

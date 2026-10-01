@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from fakes import FakeChecker, FakeDrafter, ScriptedAgent, good_probe, junit_runner
-from parallax import build, costs, lint, memcap, show, uitest, views
+from parallax import build, costs, drafts, lint, memcap, show, uitest, views
 from parallax.agents.base import AgentResult
 from parallax import lifecycle
 from parallax.core import POLICY_FILE, Project
@@ -154,7 +154,8 @@ def test_the_tester_is_blind_sandboxed_and_its_tests_are_hashed_and_run(proj, mo
 
     rec = kinds(proj, "uitest.recorded", tid)[-1]["data"]
     rel = f"docs/tasks/{tid}/ui_flows/opens.spec.js"  # Parallax's alone, and out of the checker's diff
-    assert rel in rec["files"] and (proj.root / rel).read_text() == SPEC
+    assert rel in rec["files"] and drafts.resolve(proj.root, rel).read_text() == SPEC
+    assert not (proj.root / rel).exists()  # kept in the task's data folder, never in your checkout
     staged = kinds(proj, "check.staged", tid)[-1]["data"]
     assert rel not in staged["files"] and staged["problems"] == []
     ran = kinds(proj, "flows.recorded", tid)[-1]["data"]
@@ -185,7 +186,7 @@ def test_the_maker_cant_write_its_tests_and_a_change_comes_to_you(proj, monkeypa
     monkeypatch.setattr(uitest, "FLOW_RUNNER", flow_runner([[("opens", True)], [("opens", False)]]))
 
     def tamper(cwd):  # anything that changes a kept test between checks
-        spec = next(proj.root.glob("docs/tasks/*/ui_flows/opens.spec.js"))
+        spec = next(lifecycle.task_dir(proj, tid).glob("ui_flows/opens.spec.js"))
         spec.write_text(SPEC.replace("opens", "skipped"))
     from parallax import pilot as p
     tid = p.intake(proj, "fix the README")["task"]
@@ -321,7 +322,7 @@ def test_a_tester_test_that_still_fails_after_a_rework_comes_to_you(proj, monkey
     with pytest.raises(Exception, match="needs a reason"):
         decide.apply(proj, tid, "remove", spawn=lambda *a: 9)
     decide.apply(proj, tid, "remove", "it counts <article> rows; the page has none", spawn=lambda *a: 9)
-    assert not (proj.root / rel).exists()
+    assert not drafts.resolve(proj.root, rel).exists()
     assert uitest.guarded(proj, tid) == [] and uitest.tampered(proj, tid) == []
 
 

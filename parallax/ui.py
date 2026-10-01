@@ -158,7 +158,8 @@ def act(project: Project, path: str, body: dict) -> dict:
                 return {"message": decide.apply(project, task, "drop", reason)}
             if not reason.strip():
                 raise ParallaxError("dropping a task needs a reason")
-            project.ledger.append("task.rejected", "human", reason, task=task, was=project.task(task)["status"])
+            from .cleanup import dropped
+            dropped(project, task, reason)
             return {"message": f"dropped {task}. it's out of the inbox."}
         dec = decide.decision(project, task)
         if dec is not None and any(o.name == "reject" for o in dec.options):

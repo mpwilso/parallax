@@ -30,7 +30,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import build, costs, installs, lifecycle, lint, memcap, review, sandbox, status, tree
+from . import build, costs, drafts, installs, lifecycle, lint, memcap, review, sandbox, status, tree
 from .core import ParallaxError, Project
 
 # newer MCP versions put their browser behind a Unix socket, which the sandbox refuses (Part 3 spike)
@@ -208,7 +208,7 @@ def remove(project: Project, task_id: str, files: list[str], reason: str) -> Non
     """Your call that a test is wrong: it leaves the worktree, recorded with your reason."""
     mine = [f for f in files if f in set(guarded(project, task_id))]
     for f in mine:
-        (project.root / f).unlink(missing_ok=True)
+        drafts.resolve(project.root, f).unlink(missing_ok=True)
     project.ledger.append("uitest.removed", "human", reason, task=task_id, files=mine)
 
 
@@ -220,7 +220,7 @@ def tampered(project: Project, task_id: str) -> list[str]:
     for rel, sha in rec["data"]["files"].items():
         if rel in gone:
             continue
-        path = project.root / rel
+        path = drafts.resolve(project.root, rel)
         if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != sha:
             out.append(rel)
     return out
@@ -233,8 +233,8 @@ def specs(project: Project, task_id: str, worktree: Path, base: str) -> dict[str
     """Every flow test to run: this task's kept ones, and every accepted task's in the base commit."""
     out = {f: tree.show_file(worktree, base, f) for f in tree.files_in(worktree, base) if FLOWS.match(f)}
     for rel in guarded(project, task_id):
-        if (project.root / rel).is_file():
-            out[rel] = (project.root / rel).read_bytes()
+        if drafts.resolve(project.root, rel).is_file():
+            out[rel] = drafts.resolve(project.root, rel).read_bytes()
     return out
 
 
@@ -462,7 +462,7 @@ def test(project: Project, task_id: str, p, tester_for) -> tuple[str, str]:
         target = dest / src.name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(src.read_bytes())
-        files[target.relative_to(project.root).as_posix()] = hashlib.sha256(target.read_bytes()).hexdigest()
+        files[drafts.logical(project.root, target)] = hashlib.sha256(target.read_bytes()).hexdigest()
     ev = evidence(project, task_id)
     ev.mkdir(parents=True, exist_ok=True)
     pngs = []

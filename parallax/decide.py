@@ -286,7 +286,8 @@ def apply(project: Project, task_id: str, name: str, reason: str = "", spawn: Ca
     if name == "drop":
         if dec.item:
             project.resolve(dec.item["id"], False, said)
-        project.ledger.append("task.rejected", "human", said, task=task_id, was=project.task(task_id)["status"])
+        from .cleanup import dropped
+        dropped(project, task_id, said)  # its work kept as a patch, then its worktree and branch removed
         return f"dropped {task_id}. it's out of the inbox."
     if name in ("reject", "intent", "send back"):  # send back is reject's twin on a cap or rework card
         if name == "intent":

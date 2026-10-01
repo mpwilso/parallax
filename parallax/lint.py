@@ -143,7 +143,8 @@ def _cites(item: str, root: Path | None, ledger_ids: set[str] | None) -> bool:
         if ledger_ids is not None and m.group(1) in ledger_ids:
             return True
     for m in FILE_LINE.finditer(item):
-        path = (root or Path.cwd()) / m.group(1)
+        from .drafts import resolve  # a draft is named by its path in the task's commit, and kept outside the repo
+        path = resolve(root or Path.cwd(), m.group(1))
         if path.is_file():
             n = int(m.group(2))
             if 1 <= n <= len(path.read_text(encoding="utf-8", errors="replace").splitlines()):
@@ -312,7 +313,7 @@ def lint_lifecycle(text: str, doc: str) -> list[Problem]:
 def lifecycle_doc(path: Path) -> str | None:
     """'intent', 'spec' or 'plan' for a file at docs/tasks/<id>/<doc>.md, else None."""
     parts = Path(path).resolve().parts
-    if len(parts) >= 4 and parts[-4:-2] == ("docs", "tasks") and Path(path).suffix == ".md":
+    if len(parts) >= 4 and (parts[-4:-2] == ("docs", "tasks") or parts[-2] == "drafts") and Path(path).suffix == ".md":
         return Path(path).stem if Path(path).stem in LIFECYCLE_DOCS else None
     return None
 

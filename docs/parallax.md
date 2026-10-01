@@ -15,7 +15,7 @@ Parallax follows the AI-native SDLC playbook (https://claude.com/blog/the-ai-nat
 
 What we follow from the playbook: files as the hand-off between stages, agents verifying before review, humans on the judgment calls, one record per change. What we skip: the maintain stage and autonomous triggers. Nothing starts without you.
 
-Drafters get no shell, only Read, Glob and Grep inside the task's worktree, and each call is capped by `[budget] drafting_usd` in the policy file. Only Parallax writes `docs/tasks/`.
+Drafters get no shell, only Read, Glob and Grep inside the task's worktree, and each call is capped by `[budget] drafting_usd` in the policy file. Only Parallax writes the drafts, in the task's data folder outside your checkout; accept commits them to `docs/tasks/<task>/`.
 
 ## The output shape
 

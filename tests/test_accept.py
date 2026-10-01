@@ -67,8 +67,8 @@ def test_the_commit_is_exactly_the_reviewed_tree_plus_the_task_docs(repo):
     assert git(repo, "rev-parse", f"{acc['commit']}^").stdout.strip() == proj.task(tid)["base"]
     assert not (repo / "HOOK-RAN").exists()  # commit-tree runs no hooks
     assert git(repo, "rev-parse", proj.task(tid)["branch"]).stdout.strip() == acc["commit"]
-    assert not lifecycle.task_dir(proj, tid).exists()  # moved aside, so the merge can bring it back
-    assert (Path(acc["docs_moved_to"]) / "record.md").exists()
+    assert not (repo / "docs" / "tasks" / tid).exists()  # never in your checkout, so the merge can bring it in
+    assert Path(acc["docs_moved_to"]) == lifecycle.task_dir(proj, tid) and (Path(acc["docs_moved_to"]) / "record.md").exists()
 
 
 def test_the_commit_message_ends_with_the_trailers(repo):
@@ -148,7 +148,7 @@ def test_the_record_is_generated_from_the_ledger_and_lints(repo):
     text = (Path(acc["docs_moved_to"]) / "record.md").read_text()
     assert text.startswith(f"Type: FYI\nBottom line: Task {tid}, fixing the README install steps, was accepted")
     ids = {e["id"] for e in proj.ledger.entries()}
-    shutil.copytree(acc["docs_moved_to"], lifecycle.task_dir(proj, tid))  # lint cites need the files in place
+    # its citations (docs/tasks/<id>/...) resolve to the task's data folder, where the files are
     assert lint.lint_report(text, root=proj.root, ledger_ids=ids) == []
     for want in ("Files changed: README.md.", f"Why: docs/tasks/{tid}/intent.md, docs/tasks/{tid}/plan.md.",
                  "signed with the approval key", "Written by: Maker, which builds in the sandbox (claude-opus-5), in 1 run in the sandbox.",

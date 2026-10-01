@@ -81,7 +81,7 @@ def test_only_tests_that_fail_on_an_assertion_at_the_base_are_kept(proj):
     assert why == {"test_outcome_1_exists": "it passes on the base, so it doesn't show the problem",
                    "test_something_else": "it names no outcome in the intent"}
     stored = reticle.stored(proj, tid)
-    assert stored == proj.root / "docs" / "tasks" / tid / "reticle" / "outcome_tests.py.txt" and stored.read_text() == MIXED
+    assert stored == lifecycle.task_dir(proj, tid) / "reticle" / "outcome_tests.py.txt" and stored.read_text() == MIXED
     assert rec["data"]["file"] == f"docs/tasks/{tid}/reticle/outcome_tests.py.txt"  # a name no test runner collects
     [ran] = kinds(proj, "reticle.ran")
     assert (ran["data"]["passed"], ran["data"]["total"], ran["data"]["failed"]) == (1, 1, [])  # the fix passes it
@@ -430,7 +430,7 @@ def test_a_stored_reticle_file_is_never_collected_by_the_repos_own_tests_and_old
     old = path.with_name("test_reticle.py")
     path.rename(old)
     rec = reticle.recorded(proj, tid)
-    proj.ledger.append("reticle.recorded", "reticle", "old", **{**rec["data"], "file": old.relative_to(proj.root).as_posix()})
+    proj.ledger.append("reticle.recorded", "reticle", "old", **{**rec["data"], "file": lifecycle.rel(proj, old)})
     assert reticle.stored(proj, tid) == old and not reticle.tampered(proj, tid)
 
 

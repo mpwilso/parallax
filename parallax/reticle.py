@@ -25,7 +25,7 @@ import re
 import shutil
 from pathlib import Path, PurePosixPath
 
-from . import build, costs, installs, lifecycle, lint, review, status, testrun, tree
+from . import build, costs, drafts, installs, lifecycle, lint, review, status, testrun, tree
 from .agents.base import AgentResult
 from .core import ROOT_ENV, TASK_ENV, Project
 from .gate import make_permission_fn
@@ -152,7 +152,7 @@ def stored(project: Project, task_id: str) -> Path:
     """Where this task's Reticle file is kept: where its record says (older tasks), else the new name."""
     rec = recorded(project, task_id)
     if rec and rec["kind"] == "reticle.recorded" and rec["data"].get("file"):
-        return project.root / rec["data"]["file"]
+        return drafts.resolve(project.root, rec["data"]["file"])
     return lifecycle.task_dir(project, task_id) / "reticle" / STORED
 
 
@@ -341,7 +341,7 @@ def write(project: Project, task_id: str, p, writer=None, runner=None) -> str:
     path = stored(project, task_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(text)
-    rel = path.relative_to(project.root).as_posix()
+    rel = drafts.logical(project.root, path)
     project.ledger.append("reticle.recorded", "reticle",
                           lint.one_sentence(f"{len(keep)} tests kept, {len(weak)} weak ones dropped"),
                           file=rel, sha=hashlib.sha256(text).hexdigest(), kept=keep, weak=weak, placed=where, **common)
@@ -352,7 +352,7 @@ def tampered(project: Project, task_id: str) -> bool:
     rec = recorded(project, task_id)
     if not rec or rec["kind"] != "reticle.recorded":
         return False
-    path = project.root / rec["data"]["file"]
+    path = drafts.resolve(project.root, rec["data"]["file"])
     return not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != rec["data"]["sha"]
 
 
