@@ -270,9 +270,11 @@ def _merge(project: Project, task_id: str, d: dict, runner=None) -> str:
         began = time.monotonic()
         code, output = (runner or TEST_RUNNER)(project, landing, command)
         first = first_failure(output, code) if code else ""
+        from . import outputs
+        full = outputs.keep(project, task_id, "merge-tests", output) if code and output.strip() else {}  # all of it, hashed
         project.ledger.append("merge.tested", "parallax", first or "passed", task=task_id, commit=landing,
                               command=command, exit=code, ok=code == 0, merged_in=not ff,
-                              seconds=round(time.monotonic() - began, 1))
+                              seconds=round(time.monotonic() - began, 1), **full)
         if code:
             raise ParallaxError(f"its tests failed on the commit it would land, so {d['target']} didn't move. "
                                 f"first failure: {first}. fix that, then merge by hand")

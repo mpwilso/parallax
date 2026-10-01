@@ -580,6 +580,20 @@ def test_a_ledger_id_on_the_card_is_a_quiet_link_to_its_entry(page, proj):
     expect(page.locator("#doc")).to_contain_text('"kind"')
 
 
+def test_a_failure_line_links_to_the_whole_output(page, proj):
+    from parallax import outputs
+    tid = launched(proj, "supporting subtraction")
+    full = "the real cause is up here\n" + "\n".join(f"line {i}" for i in range(100)) + "\n1 failed\n"
+    kept = outputs.keep(proj, tid, "tests", full)
+    proj.ledger.append("disagreement.raised", "parallax", "the plan's tests couldn't run (exit 4): 1 failed", task=tid,
+                       stage="check", **kept)
+    proj.ledger.append("builder.finished", "parallax", "", task=tid, status="disputed")
+    open_card(page, tid)
+    page.locator("#card a.output-link").first.click()
+    expect(page.locator("#doc")).to_contain_text("the real cause is up here", timeout=WAIT)
+    expect(page.locator("#card .docs + p.hint")).to_contain_text("shown only when its hash matches the ledger")
+
+
 def test_the_ask_box_answers_from_the_record_and_changes_nothing(page, proj, monkeypatch):
     from parallax import ask
     from test_ask import FakeAsker

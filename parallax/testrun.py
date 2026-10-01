@@ -32,6 +32,7 @@ class Results:
     tail: str = ""
     reported: bool = True  # the run wrote its JUnit report. without one, exit 1 may just mean no pytest
     cases: list[dict] = field(default_factory=list)  # each test: file, name, outcome, and its message's first line
+    output: str = ""  # everything the run printed: kept as a file when it fails (outputs.py)
 
     @property
     def passed(self) -> int:
@@ -163,7 +164,7 @@ def run(worktree: Path, base: str, reviewed: str, plan: dict, home: Path, venv: 
     # which break on long paths (Unix socket paths top out near 108 characters)
     code, output = (runner or _srt)(cfg, copy, f"export TMPDIR={shlex.quote(str(tmp))}; {cmd}", env)
     results = Results(code, parse_junit(junit, tests), "\n".join(output.strip().splitlines()[-15:]), junit.exists(),
-                      parse_cases(junit, tests))
+                      parse_cases(junit, tests), output)
     shutil.rmtree(copy, ignore_errors=True)
     shutil.rmtree(tmp, ignore_errors=True)
     return results, reset

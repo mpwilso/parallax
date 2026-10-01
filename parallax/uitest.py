@@ -120,6 +120,7 @@ class Flows:
     app_failed: bool = False
     cases: list[dict] = field(default_factory=list)  # {file, name, ok, message}
     tail: str = ""
+    output: str = ""  # everything the run printed, and the app's log when it didn't start
 
     @property
     def failed(self) -> list[dict]:
@@ -532,8 +533,9 @@ def _run_specs(project: Project, tools: Tools, home: Path, copy: Path, specs: Pa
     tail = "\n".join(output.strip().splitlines()[-15:])
     if code == APP_FAILED:
         log = (work / "app.log").read_text(errors="replace") if (work / "app.log").exists() else ""
-        return Flows(ran=False, app_failed=True, tail="\n".join(log.strip().splitlines()[-8:]) or tail)
-    return Flows(ran=junit.exists(), cases=parse_junit(junit), tail=tail)
+        return Flows(ran=False, app_failed=True, tail="\n".join(log.strip().splitlines()[-8:]) or tail,
+                     output=f"the app's log:\n{log}\n\nthe flow run:\n{output}")
+    return Flows(ran=junit.exists(), cases=parse_junit(junit), tail=tail, output=output)
 
 
 def run_flows(project: Project, task_id: str, p, reviewed: str, runner=None) -> Flows | None:

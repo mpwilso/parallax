@@ -235,6 +235,8 @@ def _handler(ui: UI):
                     self._send(200, views.shot(ui.project(), parts[2], parts[4]), "image/png")
                 elif len(parts) == 5 and parts[:2] == ["api", "task"] and parts[3] == "doc":
                     self._json(200, {"text": views.document(ui.project(), parts[2], parts[4])})
+                elif len(parts) == 5 and parts[:2] == ["api", "task"] and parts[3] == "output":
+                    self._json(200, {"text": views.output(ui.project(), parts[2], parts[4])})
                 elif len(parts) == 5 and parts[:2] == ["api", "task"] and parts[3] == "ledger":
                     self._json(200, {"text": views.ledger_entry(ui.project(), parts[2], parts[4])})
                 else:

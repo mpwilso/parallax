@@ -17,7 +17,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Callable
 
-from . import build, costs, lifecycle, lint, reticle, review, sandbox, status, testrun, tree, uitest
+from . import build, costs, lifecycle, lint, outputs, reticle, review, sandbox, status, testrun, tree, uitest
 from .agents.base import BlindChecker, Review
 from .core import ParallaxError, Project
 
@@ -95,6 +95,12 @@ def _to_you(project: Project, task_id: str, stage: str, why: str, **refs) -> str
     return "disputed"
 
 
+def _kept(project: Project, task_id: str, name: str, output: str, failed: bool) -> dict:
+    """A failing run's whole output, as a file in the task's data folder: its path and hash go in the
+    ledger entry. A passing run keeps only its last lines, as before."""
+    return outputs.keep(project, task_id, name, output) if failed and output.strip() else {}
+
+
 def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_runner=None) -> tuple[str, list[str]]:
     """One pass. Returns (status, what the maker should fix): status is ready, rework or disputed."""
     p = build.prepare(project, task_id, setup=False, launching=False)
@@ -142,9 +148,10 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
 
     results, reset = testrun.run(p.worktree, t["base"], s.tree, plan, p.home, p.venv,
                                  build.scrubbed_env(p.venv), settings["test_command"], test_runner)
+    full = _kept(project, task_id, "tests", results.output, not (results.ok and results.ran))
     project.ledger.append("tests.recorded", "parallax", results.tail, task=task_id, tree=s.tree,
                                   exit=results.exit, per_file=results.per_file, passed=results.passed,
-                                  total=results.total, harness_reset=reset)
+                                  total=results.total, harness_reset=reset, **full)
     if not results.ran:
         missing = sorted({x.split("::", 1)[0] for x in plan["tests"] if not (p.worktree / x.split("::", 1)[0]).exists()})
         if missing:  # a planned test file that isn't there conflicts with your plan; it isn't a test setup problem
@@ -152,21 +159,22 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
                            f"but your approved plan lists it", tree=s.tree, missing=missing), []
         last = (results.tail.splitlines() or ["no output"])[-1]
         return _to_you(project, task_id, "check", f"the plan's tests couldn't run (exit {results.exit}): {last}",
-                       tree=s.tree), []
+                       tree=s.tree, **full), []
     try:
         flows = uitest.run_flows(project, task_id, p, s.tree, uitest.FLOW_RUNNER)
     except uitest.UITestError as err:
         return _to_you(project, task_id, "check", f"the UI flow tests couldn't run: {err}", tree=s.tree), []
     flow_fix = []
     if flows is not None:
+        flows_full = _kept(project, task_id, "flows", flows.output, flows.app_failed or not flows.ran or bool(flows.failed))
         project.ledger.append("flows.recorded", "parallax", flows.tail, task=task_id, tree=s.tree, ran=flows.ran,
                               app_failed=flows.app_failed, passed=len(flows.cases) - len(flows.failed),
-                              total=len(flows.cases), failed=flows.failed)
+                              total=len(flows.cases), failed=flows.failed, **flows_full)
         if flows.app_failed:
             flow_fix = [f"blocker: the app didn't start for the UI flow tests:\n{flows.tail}"]
         elif not flows.ran:
             return _to_you(project, task_id, "check", f"the UI flow tests couldn't run: {lint.one_sentence(flows.tail or 'no report')}",
-                           tree=s.tree), []
+                           tree=s.tree, **flows_full), []
         else:
             flow_fix = [f"blocker {c['file']}: the UI flow \"{c['name']}\" fails: {c['message']}" for c in flows.failed]
             still = _still_failing(project, task_id, flows)
@@ -186,12 +194,13 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
         return _to_you(project, task_id, "check", f"Reticle's tests couldn't run: {err}", tree=s.tree), []
     if ran is not None:
         r_results, failing = ran
-        project.ledger.append("reticle.ran", "parallax", r_results.tail, task=task_id, tree=s.tree, exit=r_results.exit,
+        r_full = _kept(project, task_id, "reticle", r_results.output, bool(failing) or not r_results.reported)
+        project.ledger.append("reticle.ran", "parallax", r_results.tail, task=task_id, tree=s.tree, exit=r_results.exit, **r_full,
                               passed=len(reticle.kept(project, task_id)) - len(failing), total=len(reticle.kept(project, task_id)),
                               failed=[{k: t[k] for k in ("name", "outcome", "message")} for t in failing])
         if not r_results.reported:
             return _to_you(project, task_id, "check", f"Reticle's tests couldn't run (exit {r_results.exit}): "
-                           f"{lint.one_sentence((r_results.tail.splitlines() or ['no output'])[-1])}", tree=s.tree), []
+                           f"{lint.one_sentence((r_results.tail.splitlines() or ['no output'])[-1])}", tree=s.tree, **r_full), []
         reticle_failed = [{k: t[k] for k in ("name", "outcome", "message")} for t in failing]
         reticle_fix = [reticle.finding(t) for t in failing]
 

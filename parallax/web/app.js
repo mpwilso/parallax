@@ -369,8 +369,10 @@ async function loadCard(task) {
 
 function cited(item) {
   const id = item.cite && item.cite.startsWith("ledger ") ? item.cite.slice(7) : null;
-  return el("li", {}, item.text, " ", id
-    ? el("a", { class: "cite", href: "#", "data-focus": "cite-" + id, title: "Open this ledger entry",
+  return el("li", {}, item.text, " ",
+    item.output ? [el("a", { class: "output-link", href: "#", "data-focus": "output-" + item.output,
+      onclick: e => { e.preventDefault(); toggleDoc("output:" + item.output); } }, "Full output"), " "] : null,
+    id ? el("a", { class: "cite", href: "#", "data-focus": "cite-" + id, title: "Open this ledger entry",
         onclick: e => { e.preventDefault(); toggleDoc("ledger:" + id); } }, item.cite)
     : item.cite ? el("span", { class: "cite" }, item.cite) : null);
 }
@@ -545,11 +547,12 @@ setInterval(() => {  // the Merging card's clock, between polls
 function docs(c) {
   const names = [...(c.has_change ? ["diff"] : []), ...c.docs];
   if (!names.length) return null;
-  const label = n => n === "diff" ? "The change" : n.startsWith("ledger:") ? `Ledger entry ${n.slice(7)}` : cap(n);
+  const label = n => n === "diff" ? "The change" : n.startsWith("ledger:") ? `Ledger entry ${n.slice(7)}`
+    : n.startsWith("output:") ? `Full output of ledger entry ${n.slice(7)}, shown only when its hash matches the ledger` : cap(n);
   return [el("div", { class: "docs", role: "group", "aria-label": "Documents" }, names.map(n =>
       el("button", { "aria-pressed": state.doc === n ? "true" : "false", "data-focus": "doc-" + n,
         onclick: () => toggleDoc(n) }, label(n), n === "diff" ? el("kbd", { "aria-hidden": "true" }, "d") : null))),
-    state.doc ? [state.doc.startsWith("ledger:") ? el("p", { class: "hint" }, label(state.doc)) : null,
+    state.doc ? [/^(ledger|output):/.test(state.doc) ? el("p", { class: "hint" }, label(state.doc)) : null,
       el("pre", { class: "doc", id: "doc", tabindex: "0", "aria-label": label(state.doc) })] : null];
 }
 
@@ -559,7 +562,8 @@ async function toggleDoc(name) {
   renderCard();
   if (!state.doc) return;
   try {
-    const path = name.startsWith("ledger:") ? `ledger/${encodeURIComponent(name.slice(7))}` : `doc/${name}`;
+    const path = name.startsWith("ledger:") ? `ledger/${encodeURIComponent(name.slice(7))}`
+      : name.startsWith("output:") ? `output/${encodeURIComponent(name.slice(7))}` : `doc/${name}`;
     const { text } = await api(`/api/task/${encodeURIComponent(state.open)}/${path}`);
     if (state.doc !== name) return;
     state.docText = text || "(nothing yet)";

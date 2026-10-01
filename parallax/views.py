@@ -211,6 +211,11 @@ def _card(project: Project, task_id: str) -> dict:
         f["text"] = re.sub(r"; parallax diff \w+ shows it\.$", ".", f["text"])  # the page has the change a click away
     if files:  # the table under the question says it, file by file
         found = [f for f in found if f["cite"] != f"ledger {dec.item['id']}"]
+    kept = {e["id"] for e in project.ledger.entries() if e["data"].get("task") == task_id and e["data"].get("output_sha")}
+    details = [_cited(i) for i in report["sections"].get("Details", [])]
+    for f in found + details:  # a failure line whose entry kept the whole output links to it
+        if f["cite"].startswith("ledger ") and f["cite"][7:] in kept:
+            f["output"] = f["cite"][7:]
     state = status.board(t["status"])
     entries = status.attempt(project.ledger.entries(), task_id)
     return {"task": task_id, "title": inbox.title(project, task_id), "status": t["status"], "state": state,
@@ -219,7 +224,7 @@ def _card(project: Project, task_id: str) -> dict:
             "changed": [_cited(i) for i in report["sections"].get("Changed since last time", [])],
             "redraft": report["bottom"].startswith("Ready again after your reject") or any(
                 i.startswith("you rejected the last version") for i in report["sections"].get("Changed since last time", [])),
-            "details": [_cited(i) for i in report["sections"].get("Details", [])],
+            "details": details,
             "actions": actions, "merge": merge, "merge_note": merge_note, "files": files,
             "live": live.line(project, task_id) if state in ("drafting", "building", "checking") else "",
             "stages": live.stages(status.attempt(entries, task_id), waiting=state not in ("drafting", "building", "checking")),
@@ -247,6 +252,16 @@ def _merging(project: Project, task_id: str) -> dict | None:
 def _ask_spent(project: Project, task_id: str) -> float:
     from .ask import spent
     return spent(project, task_id)
+
+
+def output(project: Project, task_id: str, entry_id: str) -> str:
+    """The whole output a failing check kept, only after its hash matches the ledger's."""
+    from . import outputs
+    project.task(task_id)
+    for e in project.ledger.entries():
+        if e["id"] == entry_id and e["data"].get("task") == task_id:
+            return outputs.read(e)
+    raise ValueError(f"no ledger entry {entry_id!r} for task {task_id}")
 
 
 def ledger_entry(project: Project, task_id: str, entry_id: str) -> str:
