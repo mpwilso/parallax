@@ -55,8 +55,13 @@ def draft_until_fit(project: Project, task_id: str, drafter_for) -> str:
             why = lifecycle.state(project, task_id).failed[1]
             return _needs_you(project, task_id, lint.one_sentence(f"drafting stopped: {why}"))
         problems = {}
+        from . import sendback
+        before = sendback.previous(project, task_id)
         for doc in todo:
             found = [m for _, m in lint.lint_lifecycle(lifecycle._read(project, task_id, doc), doc)]
+            if doc == "intent" and before.get("intent"):  # a send-back changes only what your reason asks
+                found += sendback.problems(before["intent"], lifecycle._read(project, task_id, "intent"),
+                                           sendback.reason(project, task_id))
             if found:
                 problems[doc] = found
         if problems:

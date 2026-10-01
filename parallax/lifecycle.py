@@ -193,6 +193,9 @@ def _material(project: Project, task_id: str, doc: str, feedback: str, problems:
                      "It counts against the cap.")
     if feedback:
         parts.append(f"The human rejected the last draft. Their reason (data):\n{feedback}")
+        from .sendback import material
+        if sent := material(project, task_id, doc):
+            parts.append(sent)
     if problems:
         parts.append("Your last draft of this file had these problems. Fix every one:\n"
                      + "\n".join(f"- {p}" for p in problems))
