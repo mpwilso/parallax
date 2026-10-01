@@ -3,6 +3,7 @@
 No model and no cost: agents are fakes, and a task's life is played into the ledger. Skipped,
 with the reason, where Playwright or Chromium isn't installed (inside a task's sandbox, say).
 """
+import json
 import os
 import re
 import threading
@@ -588,3 +589,163 @@ def test_a_stalled_cap_card_recommends_sending_it_back_with_a_note(page, proj):
     page.locator("#reason").fill("subtraction needs its own test file first")
     page.get_by_role("button", name="Send it back").click()
     expect(page.locator("#status")).to_contain_text("redrafting", timeout=WAIT)
+
+
+# coming back to work that waits: a notification, and a link to one card ------------------------------------
+
+# window.Notification, stubbed before the page's own scripts run: every notification is recorded on the
+# page, with the permission the test wants. permission null is a browser with no notifications at all.
+NOTE_STUB = """
+(permission => {
+  window.__notes = [];   // the notifications the page made, in order
+  window.__asked = 0;    // how many times it asked for permission
+  function Fake(title, options) {
+    const o = options || {};
+    this.title = title;
+    this.body = o.body;
+    this.tag = o.tag;
+    this.onclick = null;
+    window.__notes.push(this);
+  }
+  Fake.permission = permission;
+  Fake.requestPermission = () => { window.__asked += 1; return Promise.resolve(Fake.permission); };
+  window.Notification = permission ? Fake : undefined;
+})(%s);
+"""
+
+
+@pytest.fixture
+def notify_page(browser, server):
+    """A page with window.Notification stubbed, and whatever the link's fragment should say.
+
+    Only these tests stub it, so every other flow still runs against the browser's own notifications."""
+    made = []
+
+    def open_page(permission="granted", tail=""):
+        ctx = browser.new_context(viewport={"width": 1280, "height": 860})
+        ctx.add_init_script(NOTE_STUB % json.dumps(permission))
+        pg = ctx.new_page()
+        errors = []
+        pg.on("pageerror", lambda e: errors.append(str(e)))
+        pg.goto(server.url + tail)
+        made.append((ctx, errors))
+        return pg
+
+    yield open_page
+    for ctx, errors in made:
+        ctx.close()
+        assert errors == [], errors
+
+
+def goes_ready(proj, tid):
+    """The check passes in the ledger: the task turns Ready, as a finished run leaves it."""
+    proj.ledger.append("verdict.recorded", "checker", "", task=tid, stage="check", tree="", verdict="pass", findings=[])
+    proj.ledger.append("check.finished", "parallax", "", task=tid, status="ready", tree="")
+
+
+def seen_working(pg, tid):
+    """Wait until the page's own copy of the board has this task Working, before its state changes."""
+    expect(row(pg, tid).locator(".tag")).to_have_text("Working", timeout=WAIT)
+
+
+def notes(pg):
+    return pg.evaluate("window.__notes.map(n => [n.title, n.body, n.tag])")
+
+
+def test_a_task_turning_ready_notifies_you_once(notify_page, proj):
+    pg = notify_page()
+    tid = launched(proj, "adding a usage example")
+    seen_working(pg, tid)
+    goes_ready(proj, tid)
+    expect(row(pg, tid).locator(".tag.good")).to_be_visible(timeout=WAIT)
+    pg.wait_for_function("() => window.__notes.length > 0", timeout=WAIT)
+    assert notes(pg) == [["Ready for you", "adding a usage example", tid]]
+
+
+def test_a_task_that_starts_needing_you_notifies_you(notify_page, proj):
+    pg = notify_page()
+    tid = launched(proj, "rewriting the install section")
+    seen_working(pg, tid)
+    stopped(proj, tid, "the budget cap ran out ($2.10 of $2.00 estimated)", budget=True)
+    expect(row(pg, tid).locator(".tag")).to_have_text("Failed", timeout=WAIT)
+    pg.wait_for_function("() => window.__notes.length > 0", timeout=WAIT)
+    assert notes(pg) == [["Needs you", "rewriting the install section", tid]]
+
+
+def test_clicking_the_notification_opens_that_card(notify_page, proj, server):
+    pg = notify_page()
+    tid = launched(proj, "stating supported Python versions")
+    seen_working(pg, tid)
+    goes_ready(proj, tid)
+    pg.wait_for_function("() => window.__notes.length > 0", timeout=WAIT)
+    pg.evaluate("window.__notes[0].onclick()")
+    expect(pg.locator("#card .card-head")).to_contain_text(tid, timeout=WAIT)
+    expect(pg.locator("#card-title")).to_have_text("stating supported Python versions")
+    assert pg.evaluate("location.hash") == f"#{server.token}&task={tid}"  # a link back to this card
+
+
+def test_permission_is_asked_once_a_page_and_not_again(notify_page, proj):
+    pg = notify_page(permission="default")
+    first = launched(proj, "adding a usage example")
+    second = launched(proj, "rewriting the install section")
+    seen_working(pg, first)
+    seen_working(pg, second)
+    goes_ready(proj, first)
+    pg.wait_for_function("() => window.__asked > 0", timeout=WAIT)
+    stopped(proj, second, "the budget cap ran out ($2.10 of $2.00 estimated)", budget=True)
+    expect(row(pg, second).locator(".tag")).to_have_text("Failed", timeout=WAIT)
+    pg.wait_for_timeout(2500)  # another poll, another change: it doesn't ask twice
+    assert pg.evaluate("window.__asked") == 1
+    assert notes(pg) == []  # permission never granted: nothing was shown
+
+
+def test_what_already_waits_on_you_when_the_page_loads_does_not_notify(notify_page, proj):
+    ready, _ = run_to_ready(proj, "stating supported Python versions")
+    stuck = launched(proj, "rewriting the install section")
+    stopped(proj, stuck, "the budget cap ran out ($2.10 of $2.00 estimated)", budget=True)
+    pg = notify_page()
+    expect(pg.locator("#count")).to_have_text("2 waiting on you", timeout=WAIT)
+    pg.wait_for_timeout(2500)  # a few more polls over the same board
+    assert notes(pg) == []
+
+
+def test_the_same_state_seen_again_does_not_notify_again(notify_page, proj):
+    pg = notify_page()
+    tid = launched(proj, "adding a usage example")
+    seen_working(pg, tid)
+    goes_ready(proj, tid)
+    pg.wait_for_function("() => window.__notes.length > 0", timeout=WAIT)
+    for i in range(2):  # more polls, the same state each time
+        proj.ledger.append("note", "parallax", f"something else happened ({i})", task="other")
+        pg.wait_for_timeout(2500)
+    assert len(notes(pg)) == 1
+
+
+def test_without_permission_the_page_works_as_ever_and_says_nothing(notify_page, proj):
+    for permission in ("denied", None):  # refused, and a browser with no notifications at all
+        pg = notify_page(permission=permission)
+        tid = launched(proj, f"adding a license badge ({permission})")
+        seen_working(pg, tid)
+        goes_ready(proj, tid)
+        expect(row(pg, tid).locator(".tag.good")).to_be_visible(timeout=WAIT)
+        pg.wait_for_timeout(2500)
+        assert notes(pg) == []
+        open_card(pg, tid)  # as usable as ever, and no error shown
+        assert pg.evaluate("document.querySelector('#status.error') === null")
+
+
+def test_a_link_with_a_task_opens_that_card(notify_page, proj, server):
+    tid, _ = run_to_ready(proj, "stating supported Python versions")
+    pg = notify_page(tail=f"&task={tid}")
+    expect(pg.locator("#card .card-head")).to_contain_text(tid, timeout=WAIT)
+    expect(pg.locator("#card-title")).to_have_text("stating supported Python versions")
+    expect(pg.locator("#card-title")).to_be_focused()
+    assert pg.evaluate("sessionStorage.getItem('parallax-token')") == server.token
+
+
+def test_a_link_with_only_the_token_still_signs_in(notify_page, proj, server):
+    tid, _ = run_to_ready(proj)
+    pg = notify_page()
+    expect(row(pg, tid)).to_be_visible(timeout=WAIT)
+    expect(pg.locator("#card")).to_be_hidden()
+    assert pg.evaluate("sessionStorage.getItem('parallax-token')") == server.token

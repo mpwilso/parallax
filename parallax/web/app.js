@@ -24,6 +24,7 @@ const LIVE_EVERY = 15000;  // working lines carry a clock: refresh them even whe
 const state = {
   token: "", board: null, boardKey: "", open: null, card: null, cardKey: "",
   doc: null, docText: null, version: "", busy: false, pending: null, lastLive: 0,
+  wanted: null, // a task id from the link, opened once the first board arrives
   drafts: {},  // reasons you started typing, per task, kept until you send one
   answers: {}, // what you asked about each task, and the answers, this session
   seen: {},    // each agent's last state per task, so a stage that just finished hops once
@@ -239,10 +240,62 @@ async function refresh() {
     const key = JSON.stringify(board);
     state.board = board;
     if (key !== state.boardKey) { state.boardKey = key; renderQueue(); }
+    checkWaiting();
+    if (state.wanted) {  // the link named a task: open its card once, if it's there
+      const want = state.wanted;
+      state.wanted = null;
+      if (allTasks().some(t => t.task === want)) { await openCard(want, true); return; }
+    }
     if (state.open) await loadCard(state.open);
   } catch (err) {
     say(err.message, true);
   }
+}
+
+// ---------- a nudge when something starts waiting on you ----------
+// One browser notification each time a task turns Ready or needs you, so work that waits finds you in
+// another window. Nothing already waiting notifies, nothing notifies twice, and a page without
+// notifications (missing, or permission refused) works exactly as before.
+
+const lastState = {};        // task id -> the state the last board showed
+let sawBoard = false;        // the first board only fills the map: what already waits isn't news
+let askedToNotify = false;   // permission is asked once a page, the first time there's something to say
+
+function checkWaiting() {
+  for (const t of allTasks()) {
+    const now = t.state || "";
+    const was = lastState[t.task];
+    lastState[t.task] = now;
+    if (!sawBoard || was === undefined || was === now) continue;  // first board, a new row, or no change
+    if (now === "ready" || now === "needs you") notifyWaiting(t.task, t.title, now);
+  }
+  sawBoard = true;
+}
+
+function notifyWaiting(task, title, now) {
+  try {
+    const N = window.Notification;
+    if (!N || N.permission === "denied") return;
+    if (N.permission === "default") {
+      if (askedToNotify) return;  // asked once already, and not granted: stay quiet
+      askedToNotify = true;
+      Promise.resolve(N.requestPermission()).then(ok => { if (ok === "granted") showNote(task, title, now); }).catch(() => {});
+      return;
+    }
+    showNote(task, title, now);
+  } catch (err) { /* notifications are a nicety: the page never shows an error for one */ }
+}
+
+function showNote(task, title, now) {
+  try {
+    const note = new window.Notification(now === "ready" ? "Ready for you" : "Needs you",
+      { body: title || task, tag: task });
+    note.onclick = () => {
+      try { window.focus(); } catch (err) { /* a browser may refuse: the card still opens */ }
+      location.hash = `${state.token}&task=${encodeURIComponent(task)}`;
+      openCard(task, true);
+    };
+  } catch (err) { /* same here: a refused notification changes nothing on the page */ }
 }
 
 // ---------- the card ----------
@@ -644,7 +697,20 @@ async function poll() {
   setTimeout(poll, 2000);
 }
 
-// the link stays in the address bar so you can bookmark it; the fragment never reaches a server
-state.token = location.hash.slice(1) || sessionStorage.getItem("parallax-token") || "";
+// the link stays in the address bar so you can bookmark it; the fragment never reaches a server.
+// #TOKEN, or #TOKEN&task=TASKID to land on one card. The token is URL safe, so & only ever parts them.
+function readHash() {
+  const parts = location.hash.slice(1).split("&");
+  let task = "";
+  for (const p of parts.slice(1)) {
+    if (!p.startsWith("task=")) continue;
+    try { task = decodeURIComponent(p.slice(5)); } catch (err) { task = p.slice(5); }
+  }
+  return { token: parts[0], task };
+}
+
+const link = readHash();
+state.token = link.token || sessionStorage.getItem("parallax-token") || "";
+state.wanted = link.task || null;
 if (location.hash) sessionStorage.setItem("parallax-token", state.token);
 if (!state.token) lock(); else { loadBrand(); poll(); }
