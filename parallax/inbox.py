@@ -24,7 +24,9 @@ def items(project: Project) -> list[dict]:
         try:
             where = status.board(t["status"])
             if where in ("ready", "needs you"):
-                out.append({"task": tid, "state": where, "title": title(project, tid)})
+                from . import overlap
+                said = [overlap.line(o) for o in overlap.of(project, tid)]
+                out.append({"task": tid, "state": where, "title": title(project, tid), **({"overlaps": said} if said else {})})
         except Exception:
             from .views import log_broken
             log_broken(tid, "its inbox line")

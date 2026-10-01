@@ -248,6 +248,8 @@ def _run(args) -> int:
             print("nothing waits on you.")
         for it in items:
             print(f"{it['task']}  {it['state']:<10}{_line(it['title'], 90)}")
+            for o in it.get("overlaps") or []:  # never blocks: a heads-up, naming the other task
+                print(f"        {o}")
         if items:
             print("parallax show <task> for its card.")
         if busy:

@@ -112,8 +112,10 @@ def _or_log(build, fallback, task_id: str, where: str):
 
 def _row(project: Project, item: dict, dec) -> dict:
     """What a waiting or working row shows besides its title: chip, strip, spend and start."""
+    from . import overlap
     return {"chip": progress.chip(item["state"], item.get("kind")), "strip": progress.strip(project, item["task"], dec),
-            "spend": progress.spend(project, item["task"]), "started": progress.started(project, item["task"])}
+            "spend": progress.spend(project, item["task"]), "started": progress.started(project, item["task"]),
+            "overlaps": [o["task"] for o in overlap.of(project, item["task"])]}
 
 
 def _headline(project: Project, task_id: str) -> str:
@@ -224,11 +226,17 @@ def _card(project: Project, task_id: str) -> dict:
             "strip": progress.strip(project, task_id, dec), "spend": progress.spend(project, task_id),
             "ask": {"spent": _ask_spent(project, task_id), "budget": float(project.policy.ask["budget_usd"])},
             "merging": _merging(project, task_id),
+            "overlaps": _overlaps(project, task_id),
             "chip": progress.chip(state, dec.kind if dec else ("ready" if t["status"] == "ready" else None))
             if state != "done" else progress.OUTCOMES.get(t["status"], t["status"].capitalize()),
             "has_change": any(e["kind"] == "check.staged" for e in entries) or t["status"] in ("accepted", "merged"),
             "shots": shots(project, task_id),
             "docs": [d for d in ("intent", "spec", "plan", "record") if lifecycle.found_doc(project, task_id, d)]}
+
+
+def _overlaps(project: Project, task_id: str) -> list[str]:
+    from . import overlap
+    return [overlap.line(o) for o in overlap.of(project, task_id)]
 
 
 def _merging(project: Project, task_id: str) -> dict | None:

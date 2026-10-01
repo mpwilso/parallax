@@ -198,7 +198,9 @@ function row(t) {
           done ? null : el("span", { class: "tag " + (t.secret ? "bad" : CHIP[t.chip] || "info"), title: kind || null }, t.secret ? "Secrets file" : t.chip)),
         done ? el("span", { class: "line" }, [t.outcome, t.date, `$${(t.cost_usd || 0).toFixed(2)}`,
           `${t.touches} touch${t.touches === 1 ? "" : "es"}`].filter(Boolean).join(" \u00B7 "))
-          : [t.line ? el("span", { class: "line" }, t.line) : null, strip(t.task, t.strip, false),
+          : [t.line ? el("span", { class: "line" }, t.line) : null,
+             (t.overlaps || []).length ? el("span", { class: "heads-up" }, `Overlaps task ${t.overlaps.join(", ")}`) : null,
+             strip(t.task, t.strip, false),
              el("span", { class: "row-foot" }, spendBar(t.spend), t.started ? el("span", { class: "age" }, elapsed(t.started)) : null)])));
 }
 
@@ -387,6 +389,7 @@ function renderCard() {
     c.live ? el("p", { class: "live" }, c.live) : null,
     c.redraft ? el("p", { class: "redraft" }, "Redrafted after you rejected it") : null,
     el("p", { class: "bottom" }, bottom),
+    ...(c.overlaps || []).map(o => el("p", { class: "heads-up" }, o)),  // another open task changes the same files
     c.redraft ? list("Since you rejected it", c.changed) : null,  // a redraft leads with what changed
     actions(c),
     list("Not looked at", c.unseen.length === 1 && c.unseen[0].text === "nothing" ? [] : c.unseen),

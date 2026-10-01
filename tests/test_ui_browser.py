@@ -805,3 +805,13 @@ def test_the_strip_says_when_no_reticle_tests_counted(page, proj):
     open_card(page, tid)
     expect(page.locator("#card .strip")).to_contain_text("no Reticle tests counted", timeout=WAIT)
     expect(page.locator("#card")).to_contain_text("no Reticle tests counted.")
+
+
+def test_a_task_that_overlaps_an_older_one_says_so_on_its_card_and_row(page, proj):
+    """370571 and 40171b both reached Ready with the same change, and nothing said so."""
+    first, _ = run_to_ready(proj, "adding the doctor hint")
+    second, _ = run_to_ready(proj, "adding the doctor hint again")
+    expect(row(page, second).locator(".heads-up")).to_have_text(f"Overlaps task {first}", timeout=WAIT)
+    expect(row(page, first).locator(".heads-up")).to_have_count(0)
+    open_card(page, second)
+    expect(page.locator("#card .heads-up")).to_contain_text(f"Heads-up: task {first} (adding the doctor hint), Ready, also changes")
