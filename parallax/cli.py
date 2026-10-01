@@ -75,7 +75,9 @@ def main(argv: list[str] | None = None) -> int:
     pf.add_argument("task")
     bd = sub.add_parser("build", help="build an approved plan in the sandbox, in the background")
     bd.add_argument("task")
-    sub.add_parser("stop", help="end every running build now")
+    sp = sub.add_parser("stop", help="stop one running task, at any stage, or every one")
+    sp.add_argument("task", nargs="?", help="leave it out to stop every running task")
+    sp.add_argument("--yes", action="store_true", help="don't ask first")
     rc = sub.add_parser("recheck", help="check a built task again, in the background: code checks, tests, Second Eye (the blind checker)")
     rc.add_argument("task")
     ac = sub.add_parser("accept", help="commit exactly what was reviewed, for you to merge")
@@ -227,8 +229,16 @@ def _run(args) -> int:
         return 0
 
     if args.cmd == "stop":
-        from . import build
-        stopped = build.stop(proj)
+        from . import stopping
+        targets = [args.task] if args.task else list(stopping.running(proj))
+        if args.task and args.task not in stopping.running(proj):
+            raise ParallaxError(f"task {args.task} isn't running, so there's nothing to stop. parallax show {args.task} says where it is")
+        if targets and not args.yes and sys.stdin.isatty():  # asked once, here
+            what = "; ".join(f"{t}, {stopping.doing(proj, t)}" for t in targets)
+            if input(f"stop {what}? its work so far is kept. [y/N] ").strip().lower() not in ("y", "yes"):
+                print("nothing stopped.")
+                return 0
+        stopped = stopping.stop(proj, args.task)
         print(f"stopped {', '.join(stopped)}." if stopped else "nothing is running.")
         return 0
 

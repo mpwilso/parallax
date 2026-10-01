@@ -209,6 +209,13 @@ def _decision(project: Project, task_id: str, dec, found: list[str], gaps: list[
         if dec.kind == "tool":
             hint = [f"Fix: {dec.extra['fix'].rstrip('.')}, then retry."]
         found = [f"{why} {cite}"] + [f"{h} {cite}" for h in hint] + list(found)
+    elif dec.kind == "stopped":  # your Stop: what it was doing, what it had spent, and that its work is kept
+        bottom = "Needs you: you stopped it."
+        spent = dec.extra.get("spent")
+        found = [f"You stopped it during {dec.extra['stage']}" + (f", after ${spent:.2f} spent" if spent is not None else "")
+                 + "." + (f" (ledger {dec.extra['stopped']})" if dec.extra.get("stopped") else " (Unverified)"),
+                 "Its work so far is kept: resume picks up from there, and finished stages aren't done again."
+                 + (f" (ledger {dec.extra['stopped']})" if dec.extra.get("stopped") else " (Unverified)")]
     elif dec.question == decide.IDLE_QUESTION:  # answered, but what came next never started
         bottom = "Needs you: nothing is running, and the task isn't finished."
         found = [f"It last stopped on: {dec.extra['why'].rstrip('.')}. (ledger {dec.extra['last']})"]

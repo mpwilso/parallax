@@ -26,6 +26,10 @@
 </header>
 <p id="status" class="status" role="status" aria-live="polite"></p>
 <p id="offline" class="offline" role="alert" hidden>Parallax isn't answering: the <code>parallax ui</code> server has stopped. Start it again with <code>parallax ui</code> in a terminal, then reload this page.</p>
+<div id="intake-warning" class="offline intake-warning" role="alert" hidden>
+  <p>This looks like a list of build steps. Send it as one task anyway?</p>
+  <p class="intake-warning-actions"><button id="send-anyway" type="button">Send it as one task</button> <button id="edit-it" type="button">Edit it</button></p>
+</div>
 <div id="tools" class="offline tools" role="alert" hidden></div>
 <section id="budget" class="budget" aria-labelledby="budget-q" hidden></section>
 <main id="app">

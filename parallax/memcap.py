@@ -120,7 +120,7 @@ class Result:
 
 
 def run(argv: list[str], limit: int, what: str = "the command", timeout: float | None = None,
-        capture: bool = False, **popen) -> Result:
+        capture: bool = False, on_start=None, **popen) -> Result:
     """Run argv under the cap. With capture, stdout and stderr come back together as text.
     Over the limit, the whole tree is killed and the result says so: code EXIT, over True, and the
     output ends with the cap's message. Past timeout, the tree is killed and the code is 124."""
@@ -128,6 +128,8 @@ def run(argv: list[str], limit: int, what: str = "the command", timeout: float |
     if capture:
         popen.update(stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     proc = subprocess.Popen(argv, env=env, **popen)
+    if on_start:  # its pid, for whoever may need to stop it (the pre-merge test run: stopping.py)
+        on_start(proc.pid)
     watching = available()
     start, peak, chunks = time.monotonic(), 0, []
     while True:

@@ -161,6 +161,7 @@ STOPS = [  # (ledger kind, data, reason): one per kind of stop the card, the inb
      "your budget of $8 is over the $5 limit for small tasks"),
     ("review.requested", {}, "your policy reviews every plan (review_plans)"),
     ("review.requested", {}, "the budget cap ($4.00) is over auto_launch_usd ($3.00)"),
+    ("task.stopped", {"stage": "Maker building", "spent_usd": 0.4}, "stopped in parallax ui"),  # your Stop: no item
 ]
 
 
@@ -203,7 +204,7 @@ def test_every_kind_of_stop_names_what_happened_why_and_one_action(repo):
         if not row["line"]:
             missing.append(f"{dec.kind} row: {why}")
         missing += _actions(proj, tid, why)
-        if kind != "review.requested":
+        if kind not in ("review.requested", "task.stopped"):
             proj.resolve(item["id"], False, "next case")
     assert not missing, "these stops name no action: " + "; ".join(missing)
     assert seen == set(decide.WHY_HUMAN), f"add a case for: {sorted(set(decide.WHY_HUMAN) - seen)}"

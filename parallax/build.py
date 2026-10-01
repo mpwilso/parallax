@@ -13,7 +13,6 @@ tokens, and CLAUDE_CODE_SUBPROCESS_ENV_SCRUB set. The build never pauses; the ma
 from __future__ import annotations
 
 import os
-import signal
 import subprocess
 import sys
 import time
@@ -317,13 +316,19 @@ def _doing(extra: str) -> str:
 
 
 def _alive(pid: int) -> bool:
+    """Running, not just not yet reaped: a builder this process started and that has ended is a zombie
+    until reaped, and kill(0) still finds it."""
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
     except PermissionError:
         return True
-    return True
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+    except OSError:
+        return True  # no /proc (macOS): kill(0) is all there is
+    return stat.rsplit(")", 1)[-1].split()[0] != "Z"
 
 
 def running_builds(project: Project) -> dict[str, int]:
@@ -340,27 +345,10 @@ def running_builds(project: Project) -> dict[str, int]:
     return out
 
 
-def stop(project: Project, grace: float = 3.0) -> list[str]:
-    """End every running build now, and record it. No questions."""
-    refuse_inside_task(project.root)
-    stopped = []
-    for tid, pid in running_builds(project).items():
-        if _alive(pid):
-            try:
-                os.killpg(pid, signal.SIGTERM)
-            except (ProcessLookupError, PermissionError):
-                pass
-            deadline = time.monotonic() + grace
-            while _alive(pid) and time.monotonic() < deadline:
-                time.sleep(0.1)
-            if _alive(pid):
-                try:
-                    os.killpg(pid, signal.SIGKILL)
-                except (ProcessLookupError, PermissionError):
-                    pass
-        project.ledger.append("task.stopped", "human", "parallax stop", task=tid, pid=pid)
-        stopped.append(tid)
-    return stopped
+def stop(project: Project, grace: float = 3.0, task_id: str | None = None, reason: str = "parallax stop") -> list[str]:
+    """End every running task now, or one, and record it as yours (stopping.py)."""
+    from .stopping import stop as stop_tasks
+    return stop_tasks(project, task_id, reason, grace)
 
 
 def _maker(left: float, settings: str, turns: int | None = None) -> Agent:

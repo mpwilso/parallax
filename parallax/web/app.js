@@ -100,7 +100,7 @@ function say(text, error) {
 }
 
 function lock() {
-  for (const id of ["app", "intake", "status", "offline", "tools"]) document.getElementById(id).hidden = true;
+  for (const id of ["app", "intake", "status", "offline", "tools", "intake-warning"]) document.getElementById(id).hidden = true;
   document.getElementById("locked").hidden = false;
 }
 
@@ -279,6 +279,25 @@ async function chooseBudget(mode) {
     say(r.message);
     await refresh();
   } catch (err) { say(err.message, true); }
+}
+
+// Stop, on every running card: asked once, then that task's agents and processes end
+function stopBox(c) {
+  if (state.stopping !== c.task) {
+    return el("p", { class: "stop" }, el("button", { id: "stop", class: "danger", "data-focus": "stop",
+      onclick: () => { state.stopping = c.task; renderCard(); const b = document.getElementById("stop-confirm"); if (b) b.focus(); } }, "Stop"));
+  }
+  return el("section", { class: "decide stop-confirm", "aria-label": "Stop this task" },
+    el("p", { class: "question" }, "Stop this task now?"),
+    el("p", { class: "hint" }, "Its agents and processes end within a few seconds. Its work so far is kept, and you can resume it, send it back or drop it."),
+    el("p", {}, el("button", { id: "stop-confirm", class: "danger", "data-focus": "stop-confirm", onclick: () => stopTask(c) }, "Stop it"), " ",
+      el("button", { id: "stop-cancel", "data-focus": "stop-cancel", onclick: () => { state.stopping = null; renderCard(); } }, "Keep it running")));
+}
+
+async function stopTask(c) {
+  const out = await run("/api/stop", { task: c.task });
+  state.stopping = null;
+  if (out) { state.version = ""; await refresh(); } else renderCard();
 }
 
 function renderIdle() {
@@ -539,7 +558,8 @@ function actions(c) {
         el("button", { "data-focus": "copy", onclick: copy }, "Copy")));
   }
   const a = c.actions;
-  if (a.kind === "merging") return mergingNow(c);
+  if (a.kind === "merging") return [mergingNow(c), a.stop ? stopBox(c) : null];
+  if (a.kind === "running") return a.stop ? stopBox(c) : null;
   let options, question, recommend;
   if (a.kind === "ready") { options = READY_OPTIONS; question = "Accept it, or send it back?"; recommend = null; }
   else if (a.kind === "decide") { options = a.options; question = a.question; recommend = a.recommend; }
@@ -722,11 +742,39 @@ function cancel() {
 
 // ---------- intake ----------
 
+// a heads-up, never a block: text that reads like instructions for building Parallax itself (numbered
+// steps naming branches, commits and batches) rather than one task. You can send it anyway
+const BUILD_WORDS = /\b(branch|branches|commit|commits|batch|batches|push|merge|CI|pull request|scripts\/test\.sh|gh run)\b/gi;
+function looksLikeBuildSteps(text) {
+  const steps = new Set([...text.matchAll(/(?:^|\s)(\d{1,2})[.)]\s/g)].map(m => m[1]));
+  const words = new Set([...text.matchAll(BUILD_WORDS)].map(m => m[0].toLowerCase().replace(/(es|s)$/, "")));
+  return steps.size >= 3 && words.size >= 2;
+}
+function intakeWarning(show) {
+  document.getElementById("intake-warning").hidden = !show;
+}
+document.getElementById("send-anyway").addEventListener("click", () => {
+  state.sendAnyway = document.getElementById("work").value.trim();
+  intakeWarning(false);
+  document.getElementById("intake").requestSubmit();
+});
+document.getElementById("edit-it").addEventListener("click", () => {
+  intakeWarning(false);
+  document.getElementById("work").focus();
+});
+document.getElementById("work").addEventListener("input", () => intakeWarning(false));
+
 document.getElementById("intake").addEventListener("submit", async e => {
   e.preventDefault();
   const input = document.getElementById("work");
   const work = input.value.trim();
   if (!work) return;
+  if (looksLikeBuildSteps(work) && state.sendAnyway !== work) {
+    intakeWarning(true);
+    document.getElementById("send-anyway").focus();
+    return;
+  }
+  intakeWarning(false);
   const out = await run("/api/do", { work });
   if (!out) return;  // keep what you typed
   input.value = "";

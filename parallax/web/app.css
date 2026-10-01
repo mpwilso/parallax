@@ -139,6 +139,8 @@ kbd {
 .status.shown { padding: 0.5rem 1.25rem; background: var(--accent-bg); border-bottom: 1px solid var(--line); }
 .status.error { background: var(--bad-bg); color: var(--bad); }
 .tools p { margin: 0.25rem 0; }
+.intake-warning-actions { margin-top: 0.375rem; }
+.stop { margin-top: 0.75rem; }
 .budget { padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--line); }
 .budget h2 { margin: 0 0 0.5rem; font-size: 1rem; }
 .tools .tool { font-family: var(--mono, monospace); overflow-wrap: anywhere; }

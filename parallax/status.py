@@ -66,7 +66,7 @@ BOARD = ("drafting", "building", "checking", "merging", "ready", "needs you", "d
 _TO_BOARD = {
     "drafting": "drafting", "running": "building", "reworking": "building", "built": "checking",
     "checking": "checking", "merging": "merging", "ready": "ready", "accepted": "done", "merged": "done", "rejected": "done",
-    "stopped": "done", "closed": "done",
+    "closed": "done",  # a stopped task waits on you: resume, send back or drop (stopping.py)
 }
 
 

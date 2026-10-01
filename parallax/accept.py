@@ -21,6 +21,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -136,6 +137,7 @@ def accept(project: Project, task_id: str, reason: str = "", merging: bool = Fal
 
 
 TEST_TIMEOUT = 3600  # seconds the project's tests may take before the merge gives up on them
+RUNNING = threading.local()  # the merge in this thread: where its test run's pid goes, so Stop can end it
 
 
 def run_tests(project: Project, commit: str, command: str) -> tuple[int, str]:
@@ -148,8 +150,10 @@ def run_tests(project: Project, commit: str, command: str) -> tuple[int, str]:
     folder.parent.mkdir(parents=True, exist_ok=True)
     _git(project.root, "worktree", "add", "--detach", str(folder), commit)
     try:
+        pidfile = getattr(RUNNING, "pidfile", None)
         out = memcap.run(["bash", "-c", command], memcap.SUITE, what="the tests", timeout=TEST_TIMEOUT, capture=True, cwd=folder,
-                         env=tools.env())  # runs as you: uv found in ~/.local/bin too
+                         env=tools.env(),  # runs as you: uv found in ~/.local/bin too
+                         on_start=(lambda pid: pidfile.write_text(f"{pid}\n")) if pidfile else None)
         return out.code, out.output if not out.timed_out else out.output + f"\nthe tests ran past {TEST_TIMEOUT // 60} minutes"
     finally:
         subprocess.run(["git", "-C", str(project.root), "worktree", "remove", "--force", str(folder)], capture_output=True)
@@ -250,11 +254,23 @@ def merge_now(project: Project, task_id: str, runner=None) -> str:
                           ff=ff, pid=os.getpid())
     try:
         return _merge(project, task_id, d, runner)
+    except Stopped:  # your stop: the task is yours as stopped (resume, send back or drop), not accepted
+        raise
     except Exception as err:  # it stopped: nothing moved, and the task goes back to accepted with the reason
         extra = {"conflict": err.files, "commands": conflict_steps(d, err.files)} if isinstance(err, Conflict) else {}
         project.ledger.append("merge.stopped", "parallax", str(err) if isinstance(err, ParallaxError) else
                               f"Accept and merge stopped on an error: {type(err).__name__}: {err}", task=task_id, **extra)
         raise
+
+
+class Stopped(ParallaxError):
+    """You stopped Accept and merge: nothing moved, and the task waits for you as stopped."""
+
+
+def _not_stopped(project: Project, task_id: str, d: dict) -> None:
+    from .stopping import stopped_since
+    if stopped_since(project, task_id, "merge.started"):
+        raise Stopped(f"you stopped it, so {d.get('target') or 'the base branch'} didn't move")
 
 
 def _merge(project: Project, task_id: str, d: dict, runner=None) -> str:
@@ -267,11 +283,21 @@ def _merge(project: Project, task_id: str, d: dict, runner=None) -> str:
                         capture_output=True).returncode == 0
     # the base branch has moved on since the task began: merge it into the task, outside your checkout,
     # and land that merge commit instead. Nothing has moved yet if it conflicts
+    from .stopping import merge_pidfile
+    _not_stopped(project, task_id, d)
     landing = d["commit"] if ff else merge_base_in(project, d)
     command = project.policy.merge["test_command"].strip()
     if command:  # the project's own tests, on the exact commit the base branch would become
         began = time.monotonic()
-        code, output = (runner or TEST_RUNNER)(project, landing, command)
+        _not_stopped(project, task_id, d)
+        RUNNING.pidfile = merge_pidfile(project, task_id)
+        RUNNING.pidfile.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            code, output = (runner or TEST_RUNNER)(project, landing, command)
+        finally:
+            RUNNING.pidfile.unlink(missing_ok=True)
+            RUNNING.pidfile = None
+        _not_stopped(project, task_id, d)  # stopped during the run: what it printed isn't a test result
         first = first_failure(output, code) if code else ""
         from . import outputs
         full = outputs.keep(project, task_id, "merge-tests", output) if code and output.strip() else {}  # all of it, hashed
@@ -284,6 +310,7 @@ def _merge(project: Project, task_id: str, d: dict, runner=None) -> str:
     else:
         project.ledger.append("merge.tested", "parallax", "no test command is configured", task=task_id, commit=landing,
                               command="", exit=None, ok=None, merged_in=not ff)
+    _not_stopped(project, task_id, d)  # the last moment before anything moves
     if not ff:  # the branch takes the merge commit, which has your HEAD as a parent, so this still fast-forwards
         _git(project.root, "update-ref", f"refs/heads/{d['branch']}", landing)
     out = subprocess.run(["git", "-C", str(project.root), "merge", "--ff-only", "-q", d["branch"]], capture_output=True, text=True)

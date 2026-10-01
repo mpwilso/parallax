@@ -67,6 +67,7 @@ WHY_HUMAN = {  # one short sentence per kind: why code stopped instead of decidi
     "budget": "the budget you named is over your policy's limit, and only you can spend past it",
     "tool": "a program the build needs isn't installed where Parallax can find it, and only you can install it",
     "loop": "running it again would buy the same result, so what to change is yours",
+    "stopped": "you stopped it, so only you can say how it goes on",
 }
 
 
@@ -138,6 +139,8 @@ def decision(project: Project, task_id: str) -> Decision | None:
         return Decision("review", "Does the plan do what you want?",
                         [Option("approve", "starts the build now"), REJECT, DROP], "approve", "the build",
                         extra=cited)
+    if item is None and t["status"] == "stopped":
+        return _stopped(project, task_id)
     if item is None:
         return _idle(project, task_id, t)
 
@@ -223,6 +226,19 @@ def decision(project: Project, task_id: str) -> Decision | None:
                     "the whole task", item)
 
 
+RESUME = Option("resume", "picks up where it stopped: finished stages aren't done again")
+
+
+def _stopped(project: Project, task_id: str) -> Decision:
+    """You stopped it: resume, send it back with a reason, or drop it. Its work so far is kept."""
+    from .stopping import last_stop
+    stop = last_stop(project, task_id)
+    what = (stop or {}).get("data", {}).get("stage") or "working"
+    return Decision("stopped", f"You stopped it ({what}): resume it from there, send it back, or drop it?",
+                    [RESUME, SEND_BACK, DROP], "resume", "the whole task",
+                    extra={"stage": what, "stopped": stop["id"] if stop else "", "spent": (stop or {}).get("data", {}).get("spent_usd")})
+
+
 IDLE_QUESTION = "Nothing is running and it isn't finished: run it again, or redraft?"
 
 
@@ -241,6 +257,12 @@ def _idle(project: Project, task_id: str, t: dict) -> Decision | None:
     return Decision("stuck", IDLE_QUESTION, [RETRY, REJECT, DROP], "retry", "the whole task",
                     extra={"why": " ".join((last["reason"] or last["data"].get("status") or "it stopped").split()),
                            "last": last["id"], "answered": answered[-1]["id"] if answered else ""})
+
+
+def _was_merging(project: Project, task_id: str) -> bool:
+    """The task was accepted this attempt and isn't merged: a stop there was during Accept and merge."""
+    entries = status.attempt(project.ledger.entries(), task_id)
+    return any(e["kind"] == "task.accepted" for e in entries) and not any(e["kind"] == "merge.confirmed" for e in entries)
 
 
 SANDBOX_START = ("sandbox runtime", "srt:", "bwrap", "namespace")  # words of a sandbox that never started
@@ -323,6 +345,9 @@ def apply(project: Project, task_id: str, name: str, reason: str = "", spawn: Ca
             return f"accepted the risk on {task_id}. it's Ready: parallax accept {task_id} commits it."
     elif dec.item:  # retry, plan
         project.resolve(dec.item["id"], True, said)
+    if name == "resume" and _was_merging(project, task_id):  # stopped during Accept and merge: run it again
+        from .accept import merge_now
+        return merge_now(project, task_id)
     try:
         mode = pilot.resume(project, task_id, spawn, preflight_runner)
     except tools.MissingTool as err:  # back in the inbox, naming the program and the fix

@@ -44,6 +44,7 @@ def draft_until_fit(project: Project, task_id: str, drafter_for) -> str:
     from . import budgets
     problems: dict[str, list[str]] = {}
     decided = budgets.just_decided(project, task_id)  # you answered the over-limit question: no new drafts
+    kept = _drafted_before_stop(project, task_id)  # resumed after your Stop: what was drafted stays
     for attempt in range(MAX_REDRAFTS + 1):
         st = lifecycle.state(project, task_id)
         todo = [d for d in ("intent", "spec", "plan") if d in (st.gate or ())]
@@ -51,6 +52,8 @@ def draft_until_fit(project: Project, task_id: str, drafter_for) -> str:
             todo.remove("intent")  # a good intent isn't redrafted to fix a plan
         if decided and not attempt:
             todo = []
+        if kept and not attempt:
+            todo = [d for d in todo if d not in kept]
         if not lifecycle.draft(project, task_id, todo, drafter_for, problems):
             why = lifecycle.state(project, task_id).failed[1]
             return _needs_you(project, task_id, lint.one_sentence(f"drafting stopped: {why}"))
@@ -83,6 +86,24 @@ def draft_until_fit(project: Project, task_id: str, drafter_for) -> str:
         project.ledger.append("draft.misfit", "parallax", "; ".join(fit), task=task_id, attempt=attempt + 1)
     detail = "; ".join(p for ps in problems.values() for p in ps)
     return _needs_you(project, task_id, f"drafting still failed after {MAX_REDRAFTS} redrafts: {detail}")
+
+
+def _drafted_before_stop(project: Project, task_id: str) -> set[str]:
+    """Docs drafted this attempt before you stopped it, unchanged since: a resume doesn't draft them again."""
+    entries = status.attempt(project.ledger.entries(), task_id)
+    last: dict[str, tuple[int, str]] = {}
+    for i, e in enumerate(entries):
+        if e["kind"] == "draft.recorded":
+            last[e["data"]["doc"]] = (i, e["data"].get("sha", ""))
+    stops = [i for i, e in enumerate(entries) if e["kind"] == "task.stopped"]
+    if not stops:
+        return set()
+    out = set()
+    for doc, (i, sha) in last.items():
+        path = lifecycle.doc_path(project, task_id, doc)
+        if i < stops[-1] and path.exists() and lifecycle.file_hash(path) == sha:
+            out.add(doc)
+    return out
 
 
 def _reserve(project: Project, plan: dict) -> float:

@@ -135,13 +135,20 @@ def act(project: Project, path: str, body: dict) -> dict:
         # began on; otherwise the base branch is merged in and the test gate runs again. Local, never pushed
         if body.get("merge"):
             from .accept import merge_now
+            from .accept import Stopped
             try:
                 return {"message": merge_now(project, task), "merged": True}
+            except Stopped as err:  # your Stop, during the pre-merge test run: nothing moved
+                return {"message": f"stopped {task}: {err}. it waits for you: resume, send back or drop."}
             except ParallaxError as err:
                 return {"message": f"accepted {task} as {e['data']['commit'][:7]}, but {err}. merge it yourself:",
                         "merge": merge_command(e, project)}
         return {"message": f"accepted {task} as {e['data']['commit'][:7]}. merge it yourself:",
                 "merge": merge_command(e)}
+    if path == "/api/stop":  # your Stop on a running card: that task only, at whatever stage it's in
+        from .stopping import stop
+        stop(project, task, "stopped in parallax ui")
+        return {"message": f"stopped {task}. it waits for you: resume, send back or drop."}
     if path == "/api/budget":  # your answer to the spending question, written to the local policy file
         from .budgets import choose
         chosen = str(body.get("mode") or "")

@@ -473,7 +473,7 @@ def test_while_accept_and_merge_runs_the_task_is_merging_and_never_says_merging_
     seen = peek.seen
     assert seen["status"] == "merging"
     card = seen["card"]
-    assert card["actions"] == {"kind": "merging"} and card["merge"] == ""  # no decision, no merge command yet
+    assert card["actions"] == {"kind": "merging", "stop": True} and card["merge"] == ""  # no decision yet, but Stop
     assert card["merging"]["text"] == "Merging: running the tests on the commit it would land"
     assert card["merging"]["started"] and card["chip"] == "Merging"
     assert "merging is yours" not in seen["report"].lower() and "Merging: running the tests" in seen["report"]
