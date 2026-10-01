@@ -75,10 +75,11 @@ def test_only_tests_that_fail_on_an_assertion_at_the_base_are_kept(proj):
     [rec] = kinds(proj, "reticle.recorded")
     assert [t["name"] for t in rec["data"]["kept"]] == ["test_outcome_1_sums_negatives"]
     assert rec["data"]["kept"][0]["outcome"] == "1" and "assert" in rec["data"]["kept"][0]["base_message"]
-    assert {w["name"]: w["why"] for w in rec["data"]["weak"]} == {
-        "test_outcome_1_new_name": "it fails on ImportError, not an assertion or a crash the request shows",
-        "test_outcome_1_exists": "it passes on the base, so it doesn't show the problem",
-        "test_something_else": "it names no outcome in the intent"}
+    why = {w["name"]: w["why"] for w in rec["data"]["weak"]}
+    assert why.pop("test_outcome_1_new_name").startswith(
+        "it fails on ImportError, not an assertion, a wait for the behavior, or a crash the request shows (cannot import name")
+    assert why == {"test_outcome_1_exists": "it passes on the base, so it doesn't show the problem",
+                   "test_something_else": "it names no outcome in the intent"}
     stored = reticle.stored(proj, tid)
     assert stored == proj.root / "docs" / "tasks" / tid / "reticle" / "outcome_tests.py.txt" and stored.read_text() == MIXED
     assert rec["data"]["file"] == f"docs/tasks/{tid}/reticle/outcome_tests.py.txt"  # a name no test runner collects
@@ -274,7 +275,8 @@ def test_a_crash_the_request_shows_counts_like_an_assertion(proj, typed, kept):
     [rec] = kinds(proj, "reticle.recorded")
     assert bool(rec["data"]["kept"]) is kept
     if not kept:
-        assert rec["data"]["weak"][0]["why"] == "it fails on TypeError, not an assertion or a crash the request shows"
+        assert rec["data"]["weak"][0]["why"].startswith(
+            "it fails on TypeError, not an assertion, a wait for the behavior, or a crash the request shows (unsupported operand")
 
 
 def test_an_import_error_is_weak_even_when_the_request_names_it(proj):
@@ -463,3 +465,88 @@ def test_where_reticles_file_runs():
         assert reticle.placement(p) == "tests/test_reticle_outcomes.py"
     with mock.patch.object(reticle.tree, "files_in", return_value=["a.py"]):
         assert reticle.placement(p) == "test_reticle_outcomes.py"  # no tests folder: the root
+
+
+# fair to Maker: a wait for the behavior is a real fail, and Maker hears the steps, never the code -----------
+
+WAITS = [  # the messages Playwright 1.63 leaves in JUnit, recorded from real runs
+    ("playwright._impl._errors.TimeoutError: Page.wait_for_function: Timeout 12000ms exceeded.", True),
+    ("playwright._impl._errors.TimeoutError: Page.wait_for_selector: Timeout 500ms exceeded.", True),
+    ("playwright._impl._errors.TimeoutError: Locator.click: Timeout 500ms exceeded.", True),
+    ("playwright._impl._errors.TimeoutError: Timeout 500ms exceeded.", True),
+    ("AssertionError: Locator expected to have text 'bye'", True),  # an expect that timed out
+    # 89bc50's five: a bare-expression wait the page's content security policy refused. Reticle's own
+    # mistake, which would fail on fixed code too, so it stays dropped, and the reason now says why
+    ("playwright._impl._errors.Error: Page.wait_for_function: EvalError: Evaluating a string as JavaScript violates the "
+     "following Content Security Policy directive because 'unsafe-eval' is not an allowed source of script", False),
+    ("playwright._impl._errors.Error: Page.wait_for_function: TypeError: Cannot read properties of undefined", False),
+    ("ModuleNotFoundError: No module named 'nope'", False),
+]
+
+
+@pytest.mark.parametrize("message,keep", WAITS)
+def test_a_browser_test_that_times_out_waiting_for_the_behavior_is_kept(message, keep):
+    case = {"file": reticle.FILE, "name": "test_outcome_1_notifies", "classname": "test_reticle", "outcome": "fail",
+            "message": message}
+    kept, weak = reticle.judge([case], ["1"])
+    assert bool(kept) is keep, message
+    if not keep:
+        assert weak[0]["why"].startswith("it fails on ") and "(" in weak[0]["why"]  # the reason quotes what it hit
+
+
+def test_a_file_reticle_got_wrong_is_still_dropped():
+    broken = {"file": "", "name": "test_reticle", "classname": "", "outcome": "error",
+              "message": "SyntaxError: invalid syntax"}
+    fixture = {"file": reticle.FILE, "name": "test_outcome_1_x", "classname": "test_reticle", "outcome": "error",
+               "message": "fixture 'nonexistent' not found"}
+    kept, weak = reticle.judge([broken, fixture], ["1"])
+    assert kept == [] and [w["why"] for w in weak] == [
+        "the file doesn't load on the base (SyntaxError: invalid syntax)",
+        "it errors before its assertion: fixture 'nonexistent' not found"]
+
+
+FB461D = '''from test_ui_browser import WAIT
+
+
+def test_outcome_3_opening_the_notification_opens_that_tasks_card(page):
+    """Opens ?task=6c4127#TOKEN and expects the card header to contain 6c4127."""
+    secret = "the code Maker never sees"
+    assert secret
+'''
+
+
+def test_maker_hears_the_steps_and_what_was_expected_never_the_code():
+    t = {"node": "tests/test_reticle_outcomes.py::test_outcome_3_opening_the_notification_opens_that_tasks_card",
+         "name": "test_outcome_3_opening_the_notification_opens_that_tasks_card", "outcome": "3",
+         "message": "AssertionError: Locator expected to contain text '6c4127'"}
+    steps = reticle.steps_of(FB461D)
+    said = reticle.finding({**t, "steps": steps[t["name"]]})
+    assert said == ("blocker: a test of outcome 3 that you can't see fails. It opens ?task=6c4127#TOKEN and expects the "
+                    "card header to contain 6c4127. It got: AssertionError: Locator expected to contain text '6c4127'")
+    assert "secret" not in said and "def " not in said and "WAIT" not in said
+    assert reticle.finding(t) == ("blocker: a test of outcome 3 that you can't see fails: AssertionError: Locator expected "
+                                  "to contain text '6c4127'")  # an older file, written before the steps were asked for
+
+
+def test_reticle_is_asked_for_the_steps_and_for_waits_the_page_allows():
+    assert "one-sentence docstring saying, in plain words, the steps it takes and what\n  it expects" in reticle.REQUEST
+    assert "never on a bare expression" in reticle.REQUEST
+
+
+STEPPED = KEPT.replace("def test_outcome_1_sums_negatives():\n",
+                       'def test_outcome_1_sums_negatives():\n    """Adds -1 and 1 and expects 0."""\n')
+
+
+def test_in_rework_maker_hears_the_hidden_tests_steps_and_its_failure(proj):
+    goals = []
+    first, second = maker(WRONG), maker(FIXED)
+
+    class Maker:
+        def run(self, goal, cwd, fn, stage="build", env=None):
+            goals.append(goal)
+            return (first if len(goals) == 1 else second).run(goal, cwd, fn, stage, env)
+    tid, status = go(proj, FakeReticle(STEPPED), Maker(), FakeChecker())
+    assert status == "ready" and len(goals) == 2
+    assert ("- blocker: a test of outcome 1 that you can't see fails. It adds -1 and 1 and expects 0. It got: "
+            in goals[1]) and "assert 2 == 0" in goals[1]
+    assert "def test_" not in goals[1] and "add(-1, 1)" not in goals[1]  # the steps, never the code

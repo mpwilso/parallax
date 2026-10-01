@@ -19,6 +19,7 @@ are in docs/evals.md.
 """
 from __future__ import annotations
 
+import ast
 import hashlib
 import re
 import shutil
@@ -35,6 +36,10 @@ NAME = re.compile(r"^test_outcome_(\d+)(?:_|$)")
 # a failure on an assertion, pytest.raises included. pytest writes a bare assert's message either as
 # "assert x == y" or "AssertionError: assert x == y", depending on how it ran; both count
 KEEPS = ("AssertionError", "assert ", "Failed: DID NOT RAISE", "Failed: DID NOT WARN")
+# a browser test that timed out waiting for what the outcome asks for (a Playwright wait or expect):
+# the behavior never came, which is a real fail. Playwright's own errors (a refused eval, a closed
+# page) are the test's mistake, and stay dropped
+WAITED = re.compile(r"^(?:playwright\._impl\._errors\.)?TimeoutError: (?:[\w.]+: )?Timeout \d+ms exceeded")
 # a crash bug's test fails on the crash itself: the exception the request names counts too, except these
 NEVER = {"ImportError", "ModuleNotFoundError", "SyntaxError", "IndentationError"}
 NAMED = re.compile(r"\b([A-Z]\w*(?:Error|Exception|Warning))\b")
@@ -112,6 +117,12 @@ Rules:
   is: on an assertion, or on the exception the request itself shows, for a crash.
 - Your file runs as {where}, beside the repository's own tests: import the code, fixtures and test
   helpers the way they do. No new dependencies, no network, no files outside a temporary folder.
+- Start each test with a one-sentence docstring saying, in plain words, the steps it takes and what
+  it expects, with the exact values it uses: for example "Opens ?task=6c4127#TOKEN and expects the
+  card header to contain 6c4127." If it fails on a change, that sentence is what the builder sees,
+  never your code.
+- In a browser test, wait with expect(), or with wait_for_function on an arrow function
+  ("() => ..."), never on a bare expression: a page's content security policy can refuse those.
 - If an outcome can't be tested this way, leave it out; don't write a test that passes now.
 Your final reply is the test file's full text and nothing else."""
 
@@ -263,9 +274,11 @@ def judge(cases: list[dict], outcomes: list[str], wanted: list[str] | None = Non
                                                    "and the request describes no hang"})
         elif hung(c["message"]):
             keep.append({"node": node(c, path), "name": c["name"], "outcome": m.group(1), "base_message": c["message"]})
-        elif not c["message"].startswith(KEEPS) and _exception(c["message"]) not in named:
+        elif not c["message"].startswith(KEEPS) and not WAITED.match(c["message"]) and _exception(c["message"]) not in named:
             kind = _exception(c["message"]) or "an error"
-            weak.append({"name": c["name"], "why": f"it fails on {kind}, not an assertion or a crash the request shows"})
+            said = " ".join(c["message"].split(":", 1)[-1].split())[:140]
+            weak.append({"name": c["name"], "why": f"it fails on {kind}, not an assertion, a wait for the behavior, or a "
+                                                   f"crash the request shows" + (f" ({said})" if said else "")})
         else:
             keep.append({"node": node(c, path), "name": c["name"], "outcome": m.group(1),
                          "base_message": c["message"]})
@@ -365,7 +378,8 @@ def check(project: Project, task_id: str, p, treeish: str, runner=None) -> tuple
     if missing and broken is None:
         raise Unrun(f"{len(missing)} of Reticle's {len(tests)} kept tests didn't run (exit {results.exit}), "
                     f"{missing[0]['node']} among them")
-    failing = []
+    failing, steps = [], steps_of(text)
+    tests = [{**t, "steps": steps.get(t["name"], "")} for t in tests]
     for t in tests:
         c = ran.get(t["node"])
         if c is None:
@@ -376,9 +390,26 @@ def check(project: Project, task_id: str, p, treeish: str, runner=None) -> tuple
     return results, failing
 
 
+def steps_of(text: str | bytes) -> dict[str, str]:
+    """Each test's docstring, by name: the steps it takes and what it expects, in Reticle's words.
+    The one part of the file Maker may see. A file that doesn't parse has none."""
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError):
+        return {}
+    return {n.name: " ".join(doc.split()) for n in ast.walk(tree)
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and NAME.match(n.name) and (doc := ast.get_docstring(n))}
+
+
 def finding(t: dict) -> str:
-    """What Maker hears: the outcome and the assertion message, never the test's code."""
-    return f"blocker: a test of outcome {t['outcome']} that you can't see fails: {t['message']}"
+    """What Maker hears: the outcome, the steps the test took and what it expected (its docstring), and
+    the failure message. Never the test's code (fb461d: Maker saw only "expected 6c4127", and couldn't
+    tell the test opened a different link format)."""
+    steps = (t.get("steps") or "").rstrip(".")
+    if not steps:
+        return f"blocker: a test of outcome {t['outcome']} that you can't see fails: {t['message']}"
+    return (f"blocker: a test of outcome {t['outcome']} that you can't see fails. It {steps[0].lower() + steps[1:]}. "
+            f"It got: {t['message']}")
 
 
 def _default_writer(limit: float, model: str):
