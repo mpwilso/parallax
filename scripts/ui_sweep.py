@@ -54,7 +54,7 @@ def project():
     reticle.WRITER = Writer()
 
     def runner(cfg, cwd, cmd, env):
-        if reticle.FILE not in cmd:
+        if reticle.RUN_NAME not in cmd:
             return junit_runner()(cfg, cwd, cmd, env)
         out = subprocess.run(["bash", "-c", cmd], cwd=cwd, capture_output=True, text=True,
                              env={**env, "PATH": f"{Path(sys.executable).parent}:{env['PATH']}"})

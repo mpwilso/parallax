@@ -136,7 +136,7 @@ def test_tests_in_a_class_are_found_and_run_at_every_check(proj):
     make = Twice(maker(WRONG), maker(FIXED))
     tid, status = go(proj, FakeReticle(CLASSY), make)
     [rec] = kinds(proj, "reticle.recorded")
-    assert [t["node"] for t in rec["data"]["kept"]] == ["test_reticle.py::SumTest::test_outcome_1_sums_negatives"]
+    assert [t["node"] for t in rec["data"]["kept"]] == ["tests/test_reticle_outcomes.py::SumTest::test_outcome_1_sums_negatives"]
     first, last = kinds(proj, "reticle.ran")
     assert first["data"]["failed"][0]["message"].startswith("AssertionError: 2 != 0")  # it ran, on the bad fix
     assert (last["data"]["passed"], last["data"]["failed"]) == (1, [])
@@ -429,3 +429,37 @@ def test_a_stored_reticle_file_is_never_collected_by_the_repos_own_tests_and_old
     rec = reticle.recorded(proj, tid)
     proj.ledger.append("reticle.recorded", "reticle", "old", **{**rec["data"], "file": old.relative_to(proj.root).as_posix()})
     assert reticle.stored(proj, tid) == old and not reticle.tampered(proj, tid)
+
+
+# Reticle's file runs beside the repo's own tests, so their conftest and helpers import (fb461d) -------------
+
+def test_a_file_that_imports_from_conftest_and_a_tests_helper_loads_and_is_kept(proj, repo):
+    """fb461d: its file began "from conftest import *" and imported tests/ helpers; at the root it
+    couldn't, and every test was dropped as not loading on the base."""
+    (repo / "tests" / "conftest.py").write_text("import pytest\n\nZERO = 0\n\n\n@pytest.fixture\ndef pair():\n    return (-1, 1)\n")
+    (repo / "tests" / "helpers.py").write_text("def total(a, b):\n    return a + b\n")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "test helpers"], check=True)
+    text = ("from conftest import *  # noqa: F401,F403\nfrom helpers import total\n\nfrom calc import add\n\n\n"
+            "def test_outcome_1_sums_negatives(pair):\n    assert add(*pair) == total(*pair) == ZERO  # noqa: F405\n")
+    writer = FakeReticle(text)
+    tid, status = go(proj, writer)
+    [rec] = kinds(proj, "reticle.recorded")
+    assert rec["data"]["placed"] == "tests/test_reticle_outcomes.py"
+    assert [t["node"] for t in rec["data"]["kept"]] == ["tests/test_reticle_outcomes.py::test_outcome_1_sums_negatives"]
+    assert rec["data"]["kept"][0]["base_message"].startswith("assert")  # loaded, and failed on its assertion
+    assert "Your file runs as tests/test_reticle_outcomes.py, beside the repository's own tests" in writer.goals[0]
+    [ran] = kinds(proj, "reticle.ran")
+    assert (ran["data"]["passed"], ran["data"]["total"]) == (1, 1) and status == "ready"  # the fix passes it, same place
+
+
+def test_where_reticles_file_runs():
+    from types import SimpleNamespace
+    from unittest import mock
+    p = SimpleNamespace(worktree=None, task={"base": "b"}, plan={"tests": ["test/test_output.py::t"]})
+    with mock.patch.object(reticle.tree, "files_in", return_value=["test/test_output.py", "tests/x.py", "a.py"]):
+        assert reticle.placement(p) == "test/test_reticle_outcomes.py"  # where the plan's tests are
+        p.plan = {}
+        assert reticle.placement(p) == "tests/test_reticle_outcomes.py"
+    with mock.patch.object(reticle.tree, "files_in", return_value=["a.py"]):
+        assert reticle.placement(p) == "test_reticle_outcomes.py"  # no tests folder: the root

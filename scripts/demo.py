@@ -96,7 +96,7 @@ def main() -> None:
     plan_tests = junit_runner()
 
     def runner(cfg, cwd, cmd, env):  # Reticle's file runs for real; the plan's tests are the fake's
-        if reticle.FILE not in cmd:
+        if reticle.RUN_NAME not in cmd:
             return plan_tests(cfg, cwd, cmd, env)
         out = subprocess.run(["bash", "-c", cmd], cwd=cwd, capture_output=True, text=True,
                              env={**env, "PATH": f"{Path(sys.executable).parent}:{env['PATH']}"})

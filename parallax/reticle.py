@@ -22,14 +22,15 @@ from __future__ import annotations
 import hashlib
 import re
 import shutil
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from . import build, costs, installs, lifecycle, lint, review, status, testrun, tree
 from .agents.base import AgentResult
 from .core import ROOT_ENV, TASK_ENV, Project
 from .gate import make_permission_fn
 
-FILE = "test_reticle.py"  # where the file sits in a tree when it runs: the root, so imports resolve as the repo's do
+FILE = "test_reticle.py"  # where the file ran before 2026-10-01: the repo's root, so a tests/ helper or conftest didn't import
+RUN_NAME = "test_reticle_outcomes.py"  # its name where it runs now: beside the repo's own tests (placement)
 NAME = re.compile(r"^test_outcome_(\d+)(?:_|$)")
 # a failure on an assertion, pytest.raises included. pytest writes a bare assert's message either as
 # "assert x == y" or "AssertionError: assert x == y", depending on how it ran; both count
@@ -109,8 +110,8 @@ Rules:
   only through the public interface, never private names, generated code or the text of a pattern.
 - Each test must fail on the code as it is now, because the outcome isn't met yet, and pass once it
   is: on an assertion, or on the exception the request itself shows, for a crash.
-- Import the code the way the repository's own tests do. No new dependencies, no network, no files
-  outside a temporary folder.
+- Your file runs as {where}, beside the repository's own tests: import the code, fixtures and test
+  helpers the way they do. No new dependencies, no network, no files outside a temporary folder.
 - If an outcome can't be tested this way, leave it out; don't write a test that passes now.
 Your final reply is the test file's full text and nothing else."""
 
@@ -154,14 +155,14 @@ def targets(intent: str) -> list[str]:
     return asked(intent)
 
 
-def request(intent: str, typed: str) -> str:
+def request(intent: str, typed: str, where: str = RUN_NAME) -> str:
     """Reticle's input: the person's request, the outcomes to test (without the mark), the constraints."""
     wanted = set(targets(intent))
     lines = [line for line in lint.unmark(review.section(intent, "Outcome")).splitlines()
              if (m := lint.OUTCOME_ITEM.match(line)) and m.group(1) in wanted]
     return REQUEST.format(request=typed.strip(), heading="The outcomes to test, each one the person asked for:",
                           outcome="\n".join(lines),
-                          constraints=review.section(intent, "Constraints"))
+                          constraints=review.section(intent, "Constraints"), where=where)
 
 
 def crashes(typed: str) -> set[str]:
@@ -207,24 +208,42 @@ def code_of(reply: str) -> str:
     return reply.strip() + "\n"  # nothing parses: it won't load on the base, and is dropped as weak
 
 
-def node(case: dict) -> str:
-    """A test's pytest id in the file, class included: test_reticle.py::SomeTest::test_outcome_1_x.
+def placement(p) -> str:
+    """Where Reticle's file sits when it runs: in the folder the repo's own tests live in (the plan's
+    first test's, else tests/ or test/), so it loads exactly as one of them would, with that folder's
+    conftest and helpers importable. The root only when the repo has no such folder."""
+    files = tree.files_in(p.worktree, p.task["base"])
+    dirs = [str(PurePosixPath(t.split("::", 1)[0]).parent) for t in ((p.plan or {}).get("tests") or [])]
+    for d in [*dirs, "tests", "test"]:
+        if d not in ("", ".") and any(f.startswith(d + "/") for f in files):
+            return f"{d}/{RUN_NAME}"
+    return RUN_NAME
+
+
+def placed(project: Project, task_id: str) -> str:
+    """Where this attempt's kept tests run: where they ran on the base (older records: the root)."""
+    rec = recorded(project, task_id)
+    return (rec["data"].get("placed") if rec else None) or FILE
+
+
+def node(case: dict, path: str = FILE) -> str:
+    """A test's pytest id in the file, class included: tests/test_reticle_outcomes.py::SomeTest::test_outcome_1_x.
     A method of a class is only found by its full id (seen live: pathspec-77's unittest classes)."""
-    stem = FILE.removesuffix(".py")
+    stem = PurePosixPath(path).name.removesuffix(".py")
     parts = case.get("classname", "").split(".")
     classes = parts[parts.index(stem) + 1:] if stem in parts else []
-    return "::".join([FILE, *classes, case["name"]])
+    return "::".join([path, *classes, case["name"]])
 
 
 def judge(cases: list[dict], outcomes: list[str], wanted: list[str] | None = None,
-          named: set[str] = frozenset(), hang: bool = False) -> tuple[list[dict], list[dict]]:
+          named: set[str] = frozenset(), hang: bool = False, path: str = FILE) -> tuple[list[dict], list[dict]]:
     """(kept, weak) from the tests' run on the base commit. wanted: the asked outcomes (all by
     default); named: exceptions the request shows, whose failure counts like an assertion's;
     hang: the request describes a hang, so a test that hangs on the base counts too."""
     wanted = outcomes if wanted is None else wanted
     keep, weak = [], []
     for c in cases:
-        if c["file"] != FILE and c["outcome"] != "error":  # a collection error names no class, so no file: it's ours
+        if c["file"] != path and c["outcome"] != "error":  # a collection error names no class, so no file: it's ours
             continue
         m = NAME.match(c["name"])
         if c["outcome"] == "error" and not m:
@@ -243,12 +262,12 @@ def judge(cases: list[dict], outcomes: list[str], wanted: list[str] | None = Non
             weak.append({"name": c["name"], "why": f"it hangs on the base ({hung(c['message'])}), "
                                                    "and the request describes no hang"})
         elif hung(c["message"]):
-            keep.append({"node": node(c), "name": c["name"], "outcome": m.group(1), "base_message": c["message"]})
+            keep.append({"node": node(c, path), "name": c["name"], "outcome": m.group(1), "base_message": c["message"]})
         elif not c["message"].startswith(KEEPS) and _exception(c["message"]) not in named:
             kind = _exception(c["message"]) or "an error"
             weak.append({"name": c["name"], "why": f"it fails on {kind}, not an assertion or a crash the request shows"})
         else:
-            keep.append({"node": node(c), "name": c["name"], "outcome": m.group(1),
+            keep.append({"node": node(c, path), "name": c["name"], "outcome": m.group(1),
                          "base_message": c["message"]})
     return keep, weak
 
@@ -258,10 +277,10 @@ def _exception(message: str) -> str:
     return message.split(":", 1)[0].strip().rsplit(".", 1)[-1]
 
 
-def _run(project: Project, p, treeish: str, text: bytes, nodes: list[str], where: str, runner=None) -> testrun.Results:
-    plan = {"tests": nodes, "outside_reads": [], "domains": []}
+def _run(project: Project, p, treeish: str, text: bytes, path: str, where: str, runner=None) -> testrun.Results:
+    plan = {"tests": [path], "outside_reads": [], "domains": []}
     results, _ = testrun.run(p.worktree, p.task["base"], treeish, plan, p.home / where, p.venv, build.scrubbed_env(p.venv),
-                             project.policy.check["test_command"], runner, overlay={FILE: limited(text)})
+                             project.policy.check["test_command"], runner, overlay={path: limited(text)})
     return results
 
 
@@ -290,8 +309,9 @@ def write(project: Project, task_id: str, p, writer=None, runner=None) -> str:
         return "failed"
     project.ledger.append("reticle.started", "parallax", "", task=task_id)  # the UI shows Reticle at work
     fn = make_permission_fn(project, task_id, base, read_only=True)
+    where = placement(p)
     try:
-        res = (writer or WRITER)(limit, cfg["model"]).run(request(intent, typed), base, fn, stage="reticle",
+        res = (writer or WRITER)(limit, cfg["model"]).run(request(intent, typed, where), base, fn, stage="reticle",
                                                           env={TASK_ENV: task_id, ROOT_ENV: str(project.root)})
     except Exception as err:  # recorded, never retried silently; the build goes on without it
         res = AgentResult("error", f"{type(err).__name__}: {err}")
@@ -300,10 +320,10 @@ def write(project: Project, task_id: str, p, writer=None, runner=None) -> str:
         project.ledger.append("reticle.failed", "reticle", lint.one_sentence(res.summary or res.status), **common)
         return "failed"
     text = code_of(res.summary).encode()
-    results = _run(project, p, p.task["base"], text, [FILE], "reticle-base", runner)
-    keep, weak = judge(results.cases, lint.outcomes_of(intent), targets(intent), crashes(typed), hangs(typed))
+    results = _run(project, p, p.task["base"], text, where, "reticle-base", runner)
+    keep, weak = judge(results.cases, lint.outcomes_of(intent), targets(intent), crashes(typed), hangs(typed), where)
     if not results.cases:
-        weak.append({"name": FILE, "why": f"its tests couldn't run on the base (exit {results.exit}): "
+        weak.append({"name": where, "why": f"its tests couldn't run on the base (exit {results.exit}): "
                                           f"{(results.tail.splitlines() or ['no output'])[-1][:200]}"})
     path = stored(project, task_id)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -311,7 +331,7 @@ def write(project: Project, task_id: str, p, writer=None, runner=None) -> str:
     rel = path.relative_to(project.root).as_posix()
     project.ledger.append("reticle.recorded", "reticle",
                           lint.one_sentence(f"{len(keep)} tests kept, {len(weak)} weak ones dropped"),
-                          file=rel, sha=hashlib.sha256(text).hexdigest(), kept=keep, weak=weak, **common)
+                          file=rel, sha=hashlib.sha256(text).hexdigest(), kept=keep, weak=weak, placed=where, **common)
     return "kept" if keep else "none"
 
 
@@ -337,8 +357,9 @@ def check(project: Project, task_id: str, p, treeish: str, runner=None) -> tuple
     if not tests:
         return None
     text = stored(project, task_id).read_bytes()
-    results = _run(project, p, treeish, text, [FILE], "reticle-check", runner)
-    ran = {node(c): c for c in results.cases if c["file"] == FILE and NAME.match(c["name"])}
+    where = placed(project, task_id)
+    results = _run(project, p, treeish, text, where, "reticle-check", runner)
+    ran = {node(c, where): c for c in results.cases if c["file"] == where and NAME.match(c["name"])}
     broken = next((c for c in results.cases if c["outcome"] == "error" and not NAME.match(c["name"])), None)
     missing = [t for t in tests if t["node"] not in ran]
     if missing and broken is None:
