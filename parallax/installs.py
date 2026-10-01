@@ -17,11 +17,12 @@ So after setup Parallax reads the install's own records, with no per-repo rules:
 from __future__ import annotations
 
 import json
-import os
 import re
 import shutil
 import subprocess
 from pathlib import Path, PurePosixPath
+
+from . import tools
 
 RECORD = "parallax-install.json"
 GENERATED = "parallax-generated"
@@ -43,7 +44,7 @@ def make(command: str, repo: Path, commit: str, venv: Path, where: Path) -> tupl
     """Run setup as you in a fresh checkout of commit at where, record what it installed, and
     delete the checkout. Returns (the run, the record)."""
     checkout(repo, commit, where)
-    env = {**os.environ, "PARALLAX_VENV": str(venv), "PARALLAX_WORKTREE": str(where)}
+    env = {**tools.env(), "PARALLAX_VENV": str(venv), "PARALLAX_WORKTREE": str(where)}  # uv found in ~/.local/bin too
     try:
         out = subprocess.run(command, shell=True, cwd=where, env=env, capture_output=True, text=True)
         found = record(venv, where) if out.returncode == 0 and venv.is_dir() else {}

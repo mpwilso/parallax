@@ -24,7 +24,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from . import lifecycle, lint, memcap, record, sandbox, secretscan, tree
+from . import lifecycle, lint, memcap, record, sandbox, secretscan, tools, tree
 from .core import ParallaxError, Project, refuse_inside_task
 
 
@@ -145,7 +145,8 @@ def run_tests(project: Project, commit: str, command: str) -> tuple[int, str]:
     folder.parent.mkdir(parents=True, exist_ok=True)
     _git(project.root, "worktree", "add", "--detach", str(folder), commit)
     try:
-        out = memcap.run(["bash", "-c", command], memcap.SUITE, what="the tests", timeout=TEST_TIMEOUT, capture=True, cwd=folder)
+        out = memcap.run(["bash", "-c", command], memcap.SUITE, what="the tests", timeout=TEST_TIMEOUT, capture=True, cwd=folder,
+                         env=tools.env())  # runs as you: uv found in ~/.local/bin too
         return out.code, out.output if not out.timed_out else out.output + f"\nthe tests ran past {TEST_TIMEOUT // 60} minutes"
     finally:
         subprocess.run(["git", "-C", str(project.root), "worktree", "remove", "--force", str(folder)], capture_output=True)

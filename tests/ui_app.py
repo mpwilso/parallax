@@ -109,7 +109,7 @@ def main(port: int) -> None:
     proj.ledger.append("maker.started", "parallax", "", task=b, stage="build")
 
     ui._save_link(repo, port, TOKEN)
-    app = ui.UI(repo, port=port)
+    app = ui.UI(repo, port=port, find=lambda tool: f"/usr/bin/{tool}")  # fake agents: nothing to install
     print(app.url, flush=True)
     app.server.serve_forever()
 

@@ -22,7 +22,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
-from . import costs, guard, installs, lifecycle, lint, memcap, preflight, sandbox
+from . import costs, guard, installs, lifecycle, lint, memcap, preflight, sandbox, tools
 from .agents.base import Agent, AgentResult
 from .core import ROOT_ENV, TASK_ENV, ParallaxError, Project, inside_task, refuse_inside_task
 from .gate import Scope, make_permission_fn
@@ -31,6 +31,7 @@ KEEP_ENV = ("HOME", "USER", "LOGNAME", "LANG", "LANGUAGE", "TERM", "SHELL", "TZ"
             "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_RUNTIME_DIR")
 SYSTEM_PATH = "/usr/local/bin:/usr/bin:/bin"
 MAKER_GOAL = "Build this task by following its approved plan. Change only the files the plan lists."
+WHY_SETUP = "the [build] setup command"
 QUIET_BUILD = {"PYTHONDONTWRITEBYTECODE": "1", "PYTEST_ADDOPTS": "-p no:cacheprovider"}  # no byproducts in the worktree
 
 
@@ -55,8 +56,8 @@ def scrubbed_env(venv: Path | None, environ: dict | None = None, path: str | Non
     PATH is the venv, the system folders, and wherever the sandbox tools were found before scrubbing."""
     environ = dict(os.environ if environ is None else environ)
     env = {k: v for k, v in environ.items() if k in KEEP_ENV or k.startswith("LC_")}
-    tools = [d for d in sandbox.tool_dirs(environ) if d not in SYSTEM_PATH.split(":")]
-    env["PATH"] = path or ":".join(([f"{venv}/bin"] if venv else []) + [SYSTEM_PATH] + tools)
+    found = [d for d in sandbox.tool_dirs(environ) if d not in SYSTEM_PATH.split(":")]
+    env["PATH"] = path or ":".join(([f"{venv}/bin"] if venv else []) + [SYSTEM_PATH] + found)
     if venv:
         env["VIRTUAL_ENV"] = str(venv)
     env["CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"] = "1"
@@ -87,11 +88,17 @@ def _setup_venv(project: Project, task_id: str, worktree: Path, home: Path) -> P
     venv = home / "venv"
     if venv.exists():
         return venv
+    lacking = tools.for_command(command, WHY_SETUP)
+    if lacking:  # named before anything runs, with its fix, never a shell's raw "not found"
+        raise tools.MissingTool(lacking)
     started = time.monotonic()
     out, found = installs.make(command, worktree, project.task(task_id)["base"], venv, home / "setup-base")
     project.ledger.append("setup.ran", "parallax", command, task=task_id, exit=out.returncode,
                           seconds=round(time.monotonic() - started, 1), **found)
     if out.returncode != 0:
+        lacking = tools.not_found(out.stderr + out.stdout, WHY_SETUP)  # a program a script inside setup runs
+        if lacking:
+            raise tools.MissingTool(lacking)
         tail = (out.stderr or out.stdout).strip().splitlines()[-1:] or ["no output"]
         raise ParallaxError(f"the [build] setup command failed: {tail[0]}")
     return venv
@@ -395,6 +402,10 @@ def run_mode(project: Project, task_id: str, mode: str, drafter_for, maker_for, 
             if status == "built":
                 status = run_check(project, task_id, checker_for, maker_for,
                                    test_runner=test_runner, preflight_runner=preflight_runner)
+    except tools.MissingTool as err:  # which program, and the fix, never a raw error
+        project.ledger.append("stuck.raised", "parallax", err.missing.text, task=task_id,
+                              missing_tool=err.missing.tool, fix=err.missing.fix)
+        status = "stuck"
     except Exception as err:  # nothing fails quietly in the background: it comes to you
         project.ledger.append("stuck.raised", "parallax", lint.one_sentence(
             f"Parallax hit an error and stopped the task: {type(err).__name__}: {err}"), task=task_id, error=True)

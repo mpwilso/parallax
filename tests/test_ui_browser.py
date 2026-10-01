@@ -50,7 +50,7 @@ def proj(repo, monkeypatch):
 
 @pytest.fixture
 def server(proj):
-    app = UI(proj.root, port=0)
+    app = UI(proj.root, port=0, find=lambda tool: f"/usr/bin/{tool}")  # fake agents: nothing to install
     threading.Thread(target=app.server.serve_forever, daemon=True).start()
     yield app
     app.close()
@@ -396,6 +396,27 @@ def test_leaving_and_coming_back(browser, server, proj):
     expect(pg.locator("#locked")).to_be_visible()
     expect(pg.locator("#intake")).to_be_hidden()
     ctx.close()
+
+
+def test_a_missing_program_shows_on_the_page_with_its_fix(browser, proj):
+    """"uv not found" mid-task (2026-10-01): now it's named before any task runs, with the fix."""
+    found = {"uv": None}
+    app = UI(proj.root, port=0, find=lambda t: found.get(t, f"/usr/bin/{t}"))
+    threading.Thread(target=app.server.serve_forever, daemon=True).start()
+    ctx = browser.new_context()
+    pg = ctx.new_page()
+    pg.goto(app.url)
+    note = pg.locator("#tools")
+    expect(note).to_be_visible(timeout=WAIT)
+    expect(note).to_contain_text("uv not found: Parallax's own setup needs it. fix: install it with "
+                                 "curl -LsSf https://astral.sh/uv/install.sh | sh.")
+    expect(note).to_contain_text('export PATH="$HOME/.local/bin:$PATH", then restart parallax ui from a new terminal.')
+    found["uv"] = "/home/me/.local/bin/uv"  # installed: the next look finds it, and the note goes
+    pg.reload()
+    expect(pg.locator("#queue")).to_be_visible()
+    expect(note).to_be_hidden()
+    ctx.close()
+    app.close()
 
 
 def test_a_server_that_goes_away_says_so(browser, proj):

@@ -128,11 +128,13 @@ Linux, or Windows through WSL2. On Windows, make the distro first: [docs/wsl.md]
    platform      linux on wsl2                      ok
    sandbox       bubblewrap, socat, srt             ok
    claude login  found                              ok
+   build tools   git, uv                            ok
    windows       interop off, path off, drives off  ok
    approval key  ~/.config/parallax/key             ok
    signing key   none: accept commits won't be signed
    ready.
    ```
+   `build tools` covers every program a build runs: git, uv, and whatever your `[build] setup` calls. Parallax also looks in `~/.local/bin`, where the uv installer puts it, so a shell without uv on its PATH still builds. Anything still missing is printed by `parallax ui` when it starts and shown at the top of the page, with the fix, before any task runs.
 5. In a git repo you want agents to work on: `parallax init`, then `parallax ui`. If the repo's tests need dependencies, set `[build] setup` in `parallax.policy.toml` to the command that makes a venv at `$PARALLAX_VENV`; `init` shows the command and asks first when the repo's example policy already has one.
 
 **Stop and remove.** `Ctrl+C` in the terminal running `parallax ui` stops the page; `parallax stop` ends every running build now and records it. To remove Parallax: `uv tool uninstall parallax`, then delete `~/.local/share/parallax` (worktrees, task folders, Field's tools) and `~/.config/parallax` (the approval key and UI links). A repo keeps only `parallax.policy.toml`, `REVIEW.md`, its ledger in `.parallax/` and the `docs/tasks/` it accepted; delete those to leave no trace.

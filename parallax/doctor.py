@@ -12,7 +12,6 @@ import json
 import os
 import re
 import secrets
-import shutil
 import stat
 import subprocess
 import sys
@@ -20,6 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
+from . import tools
 from .approvals import key_path
 
 OK, WARN, FAIL, INFO = "ok", "warn", "fail", "info"
@@ -42,15 +42,25 @@ def _run(argv: list[str]) -> str | None:
     return out.stdout if out.returncode == 0 else None
 
 
+def _needed() -> list[tuple[str, str]]:
+    """What a build needs here: the policy's commands too, when run in a Parallax project."""
+    from .core import Project
+    try:
+        return tools.needed(Project(Path.cwd()).policy)
+    except Exception:  # not a project, or a policy that won't load: what every build needs
+        return tools.needed()
+
+
 @dataclass
 class Machine:
     platform: str = field(default_factory=lambda: sys.platform)
     read: Callable[[str], str] = _read
     exists: Callable[[str], bool] = os.path.exists
-    which: Callable[[str], str | None] = shutil.which
+    which: Callable[[str], str | None] = tools.which  # your PATH, then where installers put programs
     run: Callable[[list[str]], str | None] = _run
     path: str = field(default_factory=lambda: os.environ.get("PATH", ""))
     key: Path = field(default_factory=key_path)
+    needed: list[tuple[str, str]] = field(default_factory=_needed)
 
 
 @dataclass
@@ -114,6 +124,18 @@ def _drives_mounted(mounts: str) -> bool:
     return False
 
 
+def check_tools(m: Machine) -> Check:
+    """Every other program a build runs, uv included. The sandbox and claude have their own lines."""
+    want = [(t, why) for t, why in m.needed if t not in tools.SANDBOX and t != "claude"]
+    lacking = [tools.Missing(t, why) for t, why in want if not m.which(t)]
+    if lacking:
+        return Check("build tools", f"missing {', '.join(x.tool for x in lacking)}", FAIL, lacking[0].fix)
+    have = m.path.split(os.pathsep)
+    off = [f"{t} at {_home(m.which(t) or '')}" for t, _ in want if str(Path(m.which(t) or "/").parent) not in have]
+    detail = ", ".join(t for t, _ in want)
+    return Check("build tools", detail + (f" ({', '.join(off)}, not on your PATH; parallax finds it there)" if off else ""), OK)
+
+
 def check_windows(m: Machine) -> Check:
     if not is_wsl(m):
         return Check("windows", "not wsl", OK)
@@ -149,7 +171,7 @@ def check_signing_key(m: Machine) -> Check:
     return Check("signing key", _home(key), OK)
 
 
-CHECKS = (check_platform, check_sandbox, check_login, check_windows, check_approval_key, check_signing_key)
+CHECKS = (check_platform, check_sandbox, check_login, check_tools, check_windows, check_approval_key, check_signing_key)
 
 
 def run(m: Machine | None = None) -> list[Check]:

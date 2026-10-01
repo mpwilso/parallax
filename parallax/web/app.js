@@ -81,7 +81,7 @@ function say(text, error) {
 }
 
 function lock() {
-  for (const id of ["app", "intake", "status", "offline"]) document.getElementById(id).hidden = true;
+  for (const id of ["app", "intake", "status", "offline", "tools"]) document.getElementById(id).hidden = true;
   document.getElementById("locked").hidden = false;
 }
 
@@ -230,6 +230,14 @@ function renderQueue() {
   renderIdle();
 }
 
+// a program a build needs isn't installed: named before any task runs, with its fix, until it's found
+function renderTools(lines) {
+  const box = document.getElementById("tools");
+  box.hidden = !lines.length;
+  box.replaceChildren(...(lines.length ? [el("p", {}, "A build stops until each of these is found. This note goes away once it is.")] : []),
+    ...lines.map(l => el("p", { class: "tool" }, l)));
+}
+
 function renderIdle() {
   const idle = document.getElementById("idle");
   const b = state.board;
@@ -247,6 +255,7 @@ async function refresh() {
     const board = await api("/api/board");
     const key = JSON.stringify(board);
     state.board = board;
+    renderTools(board.tools || []);
     if (key !== state.boardKey) { state.boardKey = key; renderQueue(); }
     checkWaiting();
     if (state.wanted) {  // the link named a task: open its card once, if it's there

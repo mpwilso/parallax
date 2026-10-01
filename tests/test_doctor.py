@@ -16,7 +16,7 @@ WSL2 = "6.1.0-microsoft-standard-WSL2"
 HARDENED_MOUNTS = "none /mnt/wsl tmpfs rw 0 0\n"
 
 
-def machine(tmp_path, platform="linux", osrelease=WSL2, tools=("bwrap", "socat", "srt", "claude"),
+def machine(tmp_path, platform="linux", osrelease=WSL2, tools=("bwrap", "socat", "srt", "claude", "git", "uv"),
             files=(), mounts=HARDENED_MOUNTS, path="/usr/bin:/bin", logged_in=True, signing=""):
     """A made-up machine: hardened WSL2 with everything installed, unless told otherwise."""
     text = {"/proc/sys/kernel/osrelease": osrelease, "/proc/mounts": mounts}
@@ -30,7 +30,7 @@ def machine(tmp_path, platform="linux", osrelease=WSL2, tools=("bwrap", "socat",
 
     return doctor.Machine(platform=platform, read=lambda p: text.get(p, ""), exists=lambda p: p in files,
                           which=lambda b: f"/usr/bin/{b}" if b in tools else None, run=run, path=path,
-                          key=tmp_path / "config" / "parallax" / "key")
+                          key=tmp_path / "config" / "parallax" / "key", needed=list(doctor.tools.needed(None, platform)))
 
 
 def by_name(checks):
@@ -43,10 +43,11 @@ def test_doctor_on_a_hardened_wsl2_machine_is_ready(tmp_path):
     m = machine(tmp_path)
     checks = by_name(doctor.run(m))
     assert {n: c.status for n, c in checks.items()} == {
-        "platform": "ok", "sandbox": "ok", "claude login": "ok", "windows": "ok",
+        "platform": "ok", "sandbox": "ok", "claude login": "ok", "build tools": "ok", "windows": "ok",
         "approval key": "ok", "signing key": "info"}
     assert checks["platform"].detail == "linux on wsl2"
     assert checks["sandbox"].detail == "bubblewrap, socat, srt"
+    assert checks["build tools"].detail == "git, uv"
     assert checks["windows"].detail == "interop off, path off, drives off"
     assert checks["signing key"].detail == "none: accept commits won't be signed"
 

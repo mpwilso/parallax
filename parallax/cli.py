@@ -234,6 +234,8 @@ def _run(args) -> int:
             print(f"parallax ui is running. open this in your Windows browser: {app.windows_url}")
         else:
             print(f"parallax ui is {'open in your browser' if opening else 'running'}: {app.url}")
+        for line in app.missing():  # before any task runs: a build would stop on it
+            print(line)
         print("keep this window open while you use it. Ctrl+C to stop.", flush=True)
         try:
             app.serve(open_browser=opening)

@@ -153,6 +153,7 @@ STOPS = [  # (ledger kind, data, reason): one per kind of stop the card, the inb
     ("stuck.raised", {}, "drafting still failed after 2 redrafts: the plan lists setup.py"),
     ("stuck.raised", {}, "the same call was refused 3 times: shell.run curl"),
     ("stuck.raised", {"error": True}, "error: the sandbox runtime exited with code 1 (srt: bwrap: namespace)"),
+    ("stuck.raised", {"missing_tool": "uv", "fix": "install it"}, "uv not found: the [build] setup command needs it"),
     ("stuck.raised", {"turns": True}, "Maker used all 80 turns"),
     ("stuck.raised", {"budget": True}, "Maker spent $3.10 of the $3.80 cap, leaving Field $0.20, so the budget cap ran out"),
     ("stuck.raised", {"over_limit": True, "named": 8.0, "limit": 5.0, "size": "small"},

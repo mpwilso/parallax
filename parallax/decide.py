@@ -64,6 +64,7 @@ WHY_HUMAN = {  # one short sentence per kind: why code stopped instead of decidi
     "stuck": "it stopped, and whether to try again or change course is yours",
     "turns": "Maker used every turn it had, and more turns may just be more of the same",
     "budget": "the budget you named is over your policy's limit, and only you can spend past it",
+    "tool": "a program the build needs isn't installed where Parallax can find it, and only you can install it",
 }
 
 
@@ -194,6 +195,9 @@ def decision(project: Project, task_id: str) -> Decision | None:
     if why.startswith("drafting"):
         return Decision("drafting", "Focus couldn't get the plan right: redraft with a hint from you?",
                         [REJECT, DROP], "reject", "the whole task", item)
+    if d.get("missing_tool"):  # which program, and the fix: never a raw "not found"
+        return Decision("tool", f"The build needs {d['missing_tool']}, which Parallax can't find: run it again once it's installed?",
+                        [RETRY, DROP], "retry", "the whole task", item, {"fix": d.get("fix", "")})
     if d.get("error"):  # the same error twice means running it again won't help
         again = sum(e["kind"] == "stuck.raised" and " ".join(e["reason"].split()) == why
                     for e in project.ledger.entries() if e["data"].get("task") == task_id) > 1

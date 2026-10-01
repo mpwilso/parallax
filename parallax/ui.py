@@ -72,10 +72,12 @@ def home_port(root: Path) -> int:
 
 
 class UI:
-    def __init__(self, root: Path, port: int | None = None, new_token: bool = False):
+    def __init__(self, root: Path, port: int | None = None, new_token: bool = False, find=None):
+        """find(tool) -> path or None: how a program is looked up. A demo with fake agents passes its own."""
         refuse_inside_task(root)
         self.root = Path(root)
         Project(self.root)  # fail early if this isn't a parallax project
+        self.find = find
         saved = {} if new_token else _saved_link(self.root)
         token = saved.get("token")
         self.token = token if isinstance(token, str) and len(token) >= 24 else secrets.token_urlsafe(24)
@@ -98,6 +100,12 @@ class UI:
 
     def project(self) -> Project:
         return Project(self.root)  # fresh each request: picks up new ledger lines
+
+    def missing(self) -> list[str]:
+        """What a build needs that isn't installed, each with its fix: printed at startup, on the page
+        until it's fixed. Checked again on every board request, so the page clears once it's found."""
+        from . import tools
+        return [m.message for m in tools.missing(self.project().policy, find=self.find)]
 
     def serve(self, open_browser: bool = True) -> None:
         if open_browser:
@@ -220,7 +228,7 @@ def _handler(ui: UI):
                     self._json(200, {"version": f"{st.st_size}-{st.st_mtime_ns}"})
                 elif path == "/api/board":
                     p = ui.project()
-                    self._json(200, {"project": p.root.name, **views.board(p)})
+                    self._json(200, {"project": p.root.name, "tools": ui.missing(), **views.board(p)})
                 elif len(parts) == 3 and parts[:2] == ["api", "task"]:
                     self._json(200, views.card(ui.project(), parts[2]))
                 elif len(parts) == 5 and parts[:2] == ["api", "task"] and parts[3] == "shot":

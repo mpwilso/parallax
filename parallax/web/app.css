@@ -123,6 +123,8 @@ kbd {
 .status:not(.shown) { height: 0; overflow: hidden; }
 .status.shown { padding: 0.5rem 1.25rem; background: var(--accent-bg); border-bottom: 1px solid var(--line); }
 .status.error { background: var(--bad-bg); color: var(--bad); }
+.tools p { margin: 0.25rem 0; }
+.tools .tool { font-family: var(--mono, monospace); overflow-wrap: anywhere; }
 .offline { padding: 0.5rem 1.25rem; background: var(--wait-bg); color: var(--wait); border-bottom: 1px solid var(--line); }
 
 /* ---- the queue beside the card ---- */

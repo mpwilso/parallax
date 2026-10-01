@@ -113,7 +113,7 @@ def main() -> None:
         build.run_mode(proj, tid, "pilot", Slow(docs), lambda left, s: maker, SlowChecker(reviews=[Review("pass")]),
                        test_runner=runner, preflight_runner=good_probe)
 
-    app = ui.UI(repo, port=0)
+    app = ui.UI(repo, port=0, find=lambda tool: f"/usr/bin/{tool}")  # fake agents: nothing to install
     threading.Thread(target=app.server.serve_forever, daemon=True).start()
     frames = Path(tempfile.mkdtemp(prefix="parallax-demo-frames-"))
     with sync_playwright() as p:
