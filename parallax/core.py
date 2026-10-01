@@ -145,10 +145,20 @@ class Project:
             raise ParallaxError(f"no task {task_id}")
         return tasks[task_id]
 
+    def git_at(self, task_id: str) -> Path:
+        """Where to read a task's commits and trees: its worktree, or, once that's removed, the project
+        root. They share one object store, so every tree and commit the ledger names is there too."""
+        wt = Path(self.task(task_id)["worktree"])
+        return wt if wt.is_dir() else self.root
+
     def diff(self, task_id: str, *args: str) -> str:
-        """Working tree against the task's base. Content only, never commit messages."""
+        """Working tree against the task's base. Content only, never commit messages. With the worktree
+        removed, the accepted commit against the base, from the project root."""
         t = self.task(task_id)
         wt = Path(t["worktree"])
+        if not wt.is_dir():
+            acc = [e for e in self.ledger.entries() if e["kind"] == "task.accepted" and e["data"].get("task") == task_id]
+            return _git(self.root, "diff", *args, t["base"], acc[-1]["data"]["commit"]) if acc else ""
         _git(wt, "add", "-N", ".")  # include new files in the diff without staging content
         return _git(wt, "diff", *args, t["base"])
 

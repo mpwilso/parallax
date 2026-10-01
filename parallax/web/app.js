@@ -14,7 +14,7 @@ const READY_OPTIONS = [
   { name: "drop", does: "ends the task; it leaves the inbox", needs_reason: true },
 ];
 const SEND = { reject: "Reject and redraft", "send back": "Send it back", drop: "Drop it", accept: "Accept the risk", intent: "Redraft to the intent", remove: "Remove the test" };
-const LABEL = { "send back": "Send back with a note", merge: "Accept and merge" };  // a button's words, where its name alone says too little
+const LABEL = { "send back": "Send back with a note", merge: "Accept and merge", allow: "Allow it", "use limit": "Use the limit" };  // a button's words, where its name alone says too little
 const slug = (name) => name.replace(/[^\w-]+/g, "-");  // an option's name as an id: "send back" -> "send-back"
 const CHIP = { Merging: "info", Working: "info", Ready: "good", "Needs you": "wait", Failed: "bad", "Can't display": "bad" };
 const MARK = { done: "\u2713", working: "\u25CF", failed: "\u2715", skipped: "\u25CB" };  // check, dot, cross, ring
@@ -59,7 +59,12 @@ async function api(path, body) {
     opts.headers["Content-Type"] = "application/json";
     opts.body = JSON.stringify(body);
   }
-  const res = await fetch(path, opts);
+  let res;
+  try {
+    res = await fetch(path, opts);
+  } catch (err) {  // the server isn't answering: say so, and how to get it back, never just "Failed to fetch"
+    throw new Error("Parallax isn't answering: the parallax ui server has stopped. Start it again with parallax ui in a terminal, then reload this page.");
+  }
   const data = await res.json().catch(() => ({}));
   if (res.status === 401) lock();
   if (!res.ok) throw new Error(data.error || res.statusText);

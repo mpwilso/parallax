@@ -192,9 +192,13 @@ def test_accept_and_merge_from_the_card_says_when_the_moved_base_conflicts(serve
     d = accepted(proj, tid)
     assert status == 200 and "merged" not in body
     assert body["message"] == (f"accepted {tid} as {d['commit'][:7]}, but merging {d['target']} into it hit a conflict "
-                               f"in README.md, so {d['target']} didn't move. sort that out on {d['branch']}, then "
-                               "merge by hand. merge it yourself:")
-    assert body["merge"] == f"git merge {d['branch']}"
+                               f"in README.md, so {d['target']} didn't move. to resolve it, in your repo's folder: "
+                               f"git checkout {d['branch']}, git merge {d['target']}, fix README.md and git add them, "
+                               f"git commit --no-edit, then git checkout {d['target']} and git merge --ff-only {d['branch']}. "
+                               "merge it yourself:")
+    assert body["merge"].splitlines() == [  # the exact commands, ready to copy
+        f"git checkout {d['branch']}", f"git merge {d['target']}", "# fix the conflict in README.md", "git add README.md",
+        "git commit --no-edit", f"git checkout {d['target']}", f"git merge --ff-only {d['branch']}"]
     assert git(proj.root, "rev-parse", "HEAD").stdout.strip() == before
     assert proj.task(tid)["status"] == "accepted"
 

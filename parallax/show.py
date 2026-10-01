@@ -6,7 +6,6 @@ ledger entry it comes from. The checker's own Not looked at is carried, never re
 """
 from __future__ import annotations
 
-from pathlib import Path
 
 from . import costs, decide, lifecycle, lint, since, tree
 from .status import attempt as _attempt
@@ -87,7 +86,7 @@ def _changed(project: Project, task_id: str, entries: list[dict]) -> list[str]:
     reworks = [e for e in entries if e["kind"] == "rework.started"]
     if not reworks or len(staged) < 2:
         return []
-    wt = Path(project.task(task_id)["worktree"])
+    wt = project.git_at(task_id)
     out = []
     for n, (old, new) in enumerate(zip(staged, staged[1:]), start=1):
         files = tree.changed_between(wt, old["data"]["tree"], new["data"]["tree"])
@@ -168,8 +167,11 @@ def _rails(entries: list[dict], tests: dict | None) -> list[str]:
 
 
 def _next(task_id: str, dec) -> str:
-    names = [o.name for o in dec.options]
-    return f"you run parallax decide {task_id} with {', '.join(names[:-1])} or {names[-1]}."
+    """One action, ready to run: the recommended option. The others are listed under Decisions."""
+    rec = dec.option(dec.recommend)
+    name = f'"{rec.name}"' if " " in rec.name else rec.name
+    why = ' --reason "..."' if rec.needs_reason else ""
+    return f"you run parallax decide {task_id} {name}{why}."
 
 
 def lead(why: str) -> str:
@@ -298,9 +300,18 @@ def report(project: Project, task_id: str) -> str:
             return lint.report("Decision needed", lint.one_sentence(
                 f"Task {task_id} was accepted as {acc['data']['commit'][:7]}, but its tests failed before the merge, "
                 f"so {acc['data'].get('target') or 'the base branch'} didn't move"),
-                "nothing", f"you fix that, then run {merge_command(acc)}.", [f"accepted (ledger {acc['id']})"] + ran)
+                "nothing", f"you fix that, then run {merge_command(acc, project)}.", [f"accepted (ledger {acc['id']})"] + ran)
+        from .accept import conflict_prose, last_stop
+        stop = last_stop(project, task_id)
+        target = acc["data"].get("target") or "the base branch"
+        if stop and stop["data"].get("commands"):
+            files = ", ".join(stop["data"].get("conflict") or []) or "its files"
+            return lint.report("Decision needed", lint.one_sentence(
+                f"Task {task_id} was accepted, but merging {target} into it hit a conflict in {files}, so {target} didn't move"),
+                "nothing", f"you resolve it: {conflict_prose(acc['data'], stop['data'].get('conflict') or [])}.",
+                [f"accepted (ledger {acc['id']})", f"Accept and merge stopped (ledger {stop['id']})"] + ran)
         return lint.report("Decision needed", f"Task {task_id} was accepted as {acc['data']['commit'][:7]}; merging is yours.",
-                           "nothing", f"you run {merge_command(acc)}.", [f"accepted (ledger {acc['id']})"] + ran)
+                           "nothing", f"you run {merge_command(acc, project)}.", [f"accepted (ledger {acc['id']})"] + ran)
     if status in ("drafting", "running", "checking", "reworking"):
         cycles = sum(e["kind"] == "rework.started" for e in entries)
         more = f" (rework {cycles} of {project.policy.check['rework_cap']})" if cycles else ""

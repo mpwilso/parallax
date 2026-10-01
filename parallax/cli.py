@@ -253,7 +253,7 @@ def _run(args) -> int:
         if busy:
             print(f"{busy} working without you.")
         for m in merges:
-            print(f"to merge, task {m['task']}: {m['command']}")
+            print(f"to merge, task {m['task']}: {m['command'].replace(chr(10), '; ')}")
         return 0
 
     if args.cmd in ("approve", "reject"):
@@ -337,7 +337,7 @@ def _reviewed_diff(proj: Project, task_id: str) -> str:
     if not staged:
         return proj.diff(task_id)
     t = proj.task(task_id)
-    return subprocess.run(["git", "-C", t["worktree"], "diff", t["base"], staged[-1]["data"]["tree"]],
+    return subprocess.run(["git", "-C", str(proj.git_at(task_id)), "diff", t["base"], staged[-1]["data"]["tree"]],
                           capture_output=True, text=True, encoding="utf-8", errors="replace").stdout.strip()
 
 

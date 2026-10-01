@@ -91,7 +91,7 @@ def test_a_plan_under_review_is_one_question(repo, monkeypatch, capsys):
     assert pilot_run(proj, tid) == "needs you"
     card = show.report(proj, tid)
     assert "Decisions\n- Decide: Does the plan do what you want? Recommend: approve. Blocks: the build." in card
-    assert f"Next: you run parallax decide {tid} with approve, reject or drop." in card
+    assert f"Next: you run parallax decide {tid} approve." in card  # one action; the others are under Decisions
     assert "the checker" not in card.split("Found")[0]  # a plan under review hasn't met the checker
     assert lints(proj, card)
     monkeypatch.chdir(proj.root)

@@ -176,12 +176,47 @@ def merge_base_in(project: Project, d: dict) -> str:
                                    capture_output=True, text=True).stdout.split()
             subprocess.run(["git", "-C", str(folder), "merge", "--abort"], capture_output=True)
             where = ", ".join(clash[:5]) + ("..." if len(clash) > 5 else "") if clash else "its files"
-            raise ParallaxError(f"merging {d['target']} into it hit a conflict in {where}, so {d['target']} "
-                                f"didn't move. sort that out on {d['branch']}, then merge by hand")
+            free_branch(project, d["branch"])
+            raise Conflict(f"merging {d['target']} into it hit a conflict in {where}, so {d['target']} didn't move. "
+                           f"to resolve it, in your repo's folder: {conflict_prose(d, clash)}", clash)
         return _git(folder, "rev-parse", "HEAD")
     finally:
         subprocess.run(["git", "-C", str(project.root), "worktree", "remove", "--force", str(folder)], capture_output=True)
         shutil.rmtree(folder, ignore_errors=True)
+
+
+class Conflict(ParallaxError):
+    """Merging the moved base in conflicted. Carries the files, so the card can give the commands."""
+
+    def __init__(self, message: str, files: list[str]):
+        super().__init__(message)
+        self.files = files
+
+
+def conflict_steps(d: dict, files: list[str]) -> list[str]:
+    """The exact commands that resolve a conflict from Accept and merge, in your repo's folder: the
+    card shows them as one block to copy, with the one step that's yours as a comment."""
+    names = " ".join(files) if files else "<the files git names>"
+    return [f"git checkout {d['branch']}", f"git merge {d['target']}", f"# fix the conflict in {', '.join(files) or 'those files'}",
+            f"git add {names}", "git commit --no-edit", f"git checkout {d['target']}", f"git merge --ff-only {d['branch']}"]
+
+
+def conflict_prose(d: dict, files: list[str]) -> str:
+    fix = ", ".join(files) if files else "the files git names"
+    return (f"git checkout {d['branch']}, git merge {d['target']}, fix {fix} and git add them, git commit --no-edit, "
+            f"then git checkout {d['target']} and git merge --ff-only {d['branch']}")
+
+
+def free_branch(project: Project, branch: str) -> None:
+    """A task's own worktree may still have its branch checked out, and then git checkout of it fails
+    in your checkout. The task is accepted, so its worktree is done with: detach it there, which keeps
+    every file. Only Parallax's own worktrees; never yours."""
+    out = subprocess.run(["git", "-C", str(project.root), "worktree", "list", "--porcelain"], capture_output=True, text=True).stdout
+    home = str(sandbox.data_home())
+    for block in out.split("\n\n"):
+        lines = dict(line.split(" ", 1) for line in block.splitlines() if " " in line)
+        if lines.get("branch") == f"refs/heads/{branch}" and lines.get("worktree", "").startswith(home):
+            subprocess.run(["git", "-C", lines["worktree"], "checkout", "-q", "--detach"], capture_output=True)
 
 
 def first_failure(output: str, code: int) -> str:
@@ -212,8 +247,9 @@ def merge_now(project: Project, task_id: str, runner=None) -> str:
     try:
         return _merge(project, task_id, d, runner)
     except Exception as err:  # it stopped: nothing moved, and the task goes back to accepted with the reason
+        extra = {"conflict": err.files, "commands": conflict_steps(d, err.files)} if isinstance(err, Conflict) else {}
         project.ledger.append("merge.stopped", "parallax", str(err) if isinstance(err, ParallaxError) else
-                              f"Accept and merge stopped on an error: {type(err).__name__}: {err}", task=task_id)
+                              f"Accept and merge stopped on an error: {type(err).__name__}: {err}", task=task_id, **extra)
         raise
 
 
@@ -221,7 +257,8 @@ def _merge(project: Project, task_id: str, d: dict, runner=None) -> str:
     on = subprocess.run(["git", "-C", str(project.root), "symbolic-ref", "--short", "-q", "HEAD"],
                         capture_output=True, text=True).stdout.strip()
     if not d.get("target") or on != d["target"]:
-        raise ParallaxError(f"can't merge from here: your checkout is on {on or 'no branch'}, not {d.get('target') or 'a branch'}")
+        raise ParallaxError(f"can't merge from here: your checkout is on {on or 'no branch'}, not {d.get('target') or 'a branch'}. "
+                            f"run git checkout {d.get('target') or 'the base branch'}, then the merge command below")
     ff = subprocess.run(["git", "-C", str(project.root), "merge-base", "--is-ancestor", "HEAD", d["commit"]],
                         capture_output=True).returncode == 0
     # the base branch has moved on since the task began: merge it into the task, outside your checkout,
@@ -246,7 +283,8 @@ def _merge(project: Project, task_id: str, d: dict, runner=None) -> str:
     out = subprocess.run(["git", "-C", str(project.root), "merge", "--ff-only", "-q", d["branch"]], capture_output=True, text=True)
     if out.returncode != 0:
         why = next((line.strip() for line in (out.stderr or out.stdout).splitlines() if line.strip()), "git refused")
-        raise ParallaxError(f"can't fast-forward {d['target']} to it: {why.removeprefix('fatal: ').rstrip('.')}")
+        raise ParallaxError(f"can't fast-forward {d['target']} to it: {why.removeprefix('fatal: ').rstrip('.')}. "
+                            f"run the merge command below in your repo's folder")
     how = "fast-forward" if ff else f"{d['target']} merged in first"
     project.ledger.append("merge.clicked", "human", f"Accept and merge: {how}, local, nothing pushed", task=task_id,
                           commit=landing, accepted=d["commit"], target=d["target"], ff=ff)
@@ -256,8 +294,30 @@ def _merge(project: Project, task_id: str, d: dict, runner=None) -> str:
     return f"merged {task_id} into {d['target']}, {how}: {ran}nothing was pushed."
 
 
-def merge_command(accepted: dict) -> str:
+def last_stop(project: Project, task_id: str) -> dict | None:
+    """Why Accept and merge last stopped for this task, if it did since the task was accepted."""
+    stop = None
+    for e in project.ledger.entries():
+        if e["data"].get("task") != task_id:
+            continue
+        if e["kind"] == "task.accepted":
+            stop = None
+        elif e["kind"] == "merge.stopped":
+            stop = e
+    return stop
+
+
+def merge_command(accepted: dict, project: Project | None = None) -> str:
+    """The command that lands it by hand. A conflict from Accept and merge gets its steps instead,
+    and a base branch that has moved on gets a real merge, since a fast-forward would fail."""
     d = accepted["data"]
+    if project is not None:
+        stop = last_stop(project, d["task"])
+        if stop and stop["data"].get("commands"):
+            return "\n".join(stop["data"]["commands"])
+        if d["ff"] and subprocess.run(["git", "-C", str(project.root), "merge-base", "--is-ancestor", d["target"], d["commit"]],
+                                      capture_output=True).returncode != 0:
+            return f"git checkout {d['target']} && git merge {d['branch']}"
     return f"git merge {'--ff-only ' if d['ff'] else ''}{d['branch']}"
 
 

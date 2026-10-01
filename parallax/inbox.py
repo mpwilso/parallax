@@ -40,5 +40,5 @@ def to_merge(project: Project) -> list[dict]:
     """Accepted tasks you haven't merged yet: merging is yours, so they're listed, not queued as items."""
     from .accept import merge_command
     accepted = {e["data"]["task"]: e for e in project.ledger.entries() if e["kind"] == "task.accepted"}
-    return [{"task": tid, "command": merge_command(accepted[tid])}
+    return [{"task": tid, "command": merge_command(accepted[tid], project)}
             for tid, t in project.tasks().items() if t["status"] == "accepted" and tid in accepted]

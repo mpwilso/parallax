@@ -290,6 +290,8 @@ def approve(project: Project, task_id: str, rule: str = "") -> dict:
     files = {doc: file_hash(doc_path(project, task_id, doc)) for doc in st.gate}
     gate = "+".join(st.gate)
     extra = {"rule": rule} if rule else {}
+    if "plan" in st.gate and (plan := plan_data(project, task_id)):
+        extra["cap_usd"] = float(plan["budget_cap_usd"])  # a redraft never lowers it (budgets.approved_cap)
     return project.ledger.append("gate.approved", "parallax" if rule else "human", rule, task=task_id, gate=gate,
                                  files=files, sig=approvals.sign(key, task_id, gate, files), **extra)
 

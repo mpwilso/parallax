@@ -220,7 +220,7 @@ def test_a_needs_you_card_shows_the_files_and_whether_a_secret_has_content(page,
     expect(card.locator("tr.risky")).to_contain_text("has content, 13 bytes")
     expect(card.locator(".files")).not_to_contain_text("notes.txt")  # empty and outside the plan: removed by code, not asked
     expect(card).to_contain_text("Whose call: security.")
-    expect(card).to_contain_text("the plan's tests and Second Eye (the blind checker) haven't run")
+    expect(card).to_contain_text("the plan's tests and Second Eye, which haven't run")  # inline: the one-action Next line left room
     expect(card.locator("#opt-reject")).to_have_class(re.compile("primary"))
 
 
@@ -781,3 +781,17 @@ def test_the_merging_card_says_what_it_is_doing_and_its_buttons_cant_be_clicked(
     go.set()
     expect(page.locator("details.done .row")).to_contain_text("Merged", timeout=WAIT)
     ctx.close()
+
+
+def test_a_stopped_server_says_so_and_how_to_get_it_back(page):
+    """Real use: the server died mid-session and the page said only "Failed to fetch"."""
+    expect(page.locator("#queue")).to_be_visible()
+    page.route("**/api/**", lambda route: route.abort())  # nothing answers, as when parallax ui has stopped
+    expect(page.locator("#offline")).to_have_text(
+        "Parallax isn't answering: the parallax ui server has stopped. Start it again with parallax ui in a terminal, "
+        "then reload this page.", timeout=WAIT)
+    page.locator("#work").fill("fixing the README")
+    page.locator("#work").press("Enter")  # an action, too, says so, never "Failed to fetch"
+    expect(page.locator("#status")).to_have_text(
+        "Parallax isn't answering: the parallax ui server has stopped. Start it again with parallax ui in a terminal, "
+        "then reload this page.", timeout=WAIT)

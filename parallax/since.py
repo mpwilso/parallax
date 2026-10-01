@@ -103,7 +103,7 @@ def lines(project: Project, task_id: str, entries: list[dict]) -> list[str]:
     after = [e for e in entries[starts[-1]:] if e["kind"] == "check.staged"]
     if before and after:
         old, new = before[-1]["data"], after[-1]["data"]
-        wt = Path(project.task(task_id)["worktree"])
+        wt = project.git_at(task_id)
         try:
             differ = set(tree.changed_between(wt, old["tree"], new["tree"]))
         except Exception:  # the old tree is gone from git: say so rather than guess

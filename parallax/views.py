@@ -17,7 +17,7 @@ SECTIONS = ("Decisions", "Changed since last time", "Found", "Recommended", "Det
 
 
 RISK = {"guard": 0, "scope": 1, "conflict": 1, "stuck": 2, "checker": 2, "tests": 2, "rework": 3, "cap": 3,
-        "drafting": 3, "launch": 4, "review": 4}  # what needs you most comes first; Ready comes last
+        "drafting": 3, "budget": 3, "launch": 4, "review": 4}  # what needs you most comes first; Ready comes last
 
 
 BROKEN = "couldn't display this task"
@@ -33,7 +33,7 @@ def broken_row(task_id: str, t: dict | None = None) -> dict:
     t = t or {}
     return {"task": task_id, "title": f"Task {task_id}", "status": t.get("status", ""), "state": "needs you",
             "cost_usd": round(t.get("cost_usd") or 0, 2), "last": t.get("last"), "kind": "broken", "secret": False,
-            "broken": True, "line": f"Task {task_id}: {BROKEN}. The terminal running parallax ui says why.",
+            "broken": True, "line": f"Task {task_id}: {BROKEN}. To see why, run parallax show {task_id} in a terminal; every other task still works.",
             "chip": "Can't display", "strip": [], "spend": None, "started": ""}
 
 
@@ -152,7 +152,7 @@ def card(project: Project, task_id: str) -> dict:
         return _card(project, task_id)
     except Exception:
         log_broken(task_id, "its card")
-        line = f"Task {task_id}: {BROKEN}. The terminal running parallax ui says why."
+        line = f"Task {task_id}: {BROKEN}. To see why, run parallax show {task_id} in a terminal; every other task still works."
         return {"task": task_id, "title": f"Task {task_id}", "status": "", "state": "needs you", "cost_usd": 0,
                 "report": {"type": "", "bottom": line, "not_looked_at": "", "next": "", "sections": {}},
                 "unseen": [], "found": [], "changed": [], "redraft": False, "details": [], "actions": {"kind": "none"},
@@ -182,14 +182,21 @@ def _card(project: Project, task_id: str) -> dict:
         actions = {"kind": "none"}
     merge, merge_note = "", ""
     if t["status"] == "accepted":
-        from .accept import merge_command
+        from .accept import last_stop, merge_command
         accepted = [e for e in project.ledger.entries() if e["kind"] == "task.accepted" and e["data"]["task"] == task_id]
-        merge = merge_command(accepted[-1]) if accepted else ""
+        merge = merge_command(accepted[-1], project) if accepted else ""
         tested = [e for e in project.ledger.entries() if e["kind"] == "merge.tested" and e["data"].get("task") == task_id]
+        stop = last_stop(project, task_id)
+        target = accepted[-1]["data"].get("target") or "the base branch" if accepted else "the base branch"
         if tested and tested[-1]["data"]["ok"] is False and accepted:
-            merge_note = (f"Accepted, but its tests failed on the commit it would land, so "
-                          f"{accepted[-1]['data'].get('target') or 'the base branch'} didn't move. "
+            merge_note = (f"Accepted, but its tests failed on the commit it would land, so {target} didn't move. "
                           f"First failure: {tested[-1]['reason']}. Fix that, then merge by hand:")
+        elif stop and stop["data"].get("commands"):
+            clash = ", ".join(stop["data"].get("conflict") or []) or "its files"
+            merge_note = (f"Accepted, but merging {target} into it hit a conflict in {clash}, so {target} didn't move. "
+                          f"Resolve it with these commands in your repo's folder:")
+        elif stop:
+            merge_note = f"Accepted, but Accept and merge stopped: {stop['reason']}. Run this in your repo's folder:"
     unseen = [report["not_looked_at"]]
     if re.match(r"^see (Found|Details) \(\d+\)$", report["not_looked_at"]):
         where = "Found" if "Found" in report["not_looked_at"] else "Details"

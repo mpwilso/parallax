@@ -131,7 +131,7 @@ def act(project: Project, path: str, body: dict) -> dict:
                 return {"message": merge_now(project, task), "merged": True}
             except ParallaxError as err:
                 return {"message": f"accepted {task} as {e['data']['commit'][:7]}, but {err}. merge it yourself:",
-                        "merge": merge_command(e)}
+                        "merge": merge_command(e, project)}
         return {"message": f"accepted {task} as {e['data']['commit'][:7]}. merge it yourself:",
                 "merge": merge_command(e)}
     if path == "/api/ask":

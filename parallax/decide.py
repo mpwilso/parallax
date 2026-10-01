@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable
 
-from . import costs, lifecycle, pilot, status
+from . import budgets, costs, lifecycle, pilot, status
 from .core import ParallaxError, Project
 
 
@@ -63,6 +63,7 @@ WHY_HUMAN = {  # one short sentence per kind: why code stopped instead of decidi
     "error": "it stopped on an error nobody planned for",
     "stuck": "it stopped, and whether to try again or change course is yours",
     "turns": "Maker used every turn it had, and more turns may just be more of the same",
+    "budget": "the budget you named is over your policy's limit, and only you can spend past it",
 }
 
 
@@ -184,6 +185,12 @@ def decision(project: Project, task_id: str) -> Decision | None:
     if stage == "guard":
         return Decision("guard", "The change touched a protected file: redraft it?", [REJECT, DROP],
                         "reject", "Ready", item)
+    if d.get("over_limit"):  # a budget you named, over the limit: one question, no redraft (786e71)
+        named, cap = budgets.money(d["named"]), budgets.money(d["limit"])
+        return Decision("budget", f"Your budget of {named} is over the {cap} limit for {d['size']} tasks: allow {named}, or use {cap}?",
+                        [Option("allow", f"allows {named} for this task only, and drafting goes on"),
+                         Option("use limit", f"uses {cap}, and drafting goes on"), DROP],
+                        "allow", "the whole task", item, {"named": d["named"], "limit": d["limit"]})
     if why.startswith("drafting"):
         return Decision("drafting", "Focus couldn't get the plan right: redraft with a hint from you?",
                         [REJECT, DROP], "reject", "the whole task", item)
@@ -253,6 +260,13 @@ def apply(project: Project, task_id: str, name: str, reason: str = "", spawn: Ca
     elif name == "raise":
         project.ledger.append("budget.raised", "human", said, task=task_id,
                               amount_usd=round(dec.extra["to"] - costs.budget(project, task_id, lifecycle.plan_data(project, task_id))[0], 2))
+        project.resolve(dec.item["id"], True, said)
+    elif name == "allow":
+        project.ledger.append("budget.allowed", "human", said, task=task_id, amount_usd=dec.extra["named"],
+                              limit_usd=dec.extra["limit"])
+        project.resolve(dec.item["id"], True, said)
+    elif name == "use limit":
+        budgets.use_limit(project, task_id, dec.extra["limit"], said)
         project.resolve(dec.item["id"], True, said)
     elif name == "remove":
         from . import uitest

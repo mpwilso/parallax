@@ -263,9 +263,10 @@ def test_a_conflict_merging_the_moved_base_in_moves_nothing(repo, monkeypatch):
     [acc] = kinds(proj, "task.accepted")
     target, commit, branch = acc["data"]["target"], acc["data"]["commit"], acc["data"]["branch"]
     assert out["message"] == (f"accepted {tid} as {commit[:7]}, but merging {target} into it hit a conflict in "
-                              f"README.md, so {target} didn't move. sort that out on {branch}, then merge by hand. "
-                              "merge it yourself:")
-    assert "\n" not in out["message"] and out["merge"] == f"git merge {branch}"  # yours to run
+                              f"README.md, so {target} didn't move. to resolve it, in your repo's folder: git checkout "
+                              f"{branch}, git merge {target}, fix README.md and git add them, git commit --no-edit, then "
+                              f"git checkout {target} and git merge --ff-only {branch}. merge it yourself:")
+    assert "\n" not in out["message"] and out["merge"] == "\n".join(CONFLICT_STEPS(branch, target))  # yours to run
     assert git(repo, "rev-parse", "HEAD").stdout.strip() == before  # nothing merged, nothing forced
     assert (repo / "README.md").read_text() == "theirs\n"
     assert git(repo, "rev-parse", branch).stdout.strip() == commit  # the task branch is where accept left it
@@ -273,6 +274,40 @@ def test_a_conflict_merging_the_moved_base_in_moves_nothing(repo, monkeypatch):
     assert not (sandbox.data_home() / "merge-in" / commit[:12]).exists()
     assert "merge-in" not in git(repo, "worktree", "list").stdout  # no throwaway worktree left behind
     assert proj.task(tid)["status"] == "accepted" and not kinds(proj, "merge.clicked")
+
+
+def CONFLICT_STEPS(branch, target):
+    return [f"git checkout {branch}", f"git merge {target}", "# fix the conflict in README.md", "git add README.md",
+            "git commit --no-edit", f"git checkout {target}", f"git merge --ff-only {branch}"]
+
+
+def test_the_conflict_commands_resolve_it_when_run_as_given(repo, monkeypatch):
+    """The card's commands, run one by one in your folder, with the conflict fixed by hand, land it."""
+    from parallax import accept as acc_mod, show, views
+    from parallax.ui import act
+    proj, tid, wt = ready(repo)
+    moved_on(repo, "README.md", "theirs\n")
+    monkeypatch.setattr(acc_mod, "TEST_RUNNER", Runner(0, "ok"))
+    act(proj, "/api/accept", {"task": tid, "merge": True})
+    [acc] = kinds(proj, "task.accepted")
+    target, branch = acc["data"]["target"], acc["data"]["branch"]
+    card = views.card(proj, tid)
+    assert card["merge_note"] == (f"Accepted, but merging {target} into it hit a conflict in README.md, so {target} "
+                                  "didn't move. Resolve it with these commands in your repo's folder:")
+    assert card["merge"].splitlines() == CONFLICT_STEPS(branch, target)
+    assert show.report(proj, tid).splitlines()[3] == (
+        f"Next: you resolve it: git checkout {branch}, git merge {target}, fix README.md and git add them, git commit "
+        f"--no-edit, then git checkout {target} and git merge --ff-only {branch}.")
+    for step in CONFLICT_STEPS(branch, target):
+        if step.startswith("#"):
+            (repo / "README.md").write_text("ok, and theirs\n")  # the one step that's yours
+            continue
+        out = subprocess.run(step.split(), cwd=repo, capture_output=True, text=True)
+        assert out.returncode in (0, 1) if step == f"git merge {target}" else out.returncode == 0, (step, out.stderr)
+    assert git(repo, "symbolic-ref", "--short", "HEAD").stdout.strip() == target
+    assert (repo / "README.md").read_text() == "ok, and theirs\n"
+    acc_mod.confirm_merges(proj)  # what your next parallax command does first
+    assert proj.task(tid)["status"] == "merged"  # the accepted commit is in what landed
 
 
 def test_a_failing_gate_after_the_moved_base_merge_leaves_the_branches_alone(repo, monkeypatch):
