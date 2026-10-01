@@ -330,9 +330,11 @@ def test_a_task_stops_at_its_cap(repo):
     maker = ScriptedAgent(steps=[("write", "README.md", "ok\n")], cost=1.9)
     assert build.run_build(proj, tid, lambda left, settings: maker, preflight_runner=good_probe) == "stuck"
     [item] = proj.inbox()
-    assert item["reason"] == "the budget cap ran out ($2.10 of $2.00 estimated)" and item["data"]["budget"]
+    assert item["reason"] == ("Maker spent $1.90 of the $2.00 cap, so the budget cap ran out; in all: Maker $1.90, "
+                              "drafting $0.20 ($2.10)") and item["data"]["budget"]  # who spent it, not only that it ran out
     assert proj.task(tid)["status"] == "stuck" and checker.briefs == []
-    assert show.report(proj, tid).startswith("Type: Decision needed\nBottom line: Needs you: the budget cap ran out")
+    assert show.report(proj, tid).startswith("Type: Decision needed\nBottom line: Needs you: Maker spent $1.90 of the $2.00 cap, "
+                                             "so the budget cap ran out.")
 
 
 def test_the_makers_budget_is_what_is_left_of_the_cap(repo, monkeypatch):
@@ -484,8 +486,8 @@ def test_the_card_leads_with_what_matters(repo):
     assert run(proj, tid, maker, runner=failing) == "stuck"
     card = show.report(proj, tid)
     lines = card.splitlines()
-    assert lines[1].startswith("Bottom line: Needs you: the budget cap ran out")
-    [reason] = [line for line in lines if line.startswith("- the budget cap ran out")]
+    assert lines[1].startswith("Bottom line: Needs you: Maker spent $") and lines[1].endswith(", so the budget cap ran out.")
+    [reason] = [line for line in lines if line.startswith("- Maker spent $") and "so the budget cap ran out" in line]
     assert "while rework was fixing failing tests in test_a, test_b" in reason
     assert "- 11 of 15 plan tests passed. Failing: test_a, test_b. (ledger " in card
     assert "- This change didn't edit any failing test file, so they may fail without it too." in card

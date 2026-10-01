@@ -316,3 +316,40 @@ def test_send_back_on_a_cap_card_redrafts_from_the_note_like_reject_at_ready(pro
 def test_a_rework_card_offers_send_back_first():
     from parallax.decide import SEND_BACK
     assert SEND_BACK.name == "send back" and SEND_BACK.needs_reason
+
+
+# the cap stop names who spent the money (fb461d: "ran out while Field was using the app") -------------------
+
+def _fb461d_spend(proj, tid):
+    """fb461d's own costs, by stage: drafting, Reticle, Maker, then Field with what was left."""
+    proj.ledger.append("draft.recorded", "drafter", "", task=tid, doc="intent", cost_usd=0.3512)
+    proj.ledger.append("reticle.recorded", "reticle", "0 tests kept", task=tid, kept=[], weak=[], cost_usd=0.1479)
+    proj.ledger.append("maker.finished", "maker", "done", task=tid, stage="build", status="done", cost_usd=3.1038)
+    proj.ledger.append("uitest.failed", "ui tester", "stopped at its budget ($0.2)", task=tid, cost_usd=0.2032)
+
+
+def test_a_cap_stop_says_what_each_stage_spent_and_never_blames_the_last_one(proj):
+    from parallax import costs
+    tid = pilot.intake(proj, WANT)["task"]
+    _fb461d_spend(proj, tid)
+    assert costs.stop_at_cap(proj, tid, 3.80, "Field was using the app") == "stuck"
+    why = kinds(proj, "stuck.raised")[-1]["reason"]
+    assert why == ("Maker spent $3.10 of the $3.80 cap, leaving Field $0.20, so the budget cap ran out; in all: Maker $3.10, "
+                   "drafting $0.35, Field $0.20, Reticle $0.15 ($3.81); it stopped while Field was using the app")
+    assert not why.startswith("Field") and "budget cap ran out" in why
+    card = show.report(proj, tid)
+    assert card.splitlines()[1] == ("Bottom line: Needs you: Maker spent $3.10 of the $3.80 cap, leaving Field $0.20, "
+                                    "so the budget cap ran out.")
+    assert f"- {why} (ledger " in card  # the whole split, in Found
+    assert decide.decision(proj, tid).kind == "cap"
+
+
+def test_the_ask_box_sees_each_steps_cost_and_the_spend_by_stage(proj):
+    from parallax import ask
+    tid = pilot.intake(proj, WANT)["task"]
+    _fb461d_spend(proj, tid)
+    record = ask.record(proj, tid)
+    assert "maker.finished by maker (cost $3.1038): done" in record
+    assert "uitest.failed by ui tester (cost $0.2032)" in record
+    assert "## spend by stage\nMaker: $3.1038\ndrafting: $0.3512\nField: $0.2032\nReticle: $0.1479\nin all, this attempt: $3.8061" in record
+    assert "[spend by stage]" in ask.PROMPT

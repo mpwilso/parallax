@@ -200,8 +200,9 @@ def test_a_fix_nothing_reviewed_never_counts_as_passed_and_is_named(proj, upstre
     lines = text.splitlines()
     assert lines[1] == "Bottom line: 1 of 2 fixes reached Ready and passed the hidden tests."
     assert lines[2] == "Not looked at: 1 case never checked, in Found"  # the reason, cited, is too long for the header
-    assert "- calc-2 never reached the check: the budget cap ran out ($2.70 of $2.20 estimated); nothing reviewed its tree, " \
-        "which passes the hidden tests (evals/results/" in text
+    [line] = [x for x in text.splitlines() if x.startswith("- calc-2 never reached the check: ")]
+    assert "spent $" in line and "so the budget cap ran out" in line  # who spent the cap, from the task's own stop
+    assert "nothing reviewed its tree, which passes the hidden tests (evals/results/" in line
     assert lines[3] == "Next: you read calc-2 in Details, then decide what to change."
     assert "calc-2: ended needs you, hidden tests pass on a tree nothing reviewed, Second Eye never judged it" in text
     assert lint.lint_report(text, root=proj.root) == []
