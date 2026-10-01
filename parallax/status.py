@@ -37,7 +37,11 @@ def derive(entries: list[dict]) -> dict[str, dict]:
         elif kind in ("draft.recorded", "gate.approved") and t["status"] == "rejected":
             t["status"] = "open"  # an old gate rejected, then redrafted by hand (before M13)
         elif kind == "task.accepted":
-            t["status"] = "accepted"
+            t["status"] = "merging" if d.get("merging") else "accepted"  # Accept and merge: merging from the click
+        elif kind == "merge.started":
+            t["status"] = "merging"
+        elif kind == "merge.stopped":
+            t["status"] = "accepted"  # the tests failed or it conflicted: nothing moved, the merge is yours
         elif kind == "merge.confirmed":
             t["status"] = "merged"
         elif kind == "task.stopped":
@@ -58,10 +62,10 @@ def derive(entries: list[dict]) -> dict[str, dict]:
     return out
 
 
-BOARD = ("drafting", "building", "checking", "ready", "needs you", "done")
+BOARD = ("drafting", "building", "checking", "merging", "ready", "needs you", "done")
 _TO_BOARD = {
     "drafting": "drafting", "running": "building", "reworking": "building", "built": "checking",
-    "checking": "checking", "ready": "ready", "accepted": "done", "merged": "done", "rejected": "done",
+    "checking": "checking", "merging": "merging", "ready": "ready", "accepted": "done", "merged": "done", "rejected": "done",
     "stopped": "done", "closed": "done",
 }
 

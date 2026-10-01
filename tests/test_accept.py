@@ -408,3 +408,95 @@ def test_the_real_runner_uses_a_throwaway_worktree_at_that_commit_under_the_cap(
 def show_report(proj, tid):
     from parallax import show
     return show.report(proj, tid)
+
+
+# Merging is its own state: from the click until the base branch moves, or it can't (89bc50) -----------------
+
+class Peek(Runner):
+    """A test run that looks at what you'd see while it runs: the card, the board, the report."""
+
+    def __init__(self, proj, tid, code=0, output="432 passed"):
+        super().__init__(code, output)
+        self.proj, self.tid, self.seen = proj, tid, {}
+
+    def __call__(self, project, commit, command):
+        from parallax import show, views
+        self.seen = {"status": self.proj.task(self.tid)["status"], "card": views.card(self.proj, self.tid),
+                     "report": show.report(self.proj, self.tid), "board": views.board(self.proj)}
+        return super().__call__(project, commit, command)
+
+
+def test_while_accept_and_merge_runs_the_task_is_merging_and_never_says_merging_is_yours(repo, monkeypatch):
+    from parallax import accept as acc_mod
+    from parallax.ui import act
+    proj, tid, wt = ready(repo)
+    _with_merge_tests(repo, proj, "scripts/test.sh")
+    peek = Peek(proj, tid)
+    monkeypatch.setattr(acc_mod, "TEST_RUNNER", peek)
+    act(proj, "/api/accept", {"task": tid, "merge": True})
+    seen = peek.seen
+    assert seen["status"] == "merging"
+    card = seen["card"]
+    assert card["actions"] == {"kind": "merging"} and card["merge"] == ""  # no decision, no merge command yet
+    assert card["merging"]["text"] == "Merging: running the tests on the commit it would land"
+    assert card["merging"]["started"] and card["chip"] == "Merging"
+    assert "merging is yours" not in seen["report"].lower() and "Merging: running the tests" in seen["report"]
+    [row] = [r for r in seen["board"]["working"] if r["task"] == tid]
+    assert row["chip"] == "Merging" and row["line"].startswith("Merging: running the tests")
+    assert row["strip"][-1] == {"stage": "ready", "name": "Merging", "state": "working", "agent": None}
+    assert proj.task(tid)["status"] == "merged"  # it landed, and the card shows merged as before
+
+
+def test_a_moved_base_says_it_merges_the_base_in_first(repo, monkeypatch):
+    from parallax import accept as acc_mod
+    from parallax.ui import act
+    proj, tid, wt = ready(repo)
+    _with_merge_tests(repo, proj, "scripts/test.sh")
+    moved_on(repo)
+    peek = Peek(proj, tid)
+    monkeypatch.setattr(acc_mod, "TEST_RUNNER", peek)
+    act(proj, "/api/accept", {"task": tid, "merge": True})
+    target = kinds(proj, "task.accepted")[-1]["data"]["target"]
+    assert peek.seen["card"]["merging"]["text"] == f"Merging {target} in, then running the tests"
+
+
+def test_a_failed_or_conflicted_merge_leaves_merging_and_shows_why_as_before(repo, monkeypatch):
+    from parallax import accept as acc_mod, views
+    from parallax.ui import act
+    proj, tid, wt = ready(repo)
+    _with_merge_tests(repo, proj, "scripts/test.sh")
+    monkeypatch.setattr(acc_mod, "TEST_RUNNER", Runner(1, "FAILED tests/x.py::t - boom\n"))
+    act(proj, "/api/accept", {"task": tid, "merge": True})
+    assert proj.task(tid)["status"] == "accepted" and kinds(proj, "merge.stopped")
+    card = views.card(proj, tid)
+    assert card["merging"] is None and card["merge_note"].startswith("Accepted, but its tests failed")
+
+
+def test_accept_and_merge_cant_be_clicked_twice(repo, monkeypatch):
+    from parallax import accept as acc_mod
+    from parallax.core import ParallaxError
+    from parallax.ui import act
+    proj, tid, wt = ready(repo)
+    _with_merge_tests(repo, proj, "scripts/test.sh")
+    tries = []
+
+    def again(project, commit, command):  # the second click arrives while the first is running
+        for body in ({"task": tid, "merge": True}, {"task": tid}):
+            with pytest.raises(ParallaxError) as err:
+                act(proj, "/api/accept", body)
+            tries.append(str(err.value))
+        with pytest.raises(ParallaxError, match="is already merging"):
+            acc_mod.merge_now(proj, tid)
+        return 0, "ok"
+    monkeypatch.setattr(acc_mod, "TEST_RUNNER", again)
+    act(proj, "/api/accept", {"task": tid, "merge": True})
+    assert len(tries) == 2 and all("merging, not ready" in t for t in tries)
+    assert len(kinds(proj, "task.accepted")) == 1 and proj.task(tid)["status"] == "merged"
+
+
+def test_the_usual_duration_comes_from_past_runs(repo):
+    from parallax import merging
+    proj, tid, wt = ready(repo)
+    for s in (100, 160, 130):
+        proj.ledger.append("merge.tested", "parallax", "passed", task="x", command="scripts/test.sh", ok=True, seconds=s)
+    assert merging.usual_seconds(proj) == 130 and merging.shown(130) == "2m 10s"

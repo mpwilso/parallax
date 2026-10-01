@@ -16,7 +16,7 @@ const READY_OPTIONS = [
 const SEND = { reject: "Reject and redraft", "send back": "Send it back", drop: "Drop it", accept: "Accept the risk", intent: "Redraft to the intent", remove: "Remove the test" };
 const LABEL = { "send back": "Send back with a note", merge: "Accept and merge" };  // a button's words, where its name alone says too little
 const slug = (name) => name.replace(/[^\w-]+/g, "-");  // an option's name as an id: "send back" -> "send-back"
-const CHIP = { Working: "info", Ready: "good", "Needs you": "wait", Failed: "bad", "Can't display": "bad" };
+const CHIP = { Merging: "info", Working: "info", Ready: "good", "Needs you": "wait", Failed: "bad", "Can't display": "bad" };
 const MARK = { done: "\u2713", working: "\u25CF", failed: "\u2715", skipped: "\u25CB" };  // check, dot, cross, ring
 const SAID = { done: "done", working: "working", failed: "failed", skipped: "didn't run" };
 const LIVE_EVERY = 15000;  // working lines carry a clock: refresh them even when nothing new happened
@@ -27,6 +27,7 @@ const state = {
   wanted: null, // a task id from the link, opened once the first board arrives
   drafts: {},  // reasons you started typing, per task, kept until you send one
   answers: {}, // what you asked about each task, and the answers, this session
+  acting: null, // the task whose decision was just clicked: its buttons stay disabled until the answer comes
   seen: {},    // each agent's last state per task, so a stage that just finished hops once
 };
 const brand = { logo: null, agents: {} };  // rendered by the server from one data file; the page only places it
@@ -474,6 +475,7 @@ function actions(c) {
         el("button", { "data-focus": "copy", onclick: copy }, "Copy")));
   }
   const a = c.actions;
+  if (a.kind === "merging") return mergingNow(c);
   let options, question, recommend;
   if (a.kind === "ready") { options = READY_OPTIONS; question = "Accept it, or send it back?"; recommend = null; }
   else if (a.kind === "decide") { options = a.options; question = a.question; recommend = a.recommend; }
@@ -484,7 +486,7 @@ function actions(c) {
     a.kind === "decide" && a.owner ? el("p", { class: "whose" }, `Whose call: ${a.owner}. Why a human: ${a.why_human}.`) : null,
     filesTable(c.files),
     el("ol", { class: "options" }, options.map((o, i) => el("li", {},
-      el("button", { id: "opt-" + slug(o.name), "data-focus": "opt-" + slug(o.name),
+      el("button", { id: "opt-" + slug(o.name), "data-focus": "opt-" + slug(o.name), disabled: state.acting === c.task || null,
         class: (o.name === (recommend || "accept") ? "primary" : "") + (o.name === "drop" ? " danger" : "") + (p && p.option === o.name ? " picked" : ""),
         "aria-describedby": "does-" + slug(o.name), "aria-expanded": o.needs_reason ? String(!!(p && p.option === o.name)) : null,
         onclick: () => choose(c, o) }, LABEL[o.name] || cap(o.name)),
@@ -502,6 +504,26 @@ function actions(c) {
         el("button", { "data-focus": "cancel", onclick: cancel }, "Cancel"),
         el("span", { class: "hint" }, "Enter sends, Shift+Enter adds a line, Esc closes it and keeps your text."))) : null);
 }
+
+// Accept and merge is running: what it's doing, for how long, and how long it usually takes. The
+// buttons stay, disabled, so nothing can be clicked twice. The spinner is still under reduced motion.
+function mergingNow(c) {
+  const m = c.merging || { text: "Merging", started: "", usual_seconds: null };
+  return el("section", { class: "decide merging", "aria-label": "Merging", "aria-busy": "true" },
+    el("p", { class: "question" }, el("span", { class: "spinner", "aria-hidden": "true" }), " ", m.text),
+    el("p", { class: "hint" }, el("span", { id: "merge-elapsed", "data-started": m.started || "" }, elapsedFine(m.started)),
+      m.usual_seconds ? ` so far; it usually takes about ${fine(m.usual_seconds)}.` : " so far."),
+    el("ol", { class: "options" }, READY_OPTIONS.map(o => el("li", {},
+      el("button", { id: "opt-" + slug(o.name), disabled: true }, LABEL[o.name] || cap(o.name)),
+      el("span", { class: "does" }, o.does)))));
+}
+
+function fine(s) { s = Math.max(0, Math.floor(s)); return s >= 60 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s` : `${s}s`; }
+function elapsedFine(ts) { const t = Date.parse(ts); return isNaN(t) ? "" : fine((Date.now() - t) / 1000); }
+setInterval(() => {  // the Merging card's clock, between polls
+  const n = document.getElementById("merge-elapsed");
+  if (n && n.dataset.started) n.textContent = elapsedFine(n.dataset.started);
+}, 1000);
 
 function docs(c) {
   const names = [...(c.has_change ? ["diff"] : []), ...c.docs];
@@ -603,8 +625,11 @@ async function choose(c, o) {
     document.getElementById("reason").focus();
     return;
   }
+  state.acting = c.task;  // every button on this card is disabled from now until the answer comes
+  renderCard();
   const out = c.actions.kind !== "ready" ? await run("/api/decide", { task: c.task, option: o.name })
     : await run("/api/accept", o.name === "merge" ? { task: c.task, merge: true } : { task: c.task });
+  state.acting = null;
   if (out) await acted(c.task, !!out.merge);  // after accept, stay: the merge command is on the card
 }
 

@@ -749,3 +749,35 @@ def test_a_link_with_only_the_token_still_signs_in(notify_page, proj, server):
     expect(row(pg, tid)).to_be_visible(timeout=WAIT)
     expect(pg.locator("#card")).to_be_hidden()
     assert pg.evaluate("sessionStorage.getItem('parallax-token')") == server.token
+
+
+def test_the_merging_card_says_what_it_is_doing_and_its_buttons_cant_be_clicked(browser, server, proj, monkeypatch):
+    """89bc50: for three minutes the card said "merging is yours" while the tests ran."""
+    from parallax import accept as acc_mod
+    policy = proj.root / "parallax.policy.toml"
+    policy.write_text(policy.read_text().replace('test_command = ""              # Accept and merge',
+                                                 'test_command = "scripts/test.sh"              # Accept and merge'))
+    proj.reload_policy()
+    go = threading.Event()
+
+    def held(project, commit, command):  # the pre-merge run, held until the page has been looked at
+        go.wait(30)
+        return 0, "1 passed"
+    monkeypatch.setattr(acc_mod, "TEST_RUNNER", held)
+    ctx = browser.new_context(viewport={"width": 1280, "height": 860}, reduced_motion="reduce")
+    page = ctx.new_page()
+    page.goto(server.url)
+    tid, _ = run_to_ready(proj)
+    open_card(page, tid)
+    page.locator("#opt-merge").click()
+    card = page.locator("#card .merging")
+    expect(card).to_contain_text("Merging: running the tests on the commit it would land", timeout=WAIT)
+    expect(page.locator("#card")).not_to_contain_text("Merging is yours")
+    for name in ("accept", "merge", "reject", "drop"):
+        expect(page.locator(f"#opt-{name}")).to_be_disabled()
+    expect(page.locator("#merge-elapsed")).not_to_be_empty()
+    assert page.evaluate("getComputedStyle(document.querySelector('.spinner')).animationName") == "none"  # reduced motion
+    expect(row(page, tid).locator(".tag")).to_have_text("Merging")
+    go.set()
+    expect(page.locator("details.done .row")).to_contain_text("Merged", timeout=WAIT)
+    ctx.close()

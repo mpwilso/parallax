@@ -13,7 +13,7 @@ from . import costs, lifecycle, live, stats, status
 from .core import Project
 
 STAGES = (("focus", "Focus"), ("reticle", "Reticle"), ("maker", "Maker"), ("check", "Check"), ("ready", "Ready"))
-WORKING = ("drafting", "building", "checking")
+WORKING = ("drafting", "building", "checking", "merging")
 # a decision's kind -> the stage that stopped. cap, error and stuck stop whichever stage was running
 STOPPED_AT = {"drafting": "focus", "turns": "maker", "guard": "maker", "scope": "check", "conflict": "check",
               "flows": "check", "rework": "check", "checker": "check", "tests": "check"}
@@ -59,7 +59,11 @@ def strip(project: Project, task_id: str, dec=None) -> list[dict]:
         "ready": t["status"] in ("ready", "accepted", "merged"),
     }
     out = []
+    merging = t["status"] == "merging"
     for key, name in STAGES:
+        if key == "ready" and merging:  # Accept and merge is running: the last stage says so
+            out.append({"stage": key, "name": "Merging", "state": "working", "agent": None})
+            continue
         if key == working:
             state = "working"
         elif key == failed or (key == "reticle" and "reticle.failed" in kinds):
@@ -76,6 +80,8 @@ def strip(project: Project, task_id: str, dec=None) -> list[dict]:
 
 def chip(state: str, kind: str | None) -> str:
     """Working, Ready, Needs you or Failed."""
+    if state == "merging":
+        return "Merging"
     if state in WORKING:
         return "Working"
     if state == "ready" or kind == "ready":

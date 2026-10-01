@@ -21,6 +21,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 from . import lifecycle, lint, memcap, record, sandbox, secretscan, tree
@@ -61,7 +62,8 @@ def message(project: Project, task_id: str, head: str) -> str:
     return f"{subject}\n\nRecord: docs/tasks/{task_id}/record.md\n\n" + "\n".join(trailers) + "\n"
 
 
-def accept(project: Project, task_id: str, reason: str = "") -> dict:
+def accept(project: Project, task_id: str, reason: str = "", merging: bool = False) -> dict:
+    """merging: this is Accept and merge, so the task is Merging from this entry on (merging.py)."""
     refuse_inside_task(project.root)
     t = lifecycle.lifecycle_task(project, task_id)
     if t["status"] != "ready":
@@ -127,7 +129,7 @@ def accept(project: Project, task_id: str, reason: str = "") -> dict:
     ff = _git(project.root, "rev-parse", "HEAD") == base
     return project.ledger.append("task.accepted", "human", reason, task=task_id, commit=commit, tree=committed_tree,
                                  reviewed=reviewed, branch=branch, target=target, ff=ff, signed=bool(key),
-                                 ledger_head=head, docs_moved_to=str(kept))
+                                 ledger_head=head, docs_moved_to=str(kept), **({"merging": True} if merging else {}))
 
 
 TEST_TIMEOUT = 3600  # seconds the project's tests may take before the merge gives up on them
@@ -200,7 +202,22 @@ def merge_now(project: Project, task_id: str, runner=None) -> str:
     acc = _last(project, task_id, "task.accepted")
     if acc is None:
         raise ParallaxError(f"task {task_id} isn't accepted yet")
+    if _last(project, task_id, "merge.started") and project.task(task_id)["status"] == "merging":
+        raise ParallaxError(f"task {task_id} is already merging. its card says how far it has got")
     d = acc["data"]
+    ff = subprocess.run(["git", "-C", str(project.root), "merge-base", "--is-ancestor", "HEAD", d["commit"]],
+                        capture_output=True).returncode == 0
+    project.ledger.append("merge.started", "parallax", "Accept and merge is running", task=task_id, target=d.get("target"),
+                          ff=ff, pid=os.getpid())
+    try:
+        return _merge(project, task_id, d, runner)
+    except Exception as err:  # it stopped: nothing moved, and the task goes back to accepted with the reason
+        project.ledger.append("merge.stopped", "parallax", str(err) if isinstance(err, ParallaxError) else
+                              f"Accept and merge stopped on an error: {type(err).__name__}: {err}", task=task_id)
+        raise
+
+
+def _merge(project: Project, task_id: str, d: dict, runner=None) -> str:
     on = subprocess.run(["git", "-C", str(project.root), "symbolic-ref", "--short", "-q", "HEAD"],
                         capture_output=True, text=True).stdout.strip()
     if not d.get("target") or on != d["target"]:
@@ -212,10 +229,12 @@ def merge_now(project: Project, task_id: str, runner=None) -> str:
     landing = d["commit"] if ff else merge_base_in(project, d)
     command = project.policy.merge["test_command"].strip()
     if command:  # the project's own tests, on the exact commit the base branch would become
+        began = time.monotonic()
         code, output = (runner or TEST_RUNNER)(project, landing, command)
         first = first_failure(output, code) if code else ""
         project.ledger.append("merge.tested", "parallax", first or "passed", task=task_id, commit=landing,
-                              command=command, exit=code, ok=code == 0, merged_in=not ff)
+                              command=command, exit=code, ok=code == 0, merged_in=not ff,
+                              seconds=round(time.monotonic() - began, 1))
         if code:
             raise ParallaxError(f"its tests failed on the commit it would land, so {d['target']} didn't move. "
                                 f"first failure: {first}. fix that, then merge by hand")

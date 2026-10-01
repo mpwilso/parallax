@@ -61,7 +61,7 @@ def test_the_board_holds_every_task_by_state(proj):
     ready = ready_task(proj)
     working = pilot.intake(proj, "another thing")["task"]
     b = views.board(proj)
-    assert list(b["columns"]) == ["drafting", "building", "checking", "ready", "needs you", "done"]
+    assert list(b["columns"]) == ["drafting", "building", "checking", "merging", "ready", "needs you", "done"]
     assert [t["task"] for t in b["columns"]["ready"]] == [ready]
     assert [t["task"] for t in b["columns"]["drafting"]] == [working]
     assert b["count"] == 1 and [t["task"] for t in b["waiting"]] == [ready]

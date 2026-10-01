@@ -76,7 +76,11 @@ kbd {
 @keyframes bob { 0% { transform: translateY(0); } 50% { transform: translateY(-1px); } 100% { transform: translateY(0); } }
 @keyframes pulse { from { opacity: 1; } to { opacity: 0.45; } }
 @keyframes hop { 0% { transform: translateY(0); } 50% { transform: translateY(-2px); } 100% { transform: translateY(0); } }
-@media (prefers-reduced-motion: reduce) { .portrait *, .logo * { animation: none !important; } }
+.spinner { display: inline-block; width: 0.875rem; height: 0.875rem; border: 2px solid var(--line); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin 0.9s linear infinite; vertical-align: -0.125rem; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.merging .options button[disabled], .options button[disabled] { opacity: 0.55; cursor: not-allowed; }
+@media (prefers-reduced-motion: reduce) { .portrait *, .logo *, .spinner { animation: none !important; } }
 /* the stage strip: five named stages, and the working agent in a fixed square tile */
 .tile {
   flex: none; display: grid; place-items: center; width: 2.5rem; height: 2.5rem; border-radius: 8px;

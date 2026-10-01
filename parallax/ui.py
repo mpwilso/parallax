@@ -122,7 +122,7 @@ def act(project: Project, path: str, body: dict) -> dict:
         t = pilot.intake(project, work)
         return {"task": t["task"], "message": f"task {t['task']}: on it. it comes back when it needs you."}
     if path == "/api/accept":
-        e = accept(project, task, reason)
+        e = accept(project, task, reason, merging=bool(body.get("merge")))  # Merging from this click on
         # Accept and merge: your click. A fast-forward when the base branch is still the tip the task
         # began on; otherwise the base branch is merged in and the test gate runs again. Local, never pushed
         if body.get("merge"):

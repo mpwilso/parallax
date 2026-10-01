@@ -275,6 +275,11 @@ def report(project: Project, task_id: str) -> str:
                      for t in disputed["data"]["failed"]] + found
         return lint.shaped("Decision needed", bottom, gaps, f"you run parallax accept {task_id}, or reject it with a reason.",
                            found, changed, "the checker", boundary + findings)
+    if status == "merging":  # Accept and merge is running: never "merging is yours" while it is
+        from . import merging
+        m = merging.info(project, task_id) or {"line": "Merging."}
+        return lint.report("FYI", lint.one_sentence(m["line"]), "nothing",
+                           "nothing waits on you: it lands on its own, or the card says why it couldn't.")
     if status in ("accepted", "merged"):
         from .accept import merge_command
         acc = _last(entries, "task.accepted")

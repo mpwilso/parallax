@@ -72,11 +72,14 @@ def board(project: Project) -> dict:
             broken.append(broken_row(item["task"], item))
     waiting.sort(key=lambda i: (not i["secret"], RISK.get(i["kind"], 5), i["last"] or ""))
     working = []
-    for s in ("drafting", "building", "checking"):
+    for s in ("drafting", "building", "checking", "merging"):
         for i in columns[s]:
             try:
                 entries = status.attempt(project.ledger.entries(), i["task"])
                 what, why, _ = live.doing(entries)
+                if s == "merging":
+                    from . import merging
+                    what, why = (merging.info(project, i["task"]) or {}).get("text", "Merging"), ""
                 item = dict(i, line=progress.sentence(what + (f". {why[:1].upper()}{why[1:]}" if why else "")),
                             agent=live.agent_of(what), kind=None)
                 item.update(_row(project, item, None))
@@ -173,6 +176,8 @@ def _card(project: Project, task_id: str) -> dict:
         files = decide.scope_files(dec.item)
     elif t["status"] == "ready":
         actions = {"kind": "ready"}
+    elif t["status"] == "merging":
+        actions = {"kind": "merging"}  # no decision while it lands: the buttons wait
     else:
         actions = {"kind": "none"}
     merge, merge_note = "", ""
@@ -211,11 +216,17 @@ def _card(project: Project, task_id: str) -> dict:
             "stages": live.stages(status.attempt(entries, task_id), waiting=state not in ("drafting", "building", "checking")),
             "strip": progress.strip(project, task_id, dec), "spend": progress.spend(project, task_id),
             "ask": {"spent": _ask_spent(project, task_id), "budget": float(project.policy.ask["budget_usd"])},
+            "merging": _merging(project, task_id),
             "chip": progress.chip(state, dec.kind if dec else ("ready" if t["status"] == "ready" else None))
             if state != "done" else progress.OUTCOMES.get(t["status"], t["status"].capitalize()),
             "has_change": any(e["kind"] == "check.staged" for e in entries) or t["status"] in ("accepted", "merged"),
             "shots": shots(project, task_id),
             "docs": [d for d in ("intent", "spec", "plan", "record") if lifecycle.found_doc(project, task_id, d)]}
+
+
+def _merging(project: Project, task_id: str) -> dict | None:
+    from . import merging
+    return merging.info(project, task_id)
 
 
 def _ask_spent(project: Project, task_id: str) -> float:
