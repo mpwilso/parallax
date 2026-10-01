@@ -217,19 +217,96 @@ def test_accept_and_merge_fast_forwards_the_base_branch_and_never_pushes(repo, m
     assert any(argv[-2:] == ["-q", acc["data"]["branch"]] and "--ff-only" in argv for argv in ran)
 
 
-def test_accept_and_merge_stops_in_one_line_when_it_cant_fast_forward(repo, monkeypatch):
+def moved_on(repo, name="other.txt", text="moved on\n"):
+    """The base branch gains a commit after the task began. Returns where it now is."""
+    (repo / name).write_text(text)
+    git(repo, "add", name)
+    git(repo, "commit", "-qm", "the base moved on")
+    return git(repo, "rev-parse", "HEAD").stdout.strip()
+
+
+def test_a_moved_base_is_merged_into_the_task_and_lands_on_one_click(repo, monkeypatch):
+    from parallax import accept as acc_mod
     from parallax.ui import act
     proj, tid, wt = ready(repo)
-    (repo / "other.txt").write_text("moved on\n")
-    git(repo, "add", "other.txt")
-    git(repo, "commit", "-qm", "the base moved on")
-    before = git(repo, "rev-parse", "HEAD").stdout.strip()
-    _pushes(monkeypatch)
+    _with_merge_tests(repo, proj, "scripts/test.sh")
+    moved = moved_on(repo)
+    runner = Runner(0, "432 passed in 150s")
+    monkeypatch.setattr(acc_mod, "TEST_RUNNER", runner)
+    ran = _pushes(monkeypatch)
     out = act(proj, "/api/accept", {"task": tid, "merge": True})
-    assert out["message"].startswith(f"accepted {tid} as ") and ", but can't fast-forward " in out["message"]
-    assert "\n" not in out["message"] and out["merge"] == f"git merge {proj.task(tid)['branch']}"  # yours to run
-    assert git(repo, "rev-parse", "HEAD").stdout.strip() == before  # nothing forced, nothing changed
+    [acc] = kinds(proj, "task.accepted")
+    target, commit = acc["data"]["target"], acc["data"]["commit"]
+    head = git(repo, "rev-parse", "HEAD").stdout.strip()
+    assert git(repo, "rev-parse", f"{head}^@").stdout.split() == [commit, moved]  # a real merge, both sides
+    assert runner.calls == [(head, "scripts/test.sh")]  # the gate, once, on the commit that lands
+    assert out == {"message": f"merged {tid} into {target}, {target} merged in first: its tests passed first "
+                              "(scripts/test.sh); nothing was pushed.", "merged": True}
+    assert (repo / "README.md").read_text() == "ok\n" and (repo / "other.txt").read_text() == "moved on\n"
+    tracked = git(repo, "ls-files", f"docs/tasks/{tid}").stdout.split()
+    assert tracked == [f"docs/tasks/{tid}/{d}.md" for d in ("intent", "plan", "record")]
+    assert proj.task(tid)["status"] == "merged"  # the accepted commit is an ancestor of the branch
+    assert not any("push" in argv for argv in ran)
+    [click] = kinds(proj, "merge.clicked")
+    assert click["actor"] == "human" and click["data"]["ff"] is False
+
+
+def test_a_conflict_merging_the_moved_base_in_moves_nothing(repo, monkeypatch):
+    from parallax import accept as acc_mod, sandbox
+    from parallax.ui import act
+    proj, tid, wt = ready(repo)
+    _with_merge_tests(repo, proj, "scripts/test.sh")
+    before = moved_on(repo, "README.md", "theirs\n")  # the same file the task wrote
+    runner = Runner(0, "432 passed in 150s")
+    monkeypatch.setattr(acc_mod, "TEST_RUNNER", runner)
+    out = act(proj, "/api/accept", {"task": tid, "merge": True})
+    [acc] = kinds(proj, "task.accepted")
+    target, commit, branch = acc["data"]["target"], acc["data"]["commit"], acc["data"]["branch"]
+    assert out["message"] == (f"accepted {tid} as {commit[:7]}, but merging {target} into it hit a conflict in "
+                              f"README.md, so {target} didn't move. sort that out on {branch}, then merge by hand. "
+                              "merge it yourself:")
+    assert "\n" not in out["message"] and out["merge"] == f"git merge {branch}"  # yours to run
+    assert git(repo, "rev-parse", "HEAD").stdout.strip() == before  # nothing merged, nothing forced
+    assert (repo / "README.md").read_text() == "theirs\n"
+    assert git(repo, "rev-parse", branch).stdout.strip() == commit  # the task branch is where accept left it
+    assert runner.calls == []  # no gate: there was nothing to test
+    assert not (sandbox.data_home() / "merge-in" / commit[:12]).exists()
+    assert "merge-in" not in git(repo, "worktree", "list").stdout  # no throwaway worktree left behind
     assert proj.task(tid)["status"] == "accepted" and not kinds(proj, "merge.clicked")
+
+
+def test_a_failing_gate_after_the_moved_base_merge_leaves_the_branches_alone(repo, monkeypatch):
+    from parallax import accept as acc_mod
+    from parallax.ui import act
+    proj, tid, wt = ready(repo)
+    _with_merge_tests(repo, proj, "scripts/test.sh")
+    before = moved_on(repo)
+    runner = Runner(1, "....F\nFAILED tests/test_merge.py::test_both_sides - AssertionError\n1 failed, 431 passed\n")
+    monkeypatch.setattr(acc_mod, "TEST_RUNNER", runner)
+    out = act(proj, "/api/accept", {"task": tid, "merge": True})
+    [acc] = kinds(proj, "task.accepted")
+    target, commit, branch = acc["data"]["target"], acc["data"]["commit"], acc["data"]["branch"]
+    first = "FAILED tests/test_merge.py::test_both_sides - AssertionError"
+    assert out["message"] == (f"accepted {tid} as {commit[:7]}, but its tests failed on the commit it would land, so "
+                              f"{target} didn't move. first failure: {first}. fix that, then merge by hand. "
+                              "merge it yourself:")
+    assert [c for _, c in runner.calls] == ["scripts/test.sh"] and runner.calls[0][0] != commit  # the merge commit
+    assert git(repo, "rev-parse", "HEAD").stdout.strip() == before  # the base branch didn't move
+    assert git(repo, "rev-parse", branch).stdout.strip() == commit  # nor did the task branch
+    assert proj.task(tid)["status"] == "accepted" and not kinds(proj, "merge.clicked")
+    [t] = kinds(proj, "merge.tested")
+    assert (t["data"]["ok"], t["data"]["merged_in"]) == (False, True)
+
+
+def test_a_cherry_picked_copy_of_the_accepted_commit_is_not_a_merge(repo):
+    """The merged rule is unchanged: only the accepted commit itself, reachable from the branch."""
+    proj, tid, wt = ready(repo)
+    acc = accept(proj, tid)["data"]
+    moved_on(repo)
+    picked = git(repo, "cherry-pick", acc["commit"])
+    assert picked.returncode == 0, picked.stderr
+    assert git(repo, "rev-parse", "HEAD").stdout.strip() != acc["commit"]
+    assert confirm_merges(proj) == [] and proj.task(tid)["status"] == "accepted"
 
 
 def test_merge_now_wont_merge_into_any_branch_but_the_one_accept_recorded(repo):

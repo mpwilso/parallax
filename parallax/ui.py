@@ -123,7 +123,9 @@ def act(project: Project, path: str, body: dict) -> dict:
         return {"task": t["task"], "message": f"task {t['task']}: on it. it comes back when it needs you."}
     if path == "/api/accept":
         e = accept(project, task, reason)
-        if body.get("merge"):  # Accept and merge: your click, fast-forward only, local, never pushed
+        # Accept and merge: your click. A fast-forward when the base branch is still the tip the task
+        # began on; otherwise the base branch is merged in and the test gate runs again. Local, never pushed
+        if body.get("merge"):
             from .accept import merge_now
             try:
                 return {"message": merge_now(project, task), "merged": True}

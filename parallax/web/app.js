@@ -9,7 +9,7 @@ const KINDS = {
 };
 const READY_OPTIONS = [
   { name: "accept", does: "commits the reviewed change to its branch; you merge it by hand" },
-  { name: "merge", does: "accepts, then fast-forwards your base branch here; never forces, never pushes" },
+  { name: "merge", does: "accepts, then lands it on your base branch here: a fast-forward, or your base branch merged in first if it moved, with the tests re-run; never forces, never pushes" },
   { name: "reject", does: "Focus redrafts the intent and plan from your reason", needs_reason: true },
   { name: "drop", does: "ends the task; it leaves the inbox", needs_reason: true },
 ];

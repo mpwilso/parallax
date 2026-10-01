@@ -156,6 +156,49 @@ def test_accept_from_the_card_shows_the_merge_command(server):
     assert card["merge"] == body["merge"] and card["actions"]["kind"] == "none"  # shown, never run
 
 
+def git(repo, *args):
+    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+
+
+def accepted(proj, tid):
+    return [e for e in proj.ledger.entries() if e["kind"] == "task.accepted" and e["data"]["task"] == tid][-1]["data"]
+
+
+def test_accept_and_merge_from_the_card_lands_a_task_whose_base_moved(server):
+    app, proj = server
+    tid = ready_task(proj)
+    (proj.root / "other.txt").write_text("moved on\n")
+    git(proj.root, "add", "other.txt")
+    git(proj.root, "commit", "-qm", "the base moved on")
+    moved = git(proj.root, "rev-parse", "HEAD").stdout.strip()
+    status, body, _ = call(app, "POST", "/api/accept", {"task": tid, "merge": True})
+    d = accepted(proj, tid)
+    assert status == 200 and body["merged"] is True
+    assert body["message"] == (f"merged {tid} into {d['target']}, {d['target']} merged in first: no test command is "
+                              "configured ([merge] test_command), so no tests ran first; nothing was pushed.")
+    head = git(proj.root, "rev-parse", "HEAD").stdout.strip()
+    assert git(proj.root, "rev-parse", f"{head}^@").stdout.split() == [d["commit"], moved]
+    assert proj.task(tid)["status"] == "merged" and (proj.root / "other.txt").exists()
+
+
+def test_accept_and_merge_from_the_card_says_when_the_moved_base_conflicts(server):
+    app, proj = server
+    tid = ready_task(proj)
+    (proj.root / "README.md").write_text("theirs\n")  # the same file the task wrote
+    git(proj.root, "add", "README.md")
+    git(proj.root, "commit", "-qm", "the base changed it too")
+    before = git(proj.root, "rev-parse", "HEAD").stdout.strip()
+    status, body, _ = call(app, "POST", "/api/accept", {"task": tid, "merge": True})
+    d = accepted(proj, tid)
+    assert status == 200 and "merged" not in body
+    assert body["message"] == (f"accepted {tid} as {d['commit'][:7]}, but merging {d['target']} into it hit a conflict "
+                               f"in README.md, so {d['target']} didn't move. sort that out on {d['branch']}, then "
+                               "merge by hand. merge it yourself:")
+    assert body["merge"] == f"git merge {d['branch']}"
+    assert git(proj.root, "rev-parse", "HEAD").stdout.strip() == before
+    assert proj.task(tid)["status"] == "accepted"
+
+
 def test_reject_needs_a_reason_then_redrafts_or_drops(server):
     app, proj = server
     tid = ready_task(proj)

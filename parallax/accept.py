@@ -9,8 +9,10 @@ Accept:
   (commit-tree runs no hooks), and trailers. It's signed if you've set a signing key;
 - points the task's branch at that commit, moves the untracked docs/tasks/<id>/ out of your
   checkout (git won't merge over it; the merge brings it back), and prints the merge command.
-Parallax never merges without your click: the card's Accept and merge accepts, then fast-forwards
-the base branch locally (merge_now), and stops with one line if it can't. It never pushes, and
+Parallax never merges without your click: the card's Accept and merge accepts, then lands the commit
+on the base branch locally (merge_now). When the base branch is still where the task began, that's a
+fast-forward; when it has moved on, the base branch is merged into the task first and the test gate
+runs again on the merge commit. Either way it stops with one line if it can't. It never pushes, and
 nothing forces. Your next command checks whether the commit landed unchanged.
 """
 from __future__ import annotations
@@ -150,6 +152,36 @@ def run_tests(project: Project, commit: str, command: str) -> tuple[int, str]:
 TEST_RUNNER = run_tests  # tests replace this; they never run a real suite
 
 
+def merge_base_in(project: Project, d: dict) -> str:
+    """The base branch has moved: merge where it is now into the accepted commit, in a throwaway
+    worktree outside your checkout, and return the merge commit. A real merge, never a rebase or a
+    cherry-pick. On a conflict nothing moves: the merge is aborted and this raises one line naming
+    the files. The worktree is removed whatever happens; your checkout is never touched."""
+    head = _git(project.root, "rev-parse", "HEAD")
+    folder = sandbox.data_home() / "merge-in" / d["commit"][:12]
+    if folder.exists():
+        subprocess.run(["git", "-C", str(project.root), "worktree", "remove", "--force", str(folder)], capture_output=True)
+        shutil.rmtree(folder, ignore_errors=True)
+    folder.parent.mkdir(parents=True, exist_ok=True)
+    _git(project.root, "worktree", "add", "--detach", str(folder), d["commit"])
+    try:
+        key = signing_key(project.root)
+        msg = f"Merge {d['target']} into {d['task']}\n\nParallax-Task: {d['task']}\n"
+        out = subprocess.run(["git", "-C", str(folder), "merge", "--no-ff", "--no-edit", "--no-verify",
+                              *(["-S"] if key else []), "-m", msg, head], capture_output=True, text=True)  # no hooks
+        if out.returncode != 0:
+            clash = subprocess.run(["git", "-C", str(folder), "diff", "--name-only", "--diff-filter=U"],
+                                   capture_output=True, text=True).stdout.split()
+            subprocess.run(["git", "-C", str(folder), "merge", "--abort"], capture_output=True)
+            where = ", ".join(clash[:5]) + ("..." if len(clash) > 5 else "") if clash else "its files"
+            raise ParallaxError(f"merging {d['target']} into it hit a conflict in {where}, so {d['target']} "
+                                f"didn't move. sort that out on {d['branch']}, then merge by hand")
+        return _git(folder, "rev-parse", "HEAD")
+    finally:
+        subprocess.run(["git", "-C", str(project.root), "worktree", "remove", "--force", str(folder)], capture_output=True)
+        shutil.rmtree(folder, ignore_errors=True)
+
+
 def first_failure(output: str, code: int) -> str:
     """The line a person needs first: pytest's first FAILED or ERROR line, else the last line."""
     lines = [line.strip() for line in output.splitlines() if line.strip()]
@@ -158,11 +190,13 @@ def first_failure(output: str, code: int) -> str:
 
 
 def merge_now(project: Project, task_id: str, runner=None) -> str:
-    """Your click on Accept and merge, after accept: fast-forward the branch the task was based on to
-    the accepted commit, locally, and only fast-forward. First, if the policy names the project's
-    test command ([merge] test_command), it runs on exactly that commit, and a failure stops here.
-    Raises with one line saying why it can't: then the base branch hasn't moved, and the merge
-    command is still yours to run. Never pushes."""
+    """Your click on Accept and merge, after accept: land the accepted commit on the branch the task
+    was based on, locally. When that branch is still where the task began it's a fast-forward. When
+    it has moved on, the branch is merged into the task first (merge_base_in), and what lands is that
+    merge commit. Either way, if the policy names the project's test command ([merge] test_command)
+    it runs on exactly the commit the branch would become, and a failure stops here. That gate is the
+    only check; there's no second confirmation. Raises with one line saying why it can't: then the
+    base branch hasn't moved, and the merge command is still yours to run. Never pushes."""
     acc = _last(project, task_id, "task.accepted")
     if acc is None:
         raise ParallaxError(f"task {task_id} isn't accepted yet")
@@ -171,31 +205,36 @@ def merge_now(project: Project, task_id: str, runner=None) -> str:
                         capture_output=True, text=True).stdout.strip()
     if not d.get("target") or on != d["target"]:
         raise ParallaxError(f"can't merge from here: your checkout is on {on or 'no branch'}, not {d.get('target') or 'a branch'}")
-    if subprocess.run(["git", "-C", str(project.root), "merge-base", "--is-ancestor", "HEAD", d["commit"]],
-                      capture_output=True).returncode != 0:
-        raise ParallaxError(f"can't fast-forward {d['target']} to it: {d['target']} has moved on since the task began")
+    ff = subprocess.run(["git", "-C", str(project.root), "merge-base", "--is-ancestor", "HEAD", d["commit"]],
+                        capture_output=True).returncode == 0
+    # the base branch has moved on since the task began: merge it into the task, outside your checkout,
+    # and land that merge commit instead. Nothing has moved yet if it conflicts
+    landing = d["commit"] if ff else merge_base_in(project, d)
     command = project.policy.merge["test_command"].strip()
     if command:  # the project's own tests, on the exact commit the base branch would become
-        code, output = (runner or TEST_RUNNER)(project, d["commit"], command)
+        code, output = (runner or TEST_RUNNER)(project, landing, command)
         first = first_failure(output, code) if code else ""
-        project.ledger.append("merge.tested", "parallax", first or "passed", task=task_id, commit=d["commit"],
-                              command=command, exit=code, ok=code == 0)
+        project.ledger.append("merge.tested", "parallax", first or "passed", task=task_id, commit=landing,
+                              command=command, exit=code, ok=code == 0, merged_in=not ff)
         if code:
             raise ParallaxError(f"its tests failed on the commit it would land, so {d['target']} didn't move. "
                                 f"first failure: {first}. fix that, then merge by hand")
     else:
-        project.ledger.append("merge.tested", "parallax", "no test command is configured", task=task_id, commit=d["commit"],
-                              command="", exit=None, ok=None)
+        project.ledger.append("merge.tested", "parallax", "no test command is configured", task=task_id, commit=landing,
+                              command="", exit=None, ok=None, merged_in=not ff)
+    if not ff:  # the branch takes the merge commit, which has your HEAD as a parent, so this still fast-forwards
+        _git(project.root, "update-ref", f"refs/heads/{d['branch']}", landing)
     out = subprocess.run(["git", "-C", str(project.root), "merge", "--ff-only", "-q", d["branch"]], capture_output=True, text=True)
     if out.returncode != 0:
         why = next((line.strip() for line in (out.stderr or out.stdout).splitlines() if line.strip()), "git refused")
         raise ParallaxError(f"can't fast-forward {d['target']} to it: {why.removeprefix('fatal: ').rstrip('.')}")
-    project.ledger.append("merge.clicked", "human", "Accept and merge: fast-forward, local, nothing pushed", task=task_id,
-                          commit=d["commit"], target=d["target"])
+    how = "fast-forward" if ff else f"{d['target']} merged in first"
+    project.ledger.append("merge.clicked", "human", f"Accept and merge: {how}, local, nothing pushed", task=task_id,
+                          commit=landing, accepted=d["commit"], target=d["target"], ff=ff)
     confirm_merges(project)
     ran = f"its tests passed first ({command}); " if command else \
         "no test command is configured ([merge] test_command), so no tests ran first; "
-    return f"merged {task_id} into {d['target']}, fast-forward: {ran}nothing was pushed."
+    return f"merged {task_id} into {d['target']}, {how}: {ran}nothing was pushed."
 
 
 def merge_command(accepted: dict) -> str:
