@@ -45,6 +45,16 @@ def git_identity(monkeypatch, tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
+def no_outer_sandbox_tmp(monkeypatch):
+    """srt's temp folder, not the one a sandbox around the test run picked.
+
+    A Maker running this suite in its own sandbox has CLAUDE_CODE_TMPDIR set, so build.prepare added
+    that folder to allowWrite and the exact-rules tests failed there. Tests that want it set it."""
+    for var in ("CLAUDE_CODE_TMPDIR", "CLAUDE_TMPDIR"):
+        monkeypatch.delenv(var, raising=False)
+
+
+@pytest.fixture(autouse=True)
 def no_background_agents(monkeypatch):
     """Tests never call a model, so they never start a real pilot or builder.
 
