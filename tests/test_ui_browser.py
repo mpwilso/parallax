@@ -448,6 +448,56 @@ def test_the_first_open_asks_how_to_handle_spending_once_and_it_can_change(brows
     app.close()
 
 
+MISSING = re.compile(r"\b(null|undefined)\b")  # what a missing value prints as when it reaches the page
+
+
+def test_a_repo_with_no_spending_mode_shows_the_question_and_never_null(browser, repo):
+    """Until 2026-10-01 the first open printed "null" under the question: the button for an answer
+    nobody had given yet went to replaceChildren as null, which prints it."""
+    make_key()
+    fresh = Project.init(repo)
+    assert not fresh.policy.mode_chosen  # no [budget] mode: init wasn't in a terminal
+    app = UI(fresh.root, port=0, find=lambda tool: f"/usr/bin/{tool}")
+    threading.Thread(target=app.server.serve_forever, daemon=True).start()
+    ctx = browser.new_context()
+    pg = ctx.new_page()
+    pg.goto(app.url)
+    expect(pg.locator("#budget h2")).to_have_text(budgets.QUESTION, timeout=WAIT)
+    expect(pg.locator("#budget-none")).to_be_visible()
+    expect(pg.locator("#queue")).to_contain_text("Nothing yet.")
+    assert not MISSING.search(pg.locator("body").inner_text())
+    ctx.close()
+    app.close()
+
+
+def test_no_state_of_the_page_prints_null_or_undefined(page, proj):
+    """Every list and card goes through one helper that drops a missing value, as el does. Each state
+    the page shows, read whole: the list, each card, a done row, and the spending question reopened."""
+    ready, _ = run_to_ready(proj, "stating supported Python versions")
+    done, _ = run_to_ready(proj, "adding a license badge", work="add a license badge")
+    from parallax.accept import accept
+    accept(proj, done)
+    working = launched(proj, "adding a usage line")
+    proj.ledger.append("maker.started", "parallax", "", task=working, stage="build")
+    stuck = launched(proj, "supporting subtraction")
+    stopped(proj, stuck, "the budget cap ran out", budget=True)
+    expect(page.locator("details.done .row")).to_contain_text("1 touch", timeout=WAIT)
+    expect(row(page, stuck).locator(".tag")).to_be_visible(timeout=WAIT)
+    seen = [page.locator("body").inner_text()]
+    for tid in (ready, stuck, working):
+        open_card(page, tid)
+        seen.append(page.locator("body").inner_text())
+    page.evaluate("t => openCard(t, true)", done)  # its row folds away with Done on each poll
+    expect(page.locator("#card .card-head")).to_contain_text(done, timeout=WAIT)
+    seen.append(page.locator("body").inner_text())
+    page.keyboard.press("Escape")
+    page.locator("#budget-change").click()
+    expect(page.locator("#budget")).to_be_visible()
+    seen.append(page.locator("body").inner_text())
+    found = [m.group(0) for text in seen for m in MISSING.finditer(text)]
+    assert not found, found
+
+
 def test_a_server_that_goes_away_says_so(browser, proj):
     app = UI(proj.root, port=0)
     threading.Thread(target=app.server.serve_forever, daemon=True).start()

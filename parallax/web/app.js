@@ -62,11 +62,22 @@ function el(tag, attrs, ...kids) {
     else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
     else node.setAttribute(k, v === true ? "" : v);
   }
+  return append(node, kids);
+}
+
+// children by el's rules: nothing for null, undefined or false, never the words "null" or "undefined"
+function append(node, kids) {
   for (const kid of kids.flat(3)) {
     if (kid === null || kid === undefined || kid === false) continue;
     node.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
   }
   return node;
+}
+
+// replaceChildren by el's rules: the DOM's own would print a missing child as "null"
+function fill(node, ...kids) {
+  node.replaceChildren();
+  return append(node, kids);
 }
 
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
@@ -232,7 +243,7 @@ function renderQueue() {
   document.title = b.count ? `(${b.count}) Parallax` : "Parallax";
   const key = focusKey();
   const nothing = !b.waiting.length && !b.working.length && !b.done.length;
-  document.getElementById("queue").replaceChildren(...[
+  fill(document.getElementById("queue"), [
     el("section", { "aria-labelledby": "h-waiting" },
       el("h2", { id: "h-waiting" }, "Waiting on you"),
       b.waiting.length ? el("ol", {}, b.waiting.map(row))
@@ -244,7 +255,7 @@ function renderQueue() {
       el("ol", {}, b.working.map(row))) : null,
     b.done.length ? el("details", { class: "done", open: b.done.some(t => t.task === state.open) || null },
       el("summary", {}, el("h2", {}, "Done")),
-      el("ol", {}, b.done.map(row))) : null].filter(Boolean));
+      el("ol", {}, b.done.map(row))) : null]);
   restoreFocus(key);
   renderIdle();
 }
@@ -253,8 +264,8 @@ function renderQueue() {
 function renderTools(lines) {
   const box = document.getElementById("tools");
   box.hidden = !lines.length;
-  box.replaceChildren(...(lines.length ? [el("p", {}, "A build stops until each of these is found. This note goes away once it is.")] : []),
-    ...lines.map(l => el("p", { class: "tool" }, l)));
+  fill(box, lines.length ? el("p", {}, "A build stops until each of these is found. This note goes away once it is.") : null,
+    lines.map(l => el("p", { class: "tool" }, l)));
 }
 
 // how Parallax handles spending: asked once, on the first open if init didn't ask, and changeable later
@@ -263,7 +274,7 @@ function renderBudget(b) {
   const show = !!b && (!b.chosen || state.budgetOpen);
   box.hidden = !show;
   if (!show) return;
-  box.replaceChildren(el("h2", { id: "budget-q" }, b.question),
+  fill(box, el("h2", { id: "budget-q" }, b.question),
     el("ol", { class: "options" }, b.choices.map(c => el("li", {},
       el("button", { id: "budget-" + c.mode, class: b.chosen && c.mode === b.mode ? "primary" : null,
         "aria-pressed": b.chosen && c.mode === b.mode ? "true" : "false", onclick: () => chooseBudget(c.mode) }, c.label),
@@ -310,7 +321,7 @@ function renderIdle() {
   const parts = [el("p", { class: "lead" }, lead)];
   if ((b.overview || []).length) parts.push(el("h2", {}, "How it's going"), el("ul", { class: "plain overview" }, b.overview.map(l => el("li", {}, l))));
   if (b.budget && b.budget.chosen) parts.push(el("button", { id: "budget-change", onclick: () => { state.budgetOpen = true; renderBudget(b.budget); } }, "Change how spending is handled"));
-  idle.replaceChildren(...parts);
+  fill(idle, parts);
 }
 
 async function refresh() {
@@ -454,7 +465,7 @@ function renderCard() {
   const chip = CHIP[c.chip] || (c.state === "ready" ? "good" : waits ? "wait" : c.state === "done" ? "plain" : "info");
   let bottom = c.report.bottom;
   for (const p of ["Needs you: ", "Ready again after your reject: ", "Ready: "]) if (bottom.startsWith(p)) bottom = cap(bottom.slice(p.length));
-  box.replaceChildren(...[
+  fill(box, [
     el("header", { class: "card-head" },
       el("button", { class: "back", onclick: closeCard, "data-focus": "back" }, "Back to tasks"),
       el("p", { class: "meta" }, el("span", { class: "tag " + chip }, c.chip || cap(c.state)), " ",
@@ -475,7 +486,7 @@ function renderCard() {
     docs(c),
     c.details.length ? el("details", { class: "more" }, el("summary", {}, "Details"),
       el("ul", { class: "plain" }, c.details.map(cited))) : null,
-  ].flat(2).filter(Boolean));
+  ]);
   box.hidden = false;
   fillDoc();
   restoreFocus(key);
@@ -639,7 +650,7 @@ async function toggleDoc(name) {
 function fillDoc() {
   const pre = document.getElementById("doc");
   if (!pre || state.docText === null) return;
-  pre.replaceChildren(...state.docText.split("\n").map(l => {
+  fill(pre, state.docText.split("\n").map(l => {
     let cls = null;
     if (state.doc === "diff") {
       if (l.startsWith("@@")) cls = "hunk";
