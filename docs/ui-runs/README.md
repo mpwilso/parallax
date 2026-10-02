@@ -1,6 +1,6 @@
 # Real runs through the UI
 
-The agents have since been named: Focus drafts the intent and plan (the drafters below), Maker builds in the sandbox (the maker), Second Eye is the blind checker (the checker), and Field is the UI tester. The run write-ups keep the words the UI showed on the day.
+The agents have since been named: Focus drafts the intent and plan (the drafters below), Maker builds in the sandbox (the maker), Second Eye is the blind checker (the checker), and Field is the UI tester. Reticle, which writes tests of what you asked before the build, joined after these runs. The run write-ups keep the words the UI showed on the day.
 
 The screenshots in `final-ui/` show the current UI on the demo project (fake agents, no model), taken by `scripts/ui_sweep.py`, which also checks keyboard use, reduced motion and phone widths: the list with the overview (`queue.png`, `queue-dark.png`), a Ready card as the README shows it (`ready.png`, `ready-dark.png`), a card stopped at its cap that recommends sending it back (`needs-you.png`, `needs-you-dark.png`), and the list and a Ready card at phone width (`phone-queue.png`, `phone-queue-dark.png`, `phone-ready.png`, `phone-ready-dark.png`). The run folders below are records of real runs and keep the UI as it was on the day.
 

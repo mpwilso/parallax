@@ -1,6 +1,6 @@
 # Threat model
 
-**Bottom line:** Parallax keeps Maker's work from running as you, or reaching your branch, without review. (The agents: Focus drafts the intent and plan; Maker builds in the sandbox; Second Eye is the blind checker, which sees only the result, never the making; Field is the UI tester.) It can't protect anything from code that already runs as you.
+**Bottom line:** Parallax keeps Maker's work from running as you, or reaching your branch, without review. (The agents: Focus drafts the intent and plan; Reticle writes tests of what you asked, before the build, which Maker can't see or change; Maker builds in the sandbox; Second Eye is the blind checker, which sees only the result, never the making; Field is the UI tester.) It can't protect anything from code that already runs as you.
 **Not looked at:** the Claude Code and sandbox-runtime code themselves, and any other process you run.
 
 ## What we protect, and from whom

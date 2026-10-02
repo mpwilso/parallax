@@ -9,6 +9,8 @@
 
 **Agents do the work. You make the calls.**
 
+Status: A portfolio project, built to show how I design, test and judge an AI tool, and a working prototype I use on this repo. In one eval run, 10 of 11 real open-source fixes passed their maintainers' hidden tests. The runs are in docs/, including the misses.
+
 Parallax is a local tool for developers who use AI coding agents. The agents plan, build and check the work on their own, inside a sandbox. Parallax checks what they produce and only comes to you when a person has to decide. For most tasks that's one decision: accept the result or send it back.
 
 Parallax is the second of three tools. [Loupe](https://github.com/mpwilso/loupe) writes the story, Parallax builds it under a gated agent loop and keeps the record, and [ISR](https://github.com/mpwilso/isr) tells the person accepting it what is left. Each runs on its own, and they have not yet been run in that order on one change.
@@ -81,7 +83,7 @@ Merging, conflicts, Stop, cleanup, where drafts live, spending, and the cards th
 
 ## Status and known limits
 
-A working prototype I use on this repo; the latest release is [v0.2.0](https://github.com/mpwilso/parallax/releases/tag/v0.2.0). One task it did on itself, from the typed request to the accepted commit: [docs/example.md](docs/example.md). Three real runs through the UI with every state and cost: [docs/ui-runs/](docs/ui-runs/README.md). How it got here: [docs/history.md](docs/history.md). What it protects and what it can't: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
+The latest release is [v0.2.1](https://github.com/mpwilso/parallax/releases/tag/v0.2.1). One task it did on itself, from the typed request to the accepted commit: [docs/example.md](docs/example.md). Three real runs through the UI with every state and cost: [docs/ui-runs/](docs/ui-runs/README.md). How it got here: [docs/history.md](docs/history.md). What it protects and what it can't: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 - **Second Eye reads the diff and can't run code.** It judges the outcome where the diff shows it, and says what it couldn't see. Reticle's tests do run: each is kept only if it fails on the code before the change, so it's seen failing before the fix. Nothing yet proves the tests catch a deliberately broken change (mutation testing).
 - **Linux or WSL2.** It needs Claude Code's sandbox (bubblewrap); that sandbox doesn't run on native Windows. macOS is untested.

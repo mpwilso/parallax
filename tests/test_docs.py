@@ -104,3 +104,11 @@ def test_the_readme_and_product_doc_describe_what_the_last_batch_built():
                      "use the limit", "heads-up", "git merge --ff-only", "changes only what", "worktree",
                      "[budget] mode", "no limit", "same check fails the same way twice", "not a charge"):
             assert said.lower() in text.lower(), f"{name} doesn't say {said!r}"
+
+
+def test_the_readme_names_the_current_release():
+    """The README's release link follows pyproject's version, so a version bump can't leave it behind
+    (it said v0.2.0 for a day after v0.2.1 shipped)."""
+    version = re.search(r'^version = "([^"]+)"', (ROOT / "pyproject.toml").read_text(encoding="utf-8"), re.M)[1]
+    link = f"latest release is [v{version}](https://github.com/mpwilso/parallax/releases/tag/v{version})"
+    assert link in (ROOT / "README.md").read_text(encoding="utf-8")
