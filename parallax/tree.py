@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from pathlib import Path, PurePosixPath
 
-from .core import ParallaxError
+from .core import ParallaxError, git_failed
 from .guard import is_protected
 
 EXCLUDE = ":(exclude)docs/tasks"
@@ -53,7 +53,7 @@ def _git(wt: Path, *args: str, index: Path | None = None, text: bool = True) -> 
     out = subprocess.run(["git", "-C", str(wt), *args], capture_output=True, env=env, text=text,
                          encoding="utf-8" if text else None, errors="replace" if text else None)
     if out.returncode != 0:
-        raise ParallaxError(f"git {args[0]} failed: {out.stderr.strip() if text else out.stderr.decode(errors='replace')}")
+        raise git_failed(args, out.stderr)
     return out.stdout
 
 
@@ -126,7 +126,7 @@ def export(worktree: Path, tree: str, dest: Path) -> None:
     dest.mkdir(parents=True, exist_ok=True)
     archive = subprocess.run(["git", "-C", str(worktree), "archive", "--format=tar", tree], capture_output=True)
     if archive.returncode != 0:
-        raise ParallaxError(f"git archive failed: {archive.stderr.decode(errors='replace').strip()}")
+        raise git_failed(["archive", "--format=tar", tree], archive.stderr)
     untar = subprocess.run(["tar", "-x", "-C", str(dest)], input=archive.stdout, capture_output=True)
     if untar.returncode != 0:
         raise ParallaxError(f"tar failed: {untar.stderr.decode(errors='replace').strip()}")

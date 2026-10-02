@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .approvals import key_path
-from .core import ParallaxError
+from .core import git_failed
 from .guard import PROTECTED_ANY_DEPTH, PROTECTED_FROM_ROOT
 
 ROOT_TARGETS = (".parallax", "parallax.policy.toml", "mission.md", "CLAUDE.md", ".claude", ".mcp.json",
@@ -68,7 +68,7 @@ def shared_git_dir(worktree: Path) -> Path:
     out = subprocess.run(["git", "-C", str(worktree), "rev-parse", "--path-format=absolute", "--git-common-dir"],
                          capture_output=True, text=True)
     if out.returncode != 0:
-        raise ParallaxError(f"can't find the shared .git directory: {out.stderr.strip()}")
+        raise git_failed(["rev-parse", "--path-format=absolute", "--git-common-dir"], out.stderr)
     return Path(out.stdout.strip()).resolve()
 
 

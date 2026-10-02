@@ -42,12 +42,27 @@ def refuse_inside_task(root: Path) -> None:
         raise ParallaxError("tasks can't create tasks or make decisions")
 
 
+GIT_WRONG = ("fatal:", "error:")
+
+
+def git_failed(args, stderr: str | bytes) -> ParallaxError:
+    """A failed git command, said with the command and git's own error. git writes progress lines such
+    as "Preparing worktree (new branch ...)" to stderr too, so the message starts at the first line
+    that says what went wrong, and leaves out hints. With no such line, it's all of stderr."""
+    if isinstance(stderr, bytes):
+        stderr = stderr.decode(errors="replace")
+    lines = [line.strip() for line in stderr.splitlines() if line.strip()]
+    first = next((i for i, line in enumerate(lines) if line.startswith(GIT_WRONG)), 0)
+    said = [line for line in lines[first:] if not line.startswith("hint:")]
+    return ParallaxError(f"git {' '.join(str(a) for a in args)} failed: {' '.join(said) or 'no error from git'}")
+
+
 def _git(repo: Path, *args: str) -> str:
     # git speaks UTF-8; Windows' default (cp1252) crashes on diffs with characters like box drawing
     result = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True,
                             encoding="utf-8", errors="replace")
     if result.returncode != 0:
-        raise ParallaxError(result.stderr.strip() or f"git {' '.join(args)} failed")
+        raise git_failed(args, result.stderr)
     return result.stdout.strip()
 
 
@@ -125,7 +140,7 @@ class Project:
     def new_task(self, goal: str, actor: str = "human", *, plan: bool = False, intent: bool = False) -> dict:
         """intent: the task follows the lifecycle (intent, plan, gates) instead of running from its goal."""
         refuse_inside_task(self.root)
-        task_id = uuid.uuid4().hex[:6]
+        task_id = self._unused_task_id()
         branch = f"parallax/{task_id}-{_slug(goal)}"
         worktree = worktrees_home(self.root) / task_id
         base = _git(self.root, "rev-parse", "HEAD")
@@ -135,6 +150,22 @@ class Project:
             task=task_id, branch=branch, worktree=str(worktree), base=base, plan=plan, intent=intent,
         )
         return self.task(task_id)
+
+    def _unused_task_id(self) -> str:
+        """A task id this repo has never had: in no task.created entry, and no branch, worktree or task
+        folder named for it. Ids are six hex digits so people can read them, so two can match: about a
+        3% chance by a repo's thousandth task. A match draws another id; reusing one would put two tasks
+        under one id in the ledger, or fail on the branch (CI run 36947648494)."""
+        from .sandbox import task_home
+        used = {e["data"].get("task") for e in self.ledger.entries() if e["kind"] == "task.created"}
+        branches = _git(self.root, "for-each-ref", "--format=%(refname:short)", "refs/heads/parallax/")
+        used |= {b.removeprefix("parallax/").split("-", 1)[0] for b in branches.splitlines()}
+        for _ in range(100):
+            task_id = uuid.uuid4().hex[:6]
+            if task_id not in used and not (worktrees_home(self.root) / task_id).exists() \
+                    and not task_home(self.root, task_id).exists():
+                return task_id
+        raise ParallaxError("no unused task id after 100 tries")
 
     def tasks(self) -> dict[str, dict]:
         return status.derive(self.ledger.entries())

@@ -26,13 +26,13 @@ import time
 from pathlib import Path
 
 from . import lifecycle, lint, memcap, record, sandbox, secretscan, tools, tree
-from .core import ParallaxError, Project, refuse_inside_task
+from .core import ParallaxError, Project, git_failed, refuse_inside_task
 
 
 def _git(root: Path, *args: str, env: dict | None = None, input: str | None = None) -> str:
     out = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, env=env, input=input)
     if out.returncode != 0:
-        raise ParallaxError(f"git {args[0]} failed: {out.stderr.strip()}")
+        raise git_failed(args, out.stderr)
     return out.stdout.strip()
 
 

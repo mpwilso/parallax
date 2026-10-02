@@ -28,7 +28,7 @@ from types import SimpleNamespace
 from typing import Callable
 
 from . import build, evals, installs, lifecycle, lint, reticle, review, sandbox
-from .core import POLICY_FILE, ParallaxError, Project
+from .core import POLICY_FILE, ParallaxError, Project, git_failed
 
 MAX_VERSIONS = 3
 MAX_TRIES = 12            # candidate versions checked against the hidden tests per case
@@ -46,7 +46,7 @@ def _git(repo: Path, *args: str, env: dict | None = None, data: bytes | None = N
     out = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, input=data,
                          env={**os.environ, **(env or {})})
     if out.returncode != 0:
-        raise ParallaxError(f"git {' '.join(args[:2])} failed: {out.stderr.decode(errors='replace').strip()[-300:]}")
+        raise git_failed(args, out.stderr)
     return out.stdout.decode(errors="replace").strip()
 
 
