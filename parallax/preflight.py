@@ -90,13 +90,20 @@ class Line:
     name: str
     detail: str
     ok: bool
+    output: str = ""  # what the sandbox printed instead of running the probe
 
 
-Runner = Callable[[Path, Path, dict, dict], dict | None]  # (srt config, cwd, spec, env) -> probe output
+@dataclass
+class NotRun:
+    """The probe never reported: what srt printed instead, kept for the card."""
+    output: str
 
 
-def run_srt(config: Path, cwd: Path, spec: dict, env: dict) -> dict | None:
-    """Run the probe under srt. None if it didn't report: the sandbox didn't start, fail closed."""
+Runner = Callable[[Path, Path, dict, dict], dict | NotRun | None]  # (srt config, cwd, spec, env) -> probe output
+
+
+def run_srt(config: Path, cwd: Path, spec: dict, env: dict) -> dict | NotRun | None:
+    """Run the probe under srt. If it didn't report, the sandbox didn't start: fail closed, keeping what it printed."""
     if not shutil.which("srt", path=env.get("PATH")):
         return None
     cmd = f"python3 -c {shlex.quote(PROBE)} {shlex.quote(json.dumps(spec))}"
@@ -108,7 +115,7 @@ def run_srt(config: Path, cwd: Path, spec: dict, env: dict) -> dict | None:
     for line in out.stdout.splitlines():
         if line.startswith("PREFLIGHT "):
             return json.loads(line[len("PREFLIGHT "):])
-    return None
+    return NotRun("\n".join(t.strip() for t in (out.stderr, out.stdout) if t.strip()))
 
 
 def _mirror(worktree: Path, targets: list[Path], mirror: Path) -> list[tuple[Path, bool]]:
@@ -129,7 +136,7 @@ def _mirror(worktree: Path, targets: list[Path], mirror: Path) -> list[tuple[Pat
 
 
 def bash_layer(worktree: Path, targets: list[Path], git_dir: Path, rules: sandbox.Rules, home: Path,
-               env: dict, runner: Runner, extra: dict) -> tuple[dict | None, dict | None, list[str]]:
+               env: dict, runner: Runner, extra: dict) -> tuple[dict | NotRun | None, dict | NotRun | None, list[str]]:
     """Two probe runs: sentinels in the real protected directories, then the mirror.
 
     Returns (real run output, mirror run output, sentinels that got through and were removed).
@@ -199,10 +206,13 @@ def run(project: Project, task_id: str, worktree: Path, rules: sandbox.Rules, ho
     finally:
         listener.close()
 
+    said = next((o.output for o in (real, mirror) if isinstance(o, NotRun) and o.output), "")
+    real = real if isinstance(real, dict) else None
+    mirror = mirror if isinstance(mirror, dict) else None
     lines = []
     total = len(targets) + 1  # every protected path, and the shared .git directory
     if real is None or mirror is None:
-        lines.append(Line("bash layer", "the sandbox didn't run the probe", False))
+        lines.append(Line("bash layer", "the sandbox didn't run the probe", False, said))
     else:
         writable = len(set(real["written"]) | set(leaked)) + len(mirror["written"])
         lines.append(Line("bash layer", f"{writable} of {total} protected paths writable", writable == 0))

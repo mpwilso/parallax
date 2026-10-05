@@ -19,6 +19,7 @@ from parallax import budgets, build, lifecycle, pilot, preflight, views  # noqa:
 from parallax.agents.base import Review  # noqa: E402
 from parallax.core import Project  # noqa: E402
 from parallax.ui import ERROR_MESSAGE, UI  # noqa: E402
+from realout import real  # noqa: E402
 from test_lifecycle_gates import docs, make_key  # noqa: E402
 
 WAIT = 12_000  # ms: the page polls every 2s
@@ -226,15 +227,27 @@ def test_a_needs_you_card_shows_the_files_and_whether_a_secret_has_content(page,
     expect(card.locator("#opt-reject")).to_have_class(re.compile("primary"))
 
 
+def test_a_sandbox_that_didnt_start_shows_its_words_and_the_next_step(page, proj):
+    tid = launched(proj, "adding a contributing guide")
+    said = real("bwrap-0.9.0-chroot-eperm.stderr")  # what bwrap really printed
+    build.refused(proj, tid, [preflight.Line("bash layer", "the sandbox didn't run the probe", False, said)])
+    proj.ledger.append("builder.finished", "parallax", "", task=tid, status="stuck")
+    open_card(page, tid)
+    expect(page.locator("#card .bottom")).to_have_text("The sandbox didn't start, so the build didn't launch.", timeout=WAIT)
+    card = page.locator("#card")
+    expect(card).to_contain_text(said.splitlines()[0])
+    expect(card).to_contain_text("To fix it, allow user namespaces")
+    expect(card).to_contain_text("parallax doctor")
+    expect(page.locator("#opt-retry")).to_have_class(re.compile("primary"))
+
+
 def test_a_background_error_leads_with_the_error_and_a_repeat_says_drop(page, proj):
     tid = launched(proj, "adding a contributing guide")
-    why = "error: the sandbox runtime exited with code 1 (srt: bwrap: No permissions to create new namespace)"
+    why = "error: the agent crashed"
     stopped(proj, tid, why, error=True)
     open_card(page, tid)
-    expect(page.locator("#card .bottom")).to_have_text("The sandbox runtime exited with code 1.", timeout=WAIT)
-    card = page.locator("#card")
-    expect(card).to_contain_text("Run parallax doctor to find the cause.")  # how to find the cause
-    expect(card).to_contain_text('For the user-namespace step, see "Allow user namespaces" in docs/wsl.md.')
+    expect(page.locator("#card .bottom")).to_have_text("The agent crashed.", timeout=WAIT)
+    expect(page.locator("#card")).not_to_contain_text("parallax doctor")  # not the sandbox: no hint
     expect(page.locator("#opt-retry")).to_have_class(re.compile("primary"))
     page.locator("#opt-retry").click()  # retry, and it fails the same way
     expect(page.locator("#status")).not_to_have_text("", timeout=WAIT)

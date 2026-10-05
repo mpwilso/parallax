@@ -4,6 +4,7 @@ import re
 import pytest
 
 from fakes import FakeChecker, FakeDrafter, ScriptedAgent, good_probe, junit_runner
+from realout import line
 from parallax import build, decide, lifecycle, pilot, show, views
 from parallax.agents.base import Review
 from parallax.core import ParallaxError, Project
@@ -153,7 +154,9 @@ STOPS = [  # (ledger kind, data, reason): one per kind of stop the card, the inb
     ("disagreement.raised", {"stage": "flows"}, "Field's test x still fails after a rework. Either the test or the app is wrong"),
     ("stuck.raised", {}, "drafting still failed after 2 redrafts: the plan lists setup.py"),
     ("stuck.raised", {}, "the same call was refused 3 times: shell.run curl"),
-    ("stuck.raised", {"error": True}, "error: the sandbox runtime exited with code 1 (srt: bwrap: namespace)"),
+    ("stuck.raised", {"error": True}, line("bwrap-0.9.0-chroot-eperm.stderr")),
+    ("stuck.raised", {"preflight": ["bash layer", "network", "environment"], "sandbox": line("bwrap-0.9.0-disable-userns.stderr")},
+     f"the sandbox didn't start, so the build didn't launch ({line('bwrap-0.9.0-disable-userns.stderr')})"),
     ("stuck.raised", {"missing_tool": "uv", "fix": "install it"}, "uv not found: the [build] setup command needs it"),
     ("stuck.raised", {"turns": True}, "Maker used all 80 turns"),
     ("stuck.raised", {"budget": True}, "Maker spent $3.10 of the $3.80 cap, leaving Field $0.20, so the budget cap ran out"),

@@ -34,7 +34,8 @@ def main(port: int) -> None:
         import types
         sys.modules["pytest"] = types.SimpleNamespace(fixture=lambda f=None, **k: f or (lambda g: g))
     from fakes import FakeChecker, FakeDrafter, ScriptedAgent, good_probe, junit_runner
-    from parallax import build, lifecycle, pilot, ui
+    from parallax import build, lifecycle, pilot, preflight, ui
+    from realout import real
     from parallax.accept import accept
     from parallax.agents.base import Review
     from parallax.core import Project
@@ -94,8 +95,10 @@ def main(port: int) -> None:
     stopped(cap, "the budget cap ran out ($2.10 of $2.00 estimated)", budget=True, cost_usd=2.1)
     err = launched("add a CONTRIBUTING file", "adding a contributing guide", "Add a short CONTRIBUTING.md.",
                    "New contributors know how to run the tests.")
-    stopped(err, "error: the sandbox runtime exited with code 1 (srt: bwrap: No permissions to create new namespace)",
-            error=True)
+    # the sandbox didn't start: recorded as a real failed preflight records it, with bwrap's real words
+    build.refused(proj, err, [preflight.Line("bash layer", "the sandbox didn't run the probe", False,
+                                             real("bwrap-0.9.0-chroot-eperm.stderr"))])
+    proj.ledger.append("builder.finished", "parallax", "", task=err, status="stuck")
     run("fix the README install steps for WSL", "fixing the README install steps",
         "Fix the README install steps so they work in WSL.", "A new user on WSL can follow them.",
         [("write", "README.md", "# calc\n\nA calculater that adds numbers.\n\n## Install\n\nIn WSL: `pip install .`\n")],

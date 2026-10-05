@@ -301,6 +301,26 @@ def test_preflight_against_the_real_sandbox(proj):
     assert len(leaked) == 2 and not list((proj.root / ".git").glob(".parallax-preflight-*"))
 
 
+@pytest.mark.skipif(NO_SANDBOX is not None, reason=NO_SANDBOX or "")
+def test_a_real_preflight_where_user_namespaces_are_blocked(proj, tmp_path, monkeypatch):
+    """The real srt and bwrap, inside a bwrap that forbids new user namespaces, as hand check M1 did by hand."""
+    from parallax import sandboxfail, show
+    from realout import line
+    monkeypatch.setattr(sandboxfail, "on_wsl", lambda: False)
+    blocked = tmp_path / "blocked"
+    blocked.mkdir()
+    (blocked / "srt").write_text("#!/bin/sh\nexec bwrap --dev-bind / / --unshare-user --disable-userns -- "
+                                 f'{shlex.quote(shutil.which("srt"))} "$@"\n')
+    (blocked / "srt").chmod(0o755)
+    runner = lambda c, cwd, spec, env: preflight.run_srt(c, cwd, spec, {**env, "PATH": f"{blocked}:{env['PATH']}"})  # noqa: E731
+    tid = approved_task(proj)
+    assert build.run_build(proj, tid, lambda left, settings: pytest.fail("Maker started"), preflight_runner=runner) == "stuck"
+    said = line("bwrap-0.9.0-disable-userns.stderr")
+    assert proj.inbox()[-1]["data"]["sandbox"] == said
+    card = show.report(proj, tid)
+    assert said in card and "To fix it, allow user namespaces" in card and "parallax doctor" in card
+
+
 # launch, run, stop -------------------------------------------------------------------------------------
 
 def test_preflight_runs_in_one_place_for_every_way_an_agent_can_launch(proj, monkeypatch):

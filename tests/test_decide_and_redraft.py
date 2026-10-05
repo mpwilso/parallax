@@ -6,6 +6,7 @@ from parallax.accept import accept
 from parallax.agents.base import Finding, Review
 from parallax.cli import main
 from parallax.core import POLICY_FILE, ParallaxError, Project
+from realout import line, real
 from test_lifecycle_gates import WANT, docs, make_key
 
 
@@ -167,51 +168,93 @@ def test_every_kind_of_decision_is_one_lint_clean_question(proj):
         proj.resolve(item["id"], False, "next case")
 
 
-# a sandbox that never started: the card says how to find the cause --------------------------------------
+# a sandbox that didn't start: the card says what failed and the one next action ------------------------
 
-DOCTOR = "Run parallax doctor to find the cause."
-WSL_STEP = 'For the user-namespace step, see "Allow user namespaces" in docs/wsl.md.'
+ENOSPC = line("bwrap-0.9.0-disable-userns.stderr")
+NAMESPACE_FIX = "To fix it, allow user namespaces ("
+ON_WSL = 'see "Allow user namespaces" in docs/wsl.md and the sysctl line in the README\'s setup step 1'
 
 
-def test_sandbox_error_card_points_to_doctor_and_the_namespace_step(proj):
+def refused_by_the_sandbox(proj, tid, output):
+    """The pilot, with a preflight whose sandbox printed `output` instead of running the probe."""
+    maker = ScriptedAgent(steps=[("write", "README.md", "ok\n")])
+    return build.run_mode(proj, tid, "pilot", FakeDrafter(docs()), lambda left, settings: maker, FakeChecker(),
+                          test_runner=junit_runner(), preflight_runner=lambda *a: preflight.NotRun(output))
+
+
+@pytest.mark.parametrize("wsl", [True, False])
+def test_a_sandbox_that_didnt_start_shows_its_own_words_and_the_next_step(proj, monkeypatch, wsl):
+    from parallax import outputs, sandboxfail, views
+    monkeypatch.setattr(sandboxfail, "on_wsl", lambda: wsl)
     tid = pilot.intake(proj, WANT)["task"]
-    pilot_run(proj, tid)
-    why = "error: the sandbox runtime exited with code 1 (srt: bwrap: No permissions to create new namespace)"
-    proj.ledger.append("stuck.raised", "parallax", why, task=tid, error=True)
+    assert refused_by_the_sandbox(proj, tid, real("m1-command-2-srt.txt")) == "stuck"
+    assert not kinds(proj, "maker.started")
+    item = proj.inbox()[-1]
+    assert item["data"]["sandbox"] == ENOSPC and item["data"]["preflight"] == ["bash layer", "network", "environment"]
+    assert outputs.read(item) == real("m1-command-2-srt.txt")  # the whole output, a click away
     dec = decide.decision(proj, tid)
-    assert (dec.kind, dec.recommend, [o.name for o in dec.options]) == ("error", "retry", ["retry", "reject", "drop"])
-    assert dec.question == "It stopped on an error: run it again once the cause is fixed, or drop it?"
+    assert (dec.kind, dec.recommend) == ("stuck", "retry")
     card = show.report(proj, tid)
     assert lints(proj, card), card
-    assert DOCTOR in card and WSL_STEP in card
-    assert card.startswith("Type: Decision needed\nBottom line: Needs you: the sandbox runtime exited with code 1.")
-    assert card.index(why.split(": ", 1)[1]) < card.index(DOCTOR) < card.index(WSL_STEP)  # the problem first
-    from parallax import views
-    found = [i["text"] for i in views.card(proj, tid)["found"]]  # the web card is parsed from the same text
-    assert found[1:3] == [DOCTOR, WSL_STEP]
+    assert card.startswith("Type: Decision needed\nBottom line: Needs you: the sandbox didn't start, so the build didn't launch.")
+    fix = next(x for x in card.splitlines() if NAMESPACE_FIX in x)
+    assert "parallax doctor" in fix and "README's setup step 1" in fix and (ON_WSL in fix) == wsl
+    assert card.index(ENOSPC) < card.index(NAMESPACE_FIX)  # what failed, then what to do
+    found = views.card(proj, tid)["found"]  # the web card is parsed from the same text
+    assert ENOSPC in found[0]["text"] and found[0]["output"] == item["id"] and NAMESPACE_FIX in found[1]["text"]
 
 
-def test_other_sandbox_start_error_gets_only_the_doctor_line(proj):
+def test_each_real_failure_gets_its_own_line_and_hint(proj, monkeypatch):
+    from parallax import sandboxfail
+    monkeypatch.setattr(sandboxfail, "on_wsl", lambda: True)
+    for name, fix in [("bwrap-0.9.0-chroot-eperm.stderr", NAMESPACE_FIX),
+                      ("srt-1.0.0-chroot-eperm.stderr", NAMESPACE_FIX),
+                      ("srt-1.0.0-no-tools-on-path.stderr", "To fix it, install what it names")]:
+        tid = pilot.intake(proj, WANT)["task"]
+        refused_by_the_sandbox(proj, tid, real(name))
+        card = show.report(proj, tid)
+        assert lints(proj, card) and line(name) in card and fix in card and "parallax doctor" in card, name
+        assert ("docs/wsl.md" in card) == (fix == NAMESPACE_FIX), name
+
+
+def test_an_error_card_reads_the_same_words(proj, monkeypatch):
+    # No real run has been seen to stop on an error carrying bwrap's words; this shows the card would read them.
+    from parallax import sandboxfail
+    monkeypatch.setattr(sandboxfail, "on_wsl", lambda: False)
     tid = pilot.intake(proj, WANT)["task"]
     pilot_run(proj, tid)
-    proj.ledger.append("stuck.raised", "parallax", "error: the sandbox runtime exited with code 2 (srt: not found)",
-                       task=tid, error=True)
+    proj.ledger.append("stuck.raised", "parallax", line("bwrap-0.9.0-chroot-eperm.stderr"), task=tid, error=True)
+    assert decide.decision(proj, tid).kind == "error"
     card = show.report(proj, tid)
-    assert lints(proj, card) and DOCTOR in card and "docs/wsl.md" not in card
+    assert lints(proj, card) and NAMESPACE_FIX in card and "docs/wsl.md" not in card
 
 
-def test_unrelated_error_card_has_no_hint(proj):
+@pytest.mark.parametrize("why", ['kubectl: namespaces "dev" not found', "error: the agent crashed"])
+def test_an_error_that_only_mentions_a_namespace_gets_no_hint(proj, why):
     tid = pilot.intake(proj, WANT)["task"]
     pilot_run(proj, tid)
-    proj.ledger.append("stuck.raised", "parallax", "error: the agent crashed", task=tid, error=True)
+    proj.ledger.append("stuck.raised", "parallax", why, task=tid, error=True)
     card = show.report(proj, tid)
-    assert lints(proj, card) and "parallax doctor" not in card and "docs/wsl.md" not in card
+    assert lints(proj, card) and "parallax doctor" not in card and "To fix it" not in card and "docs/wsl.md" not in card
+
+
+def test_a_preflight_that_says_nothing_keeps_the_old_reason(proj):
+    tid = pilot.intake(proj, WANT)["task"]
+    maker = ScriptedAgent(steps=[("write", "README.md", "ok\n")])
+    build.run_mode(proj, tid, "pilot", FakeDrafter(docs()), lambda left, settings: maker, FakeChecker(),
+                   test_runner=junit_runner(), preflight_runner=lambda *a: None)
+    item = proj.inbox()[-1]
+    assert item["reason"].startswith("preflight failed (bash layer: the sandbox didn't run the probe")
+    assert "sandbox" not in item["data"] and "To fix it" not in show.report(proj, tid)
 
 
 def test_the_namespace_hint_names_a_heading_that_exists():
     from pathlib import Path
-    doc = Path(__file__).resolve().parents[1] / "docs" / "wsl.md"
-    assert "### Allow user namespaces" in doc.read_text(encoding="utf-8")
+    root = Path(__file__).resolve().parents[1]
+    assert "### Allow user namespaces" in (root / "docs" / "wsl.md").read_text(encoding="utf-8")
+    setup = (root / "README.md").read_text(encoding="utf-8").split("\n## Setup\n", 1)[1]
+    step_1 = setup.split("\n1. ", 1)[1].split("\n2. ", 1)[0]
+    assert "sysctl -w kernel.apparmor_restrict_unprivileged_userns=0" in step_1  # the line the hint names
 
 
 def test_options_and_reasons_are_checked(proj):

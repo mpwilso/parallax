@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
-from . import costs, guard, installs, lifecycle, lint, memcap, preflight, sandbox, tools
+from . import costs, guard, installs, lifecycle, lint, memcap, outputs, preflight, sandbox, sandboxfail, tools
 from .agents.base import Agent, AgentResult
 from .core import ROOT_ENV, TASK_ENV, ParallaxError, Project, inside_task, refuse_inside_task
 from .gate import Scope, make_permission_fn
@@ -156,6 +156,22 @@ def run_preflight(project: Project, p: Prepared, runner=None) -> list[preflight.
                          scrubbed_env(p.venv), runner or preflight.run_srt)
 
 
+def refused(project: Project, task_id: str, lines: list[preflight.Line]) -> None:
+    """A failed preflight comes to you. When the sandbox didn't start, the card leads with that and the
+    line of its output that says why; the whole output is kept as the task's check output."""
+    names = [line.name for line in lines if not line.ok]
+    said = next((line.output for line in lines if line.output), "")
+    if not said:
+        failed = "; ".join(f"{line.name}: {line.detail}" for line in lines if not line.ok)
+        project.ledger.append("stuck.raised", "parallax", f"preflight failed ({failed}), so the build didn't launch",
+                              task=task_id, preflight=names)
+        return
+    found = sandboxfail.read(said)
+    key = found.line if found else said.strip().splitlines()[-1]
+    project.ledger.append("stuck.raised", "parallax", f"the sandbox didn't start, so the build didn't launch ({key})",
+                          task=task_id, preflight=names, sandbox=key, **outputs.keep(project, task_id, "preflight", said))
+
+
 def _spawn(argv: list[str], env: dict, cwd: Path, log: Path) -> int:
     with open(log, "ab") as out:
         return subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=out,
@@ -187,9 +203,7 @@ def run_build(project: Project, task_id: str, maker_for: Callable[[float, str], 
         return costs.stop_at_cap(project, task_id, p.cap)
     lines = run_preflight(project, p, preflight_runner)
     if not all(line.ok for line in lines):
-        failed = "; ".join(f"{line.name}: {line.detail}" for line in lines if not line.ok)
-        project.ledger.append("stuck.raised", "parallax", f"preflight failed ({failed}), so the build didn't launch",
-                              task=task_id, preflight=[line.name for line in lines if not line.ok])
+        refused(project, task_id, lines)
         return "stuck"
     env = {TASK_ENV: task_id, ROOT_ENV: str(project.root), **QUIET_BUILD,
            "PATH": (f"{p.venv}/bin:" if p.venv else "") + SYSTEM_PATH}  # set here, whatever the pilot's PATH

@@ -265,25 +265,6 @@ def _was_merging(project: Project, task_id: str) -> bool:
     return any(e["kind"] == "task.accepted" for e in entries) and not any(e["kind"] == "merge.confirmed" for e in entries)
 
 
-SANDBOX_START = ("sandbox runtime", "srt:", "bwrap", "namespace")  # words of a sandbox that never started
-NAMESPACES = ("namespace", "bwrap")  # what docs/wsl.md's user-namespace step is about
-
-
-def sandbox_hint(why: str) -> list[str]:
-    """One or two lines for an error card, when what stopped is the sandbox starting.
-
-    The first names `parallax doctor`, which already checks the sandbox tools. A namespace or bwrap
-    error is the one Ubuntu 24.04 causes, so that one also points at the step that allows them.
-    """
-    low = why.lower()
-    if not any(s in low for s in SANDBOX_START):
-        return []
-    hint = ["Run parallax doctor to find the cause."]
-    if any(s in low for s in NAMESPACES):
-        hint.append('For the user-namespace step, see "Allow user namespaces" in docs/wsl.md.')
-    return hint
-
-
 def line(dec: Decision) -> str:
     """The output shape's decision line."""
     return f"Decide: {dec.question} Recommend: {dec.recommend}. Blocks: {dec.blocks}."

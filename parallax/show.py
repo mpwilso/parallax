@@ -7,7 +7,7 @@ ledger entry it comes from. The checker's own Not looked at is carried, never re
 from __future__ import annotations
 
 
-from . import costs, decide, lifecycle, lint, since, tree
+from . import costs, decide, lifecycle, lint, sandboxfail, since, tree
 from .status import attempt as _attempt
 from .core import Project
 
@@ -222,7 +222,8 @@ def _decision(project: Project, task_id: str, dec, found: list[str], gaps: list[
         why = " ".join(dec.item["reason"].split())
         bottom = lint.one_sentence("Needs you: " + lead(why))  # the real problem, never a placeholder
         cite = f"(ledger {dec.item['id']})"
-        hint = decide.sandbox_hint(why) if dec.kind == "error" else []  # how to find a sandbox that won't start
+        failed = sandboxfail.read(dec.item["data"].get("sandbox", "")) or (sandboxfail.read(why) if dec.kind == "error" else None)
+        hint = sandboxfail.hint(failed, sandboxfail.on_wsl()) if failed else []  # a sandbox that didn't start: the next action
         if dec.kind == "tool":
             hint = [f"Fix: {dec.extra['fix'].rstrip('.')}, then retry."]
         found = [f"{why} {cite}"] + [f"{h} {cite}" for h in hint] + list(found)

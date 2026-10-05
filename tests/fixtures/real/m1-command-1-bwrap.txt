@@ -1,0 +1,2 @@
+bwrap: Creating new namespace failed: nesting depth or /proc/sys/user/max_*_namespaces exceeded (ENOSPC)
+exit 1

@@ -18,7 +18,7 @@ Claude Code's sandbox runs on Linux, macOS and WSL2, not on native Windows, so o
 
 ### Allow user namespaces
 
-Ubuntu 24.04 blocks the unprivileged user namespaces the sandbox needs, so `bwrap` stops with `No permissions to create new namespace` until you allow them. The README's setup step 1 has the `sysctl` line, and `parallax doctor` says whether the sandbox tools work once it's set.
+Ubuntu 24.04 blocks the unprivileged user namespaces the sandbox needs, so `bwrap` stops with `No permissions to create new namespace` until you allow them. The README's setup step 1 has the `sysctl` line, and `parallax doctor` says whether the sandbox tools work once it's set. If a task hits it first, its card says the sandbox didn't start, quotes the line `bwrap` printed, and points here.
 
 ## Harden WSL
 
