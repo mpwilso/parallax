@@ -42,13 +42,19 @@ def _run(argv: list[str]) -> str | None:
     return out.stdout if out.returncode == 0 else None
 
 
-def _needed() -> list[tuple[str, str]]:
-    """What a build needs here: the policy's commands too, when run in a Parallax project."""
+def _policy():
+    """The policy of the Parallax project this folder is in, or None. Found, never made: doctor runs
+    before init too, and must not leave a ledger in whatever folder it ran from."""
     from .core import Project
     try:
-        return tools.needed(Project(Path.cwd()).policy)
-    except Exception:  # not a project, or a policy that won't load: what every build needs
-        return tools.needed()
+        return Project.find(Path.cwd()).policy
+    except Exception:  # not a project, or a policy that won't load
+        return None
+
+
+def _needed() -> list[tuple[str, str]]:
+    """What a build needs here: the policy's commands too, when run in a Parallax project."""
+    return tools.needed(_policy())
 
 
 @dataclass

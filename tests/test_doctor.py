@@ -227,3 +227,21 @@ def test_init_asks_before_adopting_a_repos_setup_command(repo, monkeypatch, caps
     assert main(["init"]) == 0
     assert "not an interactive terminal, so it's left out" in capsys.readouterr().out
     assert Project(repo).policy.build["setup"] == ""
+
+
+# where doctor looks -------------------------------------------------------------------------
+
+def test_doctor_outside_a_project_leaves_no_parallax_folder_behind(tmp_path, monkeypatch):
+    """Doctor runs before init, in any folder: it must not start a ledger there."""
+    monkeypatch.chdir(tmp_path)
+    assert doctor._needed() == doctor.tools.needed()
+    assert not (tmp_path / STATE_DIR).exists()
+
+
+def test_doctor_in_a_projects_subfolder_reads_its_policy(repo, monkeypatch):
+    Project.init(repo)
+    (repo / POLICY_FILE).write_text("[build]\nsetup = 'make venv'\n")
+    (repo / "src").mkdir()
+    monkeypatch.chdir(repo / "src")
+    assert ("make", "the [build] setup command") in doctor._needed()
+    assert not (repo / "src" / STATE_DIR).exists()
