@@ -13,7 +13,7 @@ Status: A portfolio project, built to show how I design, test and judge an AI to
 
 Parallax is a local tool for developers who use AI coding agents. The agents plan, build and check the work on their own, inside a sandbox. Parallax checks what they produce and only comes to you when a person has to decide. For most tasks that's one decision: accept the result or send it back.
 
-Parallax is the second of three tools. [Loupe](https://github.com/mpwilso/loupe) writes the story, Parallax builds it under a gated agent loop and keeps the record, and [ISR](https://github.com/mpwilso/isr) tells the person accepting it what is left. Each runs on its own, and they have not yet been run in that order on one change.
+Parallax is the second of three tools. [Loupe](https://github.com/mpwilso/loupe) writes the story, Parallax builds it under a gated agent loop and keeps the record, and [ISR](https://github.com/mpwilso/isr) tells the person accepting it what is left. Each runs on its own, and they have been run in that order once, on one change: [ISR's run log](https://github.com/mpwilso/isr/blob/master/docs/run-log.md#the-first-story-first-run-on-a-real-parallax-change-e3108e-2026-10-05).
 
 <p align="center"><img src="docs/brand/demo.gif" alt="The app: a task typed in, Focus, Reticle, Maker and Second Eye taking their turns, the card turning Ready, and the accept" width="800"></p>
 
