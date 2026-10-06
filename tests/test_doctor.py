@@ -1,6 +1,7 @@
 import json
 import os
 import stat
+import subprocess
 import textwrap
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -30,7 +31,8 @@ def machine(tmp_path, platform="linux", osrelease=WSL2, tools=("bwrap", "socat",
 
     return doctor.Machine(platform=platform, read=lambda p: text.get(p, ""), exists=lambda p: p in files,
                           which=lambda b: f"/usr/bin/{b}" if b in tools else None, run=run, path=path,
-                          key=tmp_path / "config" / "parallax" / "key", needed=list(doctor.tools.needed(None, platform)))
+                          key=tmp_path / "config" / "parallax" / "key", needed=list(doctor.tools.needed(None, platform)),
+                          cwd=tmp_path)
 
 
 def by_name(checks):
@@ -44,7 +46,7 @@ def test_doctor_on_a_hardened_wsl2_machine_is_ready(tmp_path):
     checks = by_name(doctor.run(m))
     assert {n: c.status for n, c in checks.items()} == {
         "platform": "ok", "sandbox": "ok", "claude login": "ok", "build tools": "ok", "windows": "ok",
-        "approval key": "ok", "signing key": "info"}
+        "approval key": "ok", "signing key": "info", "repo": "info"}
     assert checks["platform"].detail == "linux on wsl2"
     assert checks["sandbox"].detail == "bubblewrap, socat, srt"
     assert checks["build tools"].detail == "git, uv"
@@ -245,3 +247,52 @@ def test_doctor_in_a_projects_subfolder_reads_its_policy(repo, monkeypatch):
     monkeypatch.chdir(repo / "src")
     assert ("make", "the [build] setup command") in doctor._needed()
     assert not (repo / "src" / STATE_DIR).exists()
+
+
+# the repo ----------------------------------------------------------------------------------
+
+def in_repo(tmp_path, where):
+    """A machine that runs real git, in the folder given."""
+    m = machine(tmp_path)
+    m.cwd = where
+    m.run = doctor._run
+    return m
+
+
+def git(where, *args):
+    subprocess.run(["git", "-C", str(where), *args], check=True, capture_output=True)
+
+
+def test_doctor_outside_a_git_repo_says_so_without_failing(tmp_path):
+    c = doctor.check_repo(machine(tmp_path))
+    assert (c.status, c.detail) == ("info", "not in a git repo: run doctor in your repo to check it too")
+
+
+def test_a_repo_on_a_branch_with_a_commit_is_ready(repo):
+    git(repo, "switch", "-q", "-c", "main")
+    c = doctor.check_repo(in_repo(repo, repo))
+    assert (c.status, c.detail) == ("ok", f"{repo.name} on main")
+    (repo / "src").mkdir()
+    assert doctor.check_repo(in_repo(repo, repo / "src")).detail == f"{repo.name} on main"  # from a subfolder too
+
+
+def test_a_repo_with_no_commits_fails_since_no_task_can_start(tmp_path):
+    git(tmp_path, "init", "-q")
+    c = doctor.check_repo(in_repo(tmp_path, tmp_path))
+    assert (c.status, c.detail) == ("fail", f"{tmp_path.name} has no commits")
+    assert "commit" in c.hint
+
+
+def test_a_detached_head_warns_since_accept_and_merge_needs_a_branch(repo):
+    git(repo, "switch", "-q", "--detach")
+    c = doctor.check_repo(in_repo(repo, repo))
+    assert (c.status, c.detail) == ("warn", f"{repo.name} on no branch (detached HEAD)")
+    assert c.hint.startswith("git switch ")
+
+
+def test_uncommitted_changes_are_not_a_finding(repo):
+    """A task starts from your latest commit, never your working tree, and init's own files are
+    uncommitted until you commit them: a dirty tree is normal here."""
+    (repo / "notes.txt").write_text("draft\n")
+    Project.init(repo)
+    assert doctor.check_repo(in_repo(repo, repo)).status == "ok"

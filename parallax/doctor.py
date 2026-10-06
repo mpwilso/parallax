@@ -67,6 +67,7 @@ class Machine:
     path: str = field(default_factory=lambda: os.environ.get("PATH", ""))
     key: Path = field(default_factory=key_path)
     needed: list[tuple[str, str]] = field(default_factory=_needed)
+    cwd: Path = field(default_factory=Path.cwd)  # the repo doctor checks is the one it runs in
 
 
 @dataclass
@@ -177,7 +178,26 @@ def check_signing_key(m: Machine) -> Check:
     return Check("signing key", _home(key), OK)
 
 
-CHECKS = (check_platform, check_sandbox, check_login, check_tools, check_windows, check_approval_key, check_signing_key)
+def check_repo(m: Machine) -> Check:
+    """The repo doctor runs in. Every task starts from its latest commit, and Accept and merge lands on
+    the branch it's on. Uncommitted changes aren't a finding: a task starts from the commit, never the
+    working tree, and init's own files stay uncommitted until you commit them."""
+    git = ["git", "-C", str(m.cwd)]
+    top = (m.run(git + ["rev-parse", "--show-toplevel"]) or "").strip()
+    if not top:
+        return Check("repo", "not in a git repo: run doctor in your repo to check it too", INFO)
+    name = Path(top).name
+    if m.run(git + ["rev-parse", "-q", "--verify", "HEAD^{commit}"]) is None:
+        return Check("repo", f"{name} has no commits", FAIL, "commit something first: every task starts from your latest commit")
+    branch = (m.run(git + ["symbolic-ref", "--short", "-q", "HEAD"]) or "").strip()
+    if not branch:
+        return Check("repo", f"{name} on no branch (detached HEAD)", WARN,
+                     "git switch <branch> before you accept: Accept and merge lands on the branch you're on")
+    return Check("repo", f"{name} on {branch}", OK)
+
+
+CHECKS = (check_platform, check_sandbox, check_login, check_tools, check_windows, check_approval_key, check_signing_key,
+          check_repo)
 
 
 def run(m: Machine | None = None) -> list[Check]:
