@@ -68,6 +68,7 @@ class Machine:
     key: Path = field(default_factory=key_path)
     needed: list[tuple[str, str]] = field(default_factory=_needed)
     cwd: Path = field(default_factory=Path.cwd)  # the repo doctor checks is the one it runs in
+    policy: object | None = field(default_factory=_policy)  # its policy, when it's a Parallax project
 
 
 @dataclass
@@ -196,13 +197,48 @@ def check_repo(m: Machine) -> Check:
     return Check("repo", f"{name} on {branch}", OK)
 
 
+TEST_RUNNER_FIX = ('set [build] setup to make a venv with pytest at $PARALLAX_VENV, like '
+                   'uv venv "$PARALLAX_VENV" && uv pip install --python "$PARALLAX_VENV" pytest')
+HAS_PYTEST = "import importlib.util; print(importlib.util.find_spec('pytest') is not None)"
+
+
+def check_test_runner(m: Machine) -> Check | None:
+    """The plan's tests run under [check] test_command with a plain PATH: the task's venv first when
+    [build] setup makes one, then the system's folders. Without setup, the python found there must
+    have pytest, or every test run comes to you as one that couldn't run. With setup, the venv is made
+    per task, as you, and doctor doesn't run setup to look. Nothing to say when it isn't pytest."""
+    if m.policy is None:
+        return None
+    command = m.policy.check["test_command"]
+    program = next(iter(tools.commands(command)), "")
+    via_python = program.startswith("python") and re.search(r"(^|\s)-m\s+pytest(\s|$)", command)
+    if program != "pytest" and not via_python:
+        return None
+    if m.policy.build["setup"].strip():
+        return Check("test runner", "pytest comes from [build] setup's venv: make sure setup installs it", INFO)
+    from .build import scrubbed_env  # the PATH the tests get, without a venv
+    path = "PATH=" + scrubbed_env(None, {"PATH": m.path})["PATH"]
+    if program == "pytest":  # found, never run: pytest --version would load the repo's conftest as you
+        found = m.run(["env", path, "sh", "-c", 'command -v "$1"', "sh", "pytest"])
+        return Check("test runner", "pytest found", OK) if (found or "").strip() else \
+            Check("test runner", "no pytest on the tests' PATH", FAIL, TEST_RUNNER_FIX)
+    # -I: not your user site-packages, which the sandbox hides from the tests
+    has = (m.run(["env", path, program, "-I", "-c", HAS_PYTEST]) or "").strip()
+    if has == "True":
+        return Check("test runner", f"{program} has pytest", OK)
+    if has == "False":
+        return Check("test runner", f"{program} has no pytest", FAIL, TEST_RUNNER_FIX)
+    return Check("test runner", f"no {program} on the tests' PATH", FAIL, TEST_RUNNER_FIX)
+
+
 CHECKS = (check_platform, check_sandbox, check_login, check_tools, check_windows, check_approval_key, check_signing_key,
-          check_repo)
+          check_repo, check_test_runner)
 
 
 def run(m: Machine | None = None) -> list[Check]:
+    """Every check that has something to say here."""
     m = m or Machine()
-    return [c(m) for c in CHECKS]
+    return [c for c in (check(m) for check in CHECKS) if c is not None]
 
 
 def report(checks: list[Check]) -> list[str]:

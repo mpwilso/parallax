@@ -32,7 +32,7 @@ def machine(tmp_path, platform="linux", osrelease=WSL2, tools=("bwrap", "socat",
     return doctor.Machine(platform=platform, read=lambda p: text.get(p, ""), exists=lambda p: p in files,
                           which=lambda b: f"/usr/bin/{b}" if b in tools else None, run=run, path=path,
                           key=tmp_path / "config" / "parallax" / "key", needed=list(doctor.tools.needed(None, platform)),
-                          cwd=tmp_path)
+                          cwd=tmp_path, policy=None)
 
 
 def by_name(checks):
@@ -296,3 +296,61 @@ def test_uncommitted_changes_are_not_a_finding(repo):
     (repo / "notes.txt").write_text("draft\n")
     Project.init(repo)
     assert doctor.check_repo(in_repo(repo, repo)).status == "ok"
+
+
+# the test runner -----------------------------------------------------------------------------
+
+def with_policy(tmp_path, text="", python=None):
+    """A machine in a project with this policy. python: what the tests' python says about pytest
+    (True, False), or None for no python on the tests' PATH."""
+    from parallax.policy import Policy
+    import tomllib
+    m = machine(tmp_path)
+    m.policy = Policy.from_dict(tomllib.loads(text))
+    seen = []
+
+    def run(argv):
+        seen.append(argv)
+        if argv[0] == "env" and python is not None:
+            return f"{python}\n"
+        return None
+
+    m.run = run
+    return m, seen
+
+
+def test_no_project_or_tests_that_arent_pytest_say_nothing(tmp_path):
+    assert doctor.check_test_runner(machine(tmp_path)) is None
+    m, seen = with_policy(tmp_path, '[check]\ntest_command = "npm test -- {tests}"\n')
+    assert doctor.check_test_runner(m) is None and seen == []
+    assert "test runner" not in by_name(doctor.run(machine(tmp_path)))
+
+
+def test_without_setup_the_tests_python_must_have_pytest(tmp_path):
+    m, seen = with_policy(tmp_path, python=True)
+    c = doctor.check_test_runner(m)
+    assert (c.name, c.status, c.detail) == ("test runner", "ok", "python has pytest")
+    [argv] = seen  # the plain PATH the tests get, isolated from your user site, which the sandbox hides
+    assert argv[1].startswith("PATH=/usr/local/bin:/usr/bin:/bin") and argv[2:4] == ["python", "-I"]
+
+    c = doctor.check_test_runner(with_policy(tmp_path, python=False)[0])
+    assert (c.status, c.detail) == ("fail", "python has no pytest")
+    assert c.hint == doctor.TEST_RUNNER_FIX
+    c = doctor.check_test_runner(with_policy(tmp_path, python=None)[0])
+    assert (c.status, c.detail) == ("fail", "no python on the tests' PATH")
+    assert c.hint == doctor.TEST_RUNNER_FIX
+
+
+def test_a_test_command_that_runs_pytest_itself_needs_it_on_that_path(tmp_path):
+    m, seen = with_policy(tmp_path, '[check]\ntest_command = "pytest --junitxml={junit} {tests}"\n', python="/usr/bin/pytest")
+    assert doctor.check_test_runner(m).detail == "pytest found"
+    assert seen[0][2:] == ["sh", "-c", 'command -v "$1"', "sh", "pytest"]  # found, never run: its conftest is repo code
+    c = doctor.check_test_runner(with_policy(tmp_path, '[check]\ntest_command = "pytest {tests}"\n')[0])
+    assert (c.status, c.detail) == ("fail", "no pytest on the tests' PATH")
+
+
+def test_with_setup_the_venv_is_made_per_task_so_it_is_not_checked(tmp_path):
+    m, seen = with_policy(tmp_path, '[build]\nsetup = "make venv"\n', python=False)
+    c = doctor.check_test_runner(m)
+    assert (c.status, c.detail) == ("info", "pytest comes from [build] setup's venv: make sure setup installs it")
+    assert seen == []  # setup runs as you, per task: doctor never runs it
