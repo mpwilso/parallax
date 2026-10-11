@@ -34,6 +34,7 @@ Search the repo for an existing helper, test fixture, or pattern first. Reuse be
 
 - No em dashes in docs, README, or CLI output.
 - Plain, direct wording. One-line CLI confirmations are lowercase and short. Reports use the output shape in docs/parallax.md.
+- The UI: every element earns its place, the next action is always obvious, and what needs the person outranks everything else. No dashboards, charts or decoration.
 
 ## Original work
 

@@ -25,7 +25,7 @@ def markdown_files() -> list[Path]:
 
 def test_the_markdown_files_are_found_with_or_without_git():
     names = {p.relative_to(ROOT).as_posix() for p in markdown_files()}
-    assert {"README.md", "CLAUDE.md", "REVIEW.md", "docs/PRODUCT.md"} <= names
+    assert {"README.md", "CLAUDE.md", "REVIEW.md", "docs/using.md"} <= names
 
 
 def slug(heading: str) -> str:
@@ -95,10 +95,10 @@ def test_parallax_reviews_itself_with_the_general_template_plus_one_pass_for_its
     assert "Parallax" not in review.TEMPLATE.split("## Passes", 1)[1]  # no Parallax rule in the general passes
 
 
-def test_the_readme_and_product_doc_describe_what_the_last_batch_built():
+def test_the_using_doc_describes_what_the_last_batch_built():
     """Merging and how long it takes, the over-limit budget question, the overlap heads-up, the conflict
     commands, a send-back changing only what you name, and a merged card without its worktree."""
-    for name in ("docs/using.md", "docs/PRODUCT.md"):  # the README's Day to day links docs/using.md for these
+    for name in ("docs/using.md",):  # the README's Day to day links docs/using.md for these
         text = " ".join((ROOT / name).read_text(encoding="utf-8").split())
         for said in ("Merging", "usually takes", "the median of the last five", "Allow $8 and launch",
                      "use the limit", "heads-up", "git merge --ff-only", "changes only what", "worktree",

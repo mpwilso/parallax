@@ -2,6 +2,10 @@
 
 The short version is in the README's [Day to day](../README.md#day-to-day). This is the rest.
 
+## The page
+
+It works by keyboard alone, with a visible focus outline on everything you can tab to, and in a narrow window. It follows your system's light or dark theme, or the one picked in the header. Body and status text meet WCAG AA contrast (4.5:1) in both themes, every stage symbol has a name (like "Maker: failed"), and with reduced motion on, nothing moves.
+
 ## The task box
 
 If what you paste reads like a list of build steps (numbered steps naming branches, commits and batches) rather than one task, the box says so first: "This looks like a list of build steps. Send it as one task anyway?" It's a heads-up: you can send it anyway.
