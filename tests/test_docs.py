@@ -107,8 +107,11 @@ def test_the_using_doc_describes_what_the_last_batch_built():
 
 
 def test_the_readme_names_the_current_release():
-    """The README's release link follows pyproject's version, so a version bump can't leave it behind
-    (it said v0.2.0 for a day after v0.2.1 shipped)."""
+    """The README's release link and install line follow pyproject's version, so a version bump can't
+    leave them behind (the link said v0.2.0 for a day after v0.2.1 shipped)."""
     version = re.search(r'^version = "([^"]+)"', (ROOT / "pyproject.toml").read_text(encoding="utf-8"), re.M)[1]
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
     link = f"latest release is [v{version}](https://github.com/mpwilso/parallax/releases/tag/v{version})"
-    assert link in (ROOT / "README.md").read_text(encoding="utf-8")
+    assert link in readme
+    install = f'uv tool install "parallax[claude] @ git+https://github.com/mpwilso/parallax@v{version}"'
+    assert install in readme and readme.count("git+https://github.com/mpwilso/parallax@") == 1

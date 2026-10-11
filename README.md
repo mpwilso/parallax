@@ -11,13 +11,15 @@
 
 Status: A portfolio project, built to show how I design, test and judge an AI tool, and a working prototype I use on this repo. In one eval run, 10 of 11 real open-source fixes passed their maintainers' hidden tests. The runs are in docs/, including the misses.
 
-Parallax is a local tool for developers who use AI coding agents. The agents plan, build and check the work on their own, inside a sandbox. Parallax checks what they produce and only comes to you when a person has to decide. For most tasks that's one decision: accept the result or send it back.
-
-Parallax is the second of three tools. [Loupe](https://github.com/mpwilso/loupe) writes the story, Parallax builds it under a gated agent loop and keeps the record, and [ISR](https://github.com/mpwilso/isr) tells the person accepting it what is left. Each runs on its own, and they have been run in that order once, on one change: [ISR's run log](https://github.com/mpwilso/isr/blob/master/docs/run-log.md#the-first-story-first-run-on-a-real-parallax-change-e3108e-2026-10-05).
-
 <p align="center"><img src="docs/brand/demo.gif" alt="The app: a task typed in, Focus, Reticle, Maker and Second Eye taking their turns, the card turning Ready, and the accept" width="800"></p>
 
 <p align="center"><sub>Demo with scripted agents, so it runs in seconds and costs nothing. Real runs are in <a href="docs/ui-runs/">docs/ui-runs/</a>.</sub></p>
+
+Cost of entry: Linux or WSL2 only (macOS is untested), root `apt` installs, a `sysctl` that relaxes AppArmor's limit on unprivileged user namespaces (Ubuntu 24.04 and later), Node 22, and a logged-in Claude Code. [Setup](#setup) has every step.
+
+Parallax is a local tool for developers who use AI coding agents. The agents plan, build and check the work on their own, inside a sandbox. Parallax checks what they produce and only comes to you when a person has to decide. For most tasks that's one decision: accept the result or send it back.
+
+Parallax is the second of three tools. [Loupe](https://github.com/mpwilso/loupe) writes the story, Parallax builds it under a gated agent loop and keeps the record, and [ISR](https://github.com/mpwilso/isr) tells the person accepting it what is left. Each runs on its own, and they have been run in that order once, on one change: [ISR's run log](https://github.com/mpwilso/isr/blob/master/docs/run-log.md#the-first-story-first-run-on-a-real-parallax-change-e3108e-2026-10-05).
 
 | 3 min 25 s from request to Ready | $0.92 in agent costs (estimate) | 1 decision: accept |
 |:---:|:---:|:---:|
@@ -39,7 +41,7 @@ AI can now write code faster than people can review it. The bottleneck has moved
   <img src="docs/brand/party-animated-light.svg" alt="Focus, Reticle, Maker, Second Eye and Field" width="450">
 </picture>
 
-**Focus** drafts the intent and plan. **Reticle** writes tests of what you asked, before the build; Maker can't see or change them. **Maker** builds in the sandbox. **Second Eye** is the blind checker: it sees only the result, never the making. **Field** is the UI tester, which uses your app in a real browser and leaves tests behind. Here they take turns the way a task moves through them; in the UI a portrait moves only while its agent is working on that task, and everything else is still.
+**Focus** drafts the intent and plan. **Reticle** writes tests of what you asked, before the build; Maker can't see or change them. **Maker** builds in the sandbox. **Second Eye** is the blind checker: it sees only the result, never the making. **Field** is the UI tester, which uses your app in a real browser and leaves tests behind. In the UI a portrait moves only while its agent is working.
 
 ## What's distinctive
 
@@ -50,18 +52,11 @@ AI can now write code faster than people can review it. The bottleneck has moved
 - **What an agent may reach is part of what you approve.** Network access, files outside its workspace and new dependencies are listed in the plan, and the sandbox is tested before every launch. A plan that asks for more never starts without you.
 - **The reviewer never sees how the work was made.** Second Eye gets only the goal, the review rules and the change itself, never the plan or the builder's notes. A test pins that.
 - **Code decides what happens next, not a model.** Every step goes into a tamper-evident log, and every approval is signed with a key the agents can't read.
-
-## Many ways in, one way through
-
-You can start work from the app or the terminal, and pick it back up several ways. Every one of them passes the same checks before any agent runs: your signed approval, a spending cap, a test of the sandbox, and an entry in the log. One test proves that for every way in.
+- **Many ways in, one way through.** Start work from the app or the terminal, and pick it back up several ways: every one passes the same checks before any agent runs (your signed approval, a spending cap, a test of the sandbox, an entry in the log). One test proves that for every way in.
 
 ## Day to day
 
-1. **Start it.** In your repo, run `parallax ui` and open the link it prints. The link stays the same between runs.
-2. **Type the task** into the box at the top and press Enter. That's all.
-3. **Watch the list.** Waiting on you: the only part that needs you, riskiest first. Working: which agent has each task, and what it has spent against its cap.
-4. **Open a card.** It shows the bottom line, the one question with its options and which one is recommended, what nobody looked at, and the evidence. Ask about the task in the box on the card: a model answers from that task's record only, and can't change anything.
-5. **Accept, or accept and merge.** Accept commits the reviewed change to the task's branch and shows the merge command, which you run. Accept and merge also lands it on your base branch, once your project's tests pass on the exact commit your base branch would become; Parallax never merges without your click, and never pushes.
+In your repo, run `parallax ui`, type the task, and answer the one card that comes back. The steps, the keys, the terminal commands, merging, Stop, cleanup and spending: [docs/using.md](docs/using.md).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/ui-runs/final-ui/ready-dark.png">
@@ -69,17 +64,6 @@ You can start work from the app or the terminal, and pick it back up several way
 </picture>
 
 **Ready** means the listed checks passed: the plan's tests ran on the exact reviewed tree, the card says for each outcome in the intent which test that ran covers it or that none does, and Second Eye found nothing blocking. It does not mean the code is bug-free. **Needs you** means one decision only you can make; the card says whose call it is and why a person has to make it. Anything that sends work back, drops it or accepts a risk asks for a one-line reason, and Focus redrafts from it.
-
-<details>
-<summary>Keyboard and terminal</summary>
-
-The page follows your system's light or dark theme; the picker in the header overrides it, in that browser only. Keys in the app: `/` type a task, `n` next waiting, `j` and `k` move, `a` then `Enter` accept, `r` reject, `1` to `9` then `Enter` pick an option, `d` the change, `Esc` back.
-
-The terminal has the same: `parallax do "..."`, `parallax inbox`, `parallax show <task>`, `parallax accept <task>`, `parallax reject <task> --reason "..."`, `parallax decide <task> <option>`, `parallax stats`.
-
-</details>
-
-Merging, conflicts, Stop, cleanup, where drafts live, spending, and the cards that tell you something first: [docs/using.md](docs/using.md).
 
 ## Status and known limits
 
@@ -121,11 +105,11 @@ Linux, or Windows through WSL2. On Windows, make the distro first: [docs/wsl.md]
    curl -fsSL https://claude.ai/install.sh | bash
    source ~/.local/bin/env && claude
    ```
-3. Parallax itself:
+3. Parallax itself, from GitHub (the `parallax` on PyPI is an unrelated SSH tool):
    ```bash
-   git clone https://github.com/mpwilso/parallax ~/code/parallax
-   uv tool install --editable "$HOME/code/parallax[claude]"
+   uv tool install "parallax[claude] @ git+https://github.com/mpwilso/parallax@v0.2.2"
    ```
+   To work on Parallax or run its evals, clone it and install that instead: `git clone https://github.com/mpwilso/parallax ~/code/parallax`, then `uv tool install --editable "$HOME/code/parallax[claude]"`.
 4. Check the machine:
    ```bash
    parallax doctor

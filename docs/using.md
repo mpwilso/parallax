@@ -1,10 +1,24 @@
 # Using Parallax
 
-The short version is in the README's [Day to day](../README.md#day-to-day). This is the rest.
+The one-line version is the README's [Day to day](../README.md#day-to-day). This is the rest.
+
+## Day to day
+
+1. **Start it.** In your repo, run `parallax ui` and open the link it prints. The link stays the same between runs.
+2. **Type the task** into the box at the top and press Enter. That's all.
+3. **Watch the list.** Waiting on you: the only part that needs you, riskiest first. Working: which agent has each task, and what it has spent against its cap.
+4. **Open a card.** It shows the bottom line, the one question with its options and which one is recommended, what nobody looked at, and the evidence. Ask about the task in the box on the card: a model answers from that task's record only, and can't change anything.
+5. **Accept, or accept and merge.** Accept commits the reviewed change to the task's branch and shows the merge command, which you run. Accept and merge also lands it on your base branch, once your project's tests pass on the exact commit your base branch would become; Parallax never merges without your click, and never pushes.
+
+## Keys and the terminal
+
+Keys in the app: `/` type a task, `n` next waiting, `j` and `k` move, `a` then `Enter` accept, `r` reject, `1` to `9` then `Enter` pick an option, `d` the change, `Esc` back.
+
+The terminal has the same: `parallax do "..."`, `parallax inbox`, `parallax show <task>`, `parallax accept <task>`, `parallax reject <task> --reason "..."`, `parallax decide <task> <option>`, `parallax stats`.
 
 ## The page
 
-It works by keyboard alone, with a visible focus outline on everything you can tab to, and in a narrow window. It follows your system's light or dark theme, or the one picked in the header. Body and status text meet WCAG AA contrast (4.5:1) in both themes, every stage symbol has a name (like "Maker: failed"), and with reduced motion on, nothing moves.
+It works by keyboard alone, with a visible focus outline on everything you can tab to, and in a narrow window. It follows your system's light or dark theme; the picker in the header overrides it, in that browser only. Body and status text meet WCAG AA contrast (4.5:1) in both themes, every stage symbol has a name (like "Maker: failed"), and with reduced motion on, nothing moves.
 
 ## The task box
 
