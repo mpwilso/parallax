@@ -2,6 +2,17 @@
 
 What changed in each release. The full notes for each are on the [releases page](https://github.com/mpwilso/parallax/releases).
 
+## Unreleased
+
+Changed:
+- The UI reads the ledger once per change, not several times per task on every refresh: parsed entries are kept while the file's size and modified time stay the same, and dropped on every write. Entries a read returns are shared, so they're read-only.
+- One git helper, `parallax/git.py`, replaces six. Error messages fall back to git's stdout when stderr is empty, and every module reads git's output as UTF-8.
+
+Docs:
+- The README shows the demo first, says what it takes to start (Linux or WSL2, root apt installs, the AppArmor sysctl, Node 22, a Claude Code login), and installs from the release tag with uv: the `parallax` on PyPI is an unrelated SSH tool. The day-to-day steps and keys moved to `docs/using.md`.
+- `docs/macos.md`: what running on macOS with srt would take, and a plan. Not supported yet.
+- CLAUDE.md points at `docs/parallax.md`; `docs/history.md` cites eval run 8e3074. `evals/README.md` lists the three runs no doc linked. `docs/PRODUCT.md` and seven unused screenshots (1.1 MB) are gone.
+
 ## 0.2.2 (2026-10-11)
 
 Fixed:
