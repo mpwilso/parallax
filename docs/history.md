@@ -41,4 +41,5 @@ blind checker was right 8 times, missed 1 bad fix and raised 1 false alarm. Repo
 [67faab](../evals/results/2026-09-28-67faab.md), [73982e](../evals/results/2026-09-28-73982e.md).
 These committed results came from an earlier harness that has since been removed, with the
 old path it ran on. The cases in [evals/cases.toml](../evals/cases.toml) are the case set for the
-harness on the current pipeline ("Evals" in [plan.md](plan.md)), which has no paid run yet.
+harness on the current pipeline ("Evals" in [plan.md](plan.md)). Its run 8e3074 (2026-10-01)
+passed 10 of 11: [evals.md](evals.md#results).

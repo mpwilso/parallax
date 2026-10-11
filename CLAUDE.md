@@ -1,6 +1,6 @@
 # Parallax
 
-Agents do the work. You make the calls. The agents, wherever a person sees them: Focus (drafts the intent and plan), Reticle (writes tests of what was asked, before the build; Maker can't see or change them), Maker (builds in the sandbox), Second Eye (the blind checker; sees only the result, never the making), Field (the UI tester). Scope is reserved for a future read-only investigator. Module and ledger names stay as they are. Read README.md for the thesis, docs/direction.md for the brief, and docs/plan.md for the build order.
+Agents do the work. You make the calls. The agents, wherever a person sees them: Focus (drafts the intent and plan), Reticle (writes tests of what was asked, before the build; Maker can't see or change them), Maker (builds in the sandbox), Second Eye (the blind checker; sees only the result, never the making), Field (the UI tester). Scope is reserved for a future read-only investigator. Module and ledger names stay as they are. Read README.md for the thesis and docs/parallax.md for how it works. docs/direction.md and docs/plan.md are design notes, kept as a record; where they disagree with docs/parallax.md, docs/parallax.md wins.
 
 The test for every feature: "Parallax is hands-free. Execution happens without me. I only make judgment calls, and when I make them, I have everything I need to make them well. Any feature that adds work for me instead of removing it is wrong."
 
@@ -33,12 +33,16 @@ Search the repo for an existing helper, test fixture, or pattern first. Reuse be
 ## Writing
 
 - No em dashes in docs, README, or CLI output.
-- Plain, direct wording. One-line CLI confirmations are lowercase and short. Reports use the output shape in docs/direction.md.
+- Plain, direct wording. One-line CLI confirmations are lowercase and short. Reports use the output shape in docs/parallax.md.
 
 ## Original work
 
 Only original work goes in this repo. Don't copy code, text or UI from other projects or products. Credit ideas in docs/prior-art.md.
 
-## Current milestone
+## Testing
 
-Follow docs/plan.md. M7 to M14 are built, with the UI pass (the queue and the decision card), the UI tester, session cost records, and the old Milestone 2 path cut. Next is M15: the light conductor.
+Don't add a second -q to pytest: scripts/test.sh already passes one, and stacked quiet flags hide the summary line.
+
+## Current state
+
+M7 to M14 are built, with the UI pass (the queue and the decision card), the UI tester, session cost records, the eval harness on the current pipeline, and the old Milestone 2 path cut. What's planned is in the README's "What's next"; docs/history.md has the milestones.
