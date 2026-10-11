@@ -8,11 +8,18 @@ on:
 permissions:
   contents: read
 
+# a newer push to a branch cancels its older run; master's runs always finish
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
 jobs:
   test:
     # twice, side by side: from the checkout, and from a second clone at a path with a space in it, so
     # no test depends on where the repo lives (four once failed in a scratch copy). Neither stops the other
     name: tests from ${{ matrix.where }}
+    # a pull request from this repo already ran on its push, so only one from a fork runs again here
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     strategy:
       fail-fast: false
       matrix:
