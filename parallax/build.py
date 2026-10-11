@@ -13,6 +13,7 @@ tokens, and CLAUDE_CODE_SUBPROCESS_ENV_SCRUB set. The build never pauses; the ma
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -85,8 +86,9 @@ def _setup_venv(project: Project, task_id: str, worktree: Path, home: Path) -> P
     if not command:
         return None
     venv = home / "venv"
-    if venv.exists():
+    if installs.ready(venv):
         return venv
+    shutil.rmtree(venv, ignore_errors=True)  # half built, or not there: setup makes it from nothing
     lacking = tools.for_command(command, WHY_SETUP)
     if lacking:  # named before anything runs, with its fix, never a shell's raw "not found"
         raise tools.MissingTool(lacking)
@@ -130,7 +132,7 @@ def prepare(project: Project, task_id: str, setup: bool = True, launching: bool 
     home = sandbox.task_home(project.root, task_id)
     home.mkdir(parents=True, exist_ok=True)
     os.chmod(home, 0o700)
-    venv = _setup_venv(project, task_id, wt, home) if setup else (home / "venv" if (home / "venv").exists() else None)
+    venv = _setup_venv(project, task_id, wt, home) if setup else (home / "venv" if installs.ready(home / "venv") else None)
     installs.place(venv, wt)  # files the install generated, which git ignores: the maker's tests need them too
     reads = [str(Path(r).expanduser()) for r in plan["outside_reads"]]
     refused = sandbox.refused_reads(reads)

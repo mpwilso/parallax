@@ -252,7 +252,7 @@ def score(project: Project, task_id: str, case: Case, cache: Path, runner=None) 
     work = sandbox.task_home(project.root, task_id)
     work.mkdir(parents=True, exist_ok=True)
     final = staged[-1] if staged else tree.stage(wt, base, work / "eval.index").tree
-    venv = work / "venv" if (work / "venv").exists() else None
+    venv = work / "venv" if installs.ready(work / "venv") else None
     hidden = hidden_tests(case, cache)
     command = project.policy.check["test_command"]
     runs = {}

@@ -137,6 +137,12 @@ def record(venv: Path, where: Path) -> dict:
     return data
 
 
+def ready(venv: Path) -> bool:
+    """A venv setup finished: the record is written only after a setup that succeeded. A venv
+    without one is half built (Parallax was killed mid-setup, say) and is made again."""
+    return (venv / RECORD).is_file()
+
+
 def _load(venv: Path | None) -> dict:
     try:
         return json.loads((venv / RECORD).read_text(encoding="utf-8")) if venv else {}

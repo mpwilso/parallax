@@ -145,3 +145,17 @@ def test_a_setup_that_never_ends_is_stopped_and_fails_plainly(repo, monkeypatch)
     assert time.monotonic() - started < 30
     assert kinds(proj, "setup.ran")[0]["data"]["exit"] == 124
     assert not (build.sandbox.task_home(proj.root, tid) / "venv").exists()
+
+
+def test_a_venv_left_without_its_install_record_is_made_again(repo):
+    """Parallax killed mid-setup leaves a venv with no record (written only when setup succeeds).
+    The next build takes it for half built and runs setup again; one with its record is ready."""
+    proj, tid = task_with(repo, SRC, VENV)
+    half = build.sandbox.task_home(proj.root, tid) / "venv"
+    (half / "bin").mkdir(parents=True)
+    (half / "left-over").write_text("from the killed run\n")
+    p = build.prepare(proj, tid)
+    assert len(kinds(proj, "setup.ran")) == 1
+    assert (p.venv / installs.RECORD).is_file() and not (p.venv / "left-over").exists()
+    build.prepare(proj, tid)
+    assert len(kinds(proj, "setup.ran")) == 1  # with its record, it's ready
