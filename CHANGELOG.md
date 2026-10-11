@@ -2,7 +2,7 @@
 
 What changed in each release. The full notes for each are on the [releases page](https://github.com/mpwilso/parallax/releases).
 
-## Unreleased
+## 0.2.3 (2026-10-11)
 
 Changed:
 - The UI reads the ledger once per change, not several times per task on every refresh: parsed entries are kept while the file's size and modified time stay the same, and dropped on every write. Entries a read returns are shared, so they're read-only.
