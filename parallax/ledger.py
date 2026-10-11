@@ -106,9 +106,19 @@ class Ledger:
             "prev": self._last_hash(),
         }
         entry = {**body, "hash": _hash(body)}
+        self._drop_torn_tail()
         with self.path.open("a") as f:
             f.write(json.dumps(entry, sort_keys=True) + "\n")
         return entry
+
+    def _drop_torn_tail(self) -> None:
+        """The caller holds the lock. A tail with no newline is a line whose writer died mid-write:
+        no writer can finish it now, entries() never read it, and the new entry chains past it.
+        Appending after it would join the two into one line that no read can parse, so it goes."""
+        raw = self.path.read_bytes()
+        if raw and not raw.endswith(b"\n"):
+            with self.path.open("r+b") as f:
+                f.truncate(raw.rfind(b"\n") + 1)
 
     def verify(self) -> tuple[bool, str]:
         prev = GENESIS

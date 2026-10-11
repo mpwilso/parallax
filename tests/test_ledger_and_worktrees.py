@@ -40,6 +40,21 @@ def test_ledger_detects_tampering(repo):
     assert not ok and "line 1" in msg
 
 
+def test_a_line_torn_by_a_crash_is_dropped_before_the_next_append(tmp_path):
+    """A writer that died mid-line leaves a tail with no newline. The next append chains to the
+    last whole entry, so the torn tail goes, instead of joining the new line and breaking every read."""
+    from parallax.ledger import Ledger
+    ledger = Ledger(tmp_path / "ledger.jsonl")
+    first = ledger.append("task.created", "human")
+    with ledger.path.open("a") as f:
+        f.write('{"id": "torn", "kind": "task.dra')
+    second = ledger.append("task.approved", "human")
+    assert [e["id"] for e in ledger.entries()] == [first["id"], second["id"]]
+    assert second["prev"] == first["hash"]
+    assert ledger.verify() == (True, "ledger intact")
+    assert ledger.path.read_text().endswith("\n")
+
+
 def ids(monkeypatch, *prefixes):
     """uuid4, drawing task ids in this order: a clash on purpose, not by a one-in-a-million chance."""
     import uuid
