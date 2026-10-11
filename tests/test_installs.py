@@ -122,3 +122,26 @@ def test_a_repo_without_setup_or_without_an_install_is_unchanged(repo):
     proj, tid = task_with(repo, SRC, VENV)  # a venv with nothing of the repo's installed
     p = build.prepare(proj, tid)
     assert kinds(proj, "setup.ran")[0]["data"]["roots"] == [] and installs.env(p.venv, p.worktree) == {}
+
+
+def test_a_setup_that_made_the_venv_then_failed_runs_again_on_the_retry(repo):
+    """A half-built venv was kept, so the retry skipped setup and ran on it."""
+    from parallax.core import ParallaxError
+    proj, tid = task_with(repo, SRC, 'mkdir -p "$PARALLAX_VENV" && echo the mirror is down >&2 && exit 1')
+    for _ in range(2):
+        with pytest.raises(ParallaxError, match="the mirror is down"):
+            build.prepare(proj, tid)
+    assert [e["data"]["exit"] for e in kinds(proj, "setup.ran")] == [1, 1]
+
+
+def test_a_setup_that_never_ends_is_stopped_and_fails_plainly(repo, monkeypatch):
+    import time
+    from parallax.core import ParallaxError
+    monkeypatch.setattr(installs, "SETUP_TIMEOUT", 1)
+    proj, tid = task_with(repo, SRC, 'mkdir -p "$PARALLAX_VENV" && sleep 60')
+    started = time.monotonic()
+    with pytest.raises(ParallaxError, match=r"the \[build\] setup command failed: it ran past 1 second"):
+        build.prepare(proj, tid)
+    assert time.monotonic() - started < 30
+    assert kinds(proj, "setup.ran")[0]["data"]["exit"] == 124
+    assert not (build.sandbox.task_home(proj.root, tid) / "venv").exists()

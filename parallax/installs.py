@@ -17,7 +17,9 @@ So after setup Parallax reads the install's own records, with no per-repo rules:
 from __future__ import annotations
 
 import json
+import os
 import re
+import signal
 import shutil
 import subprocess
 from pathlib import Path, PurePosixPath
@@ -28,6 +30,7 @@ RECORD = "parallax-install.json"
 GENERATED = "parallax-generated"
 SKIP_PARTS = {"__pycache__", "build", "dist", ".eggs", ".tox", ".nox", ".venv", "node_modules", ".git"}
 MAX_GENERATED = 200
+SETUP_TIMEOUT = 1800  # seconds: as long as a test run gets (testrun.py)
 
 
 def checkout(repo: Path, commit: str, dest: Path) -> None:
@@ -45,12 +48,33 @@ def make(command: str, repo: Path, commit: str, venv: Path, where: Path) -> tupl
     delete the checkout. Returns (the run, the record)."""
     checkout(repo, commit, where)
     env = {**tools.env(), "PARALLAX_VENV": str(venv), "PARALLAX_WORKTREE": str(where)}  # uv found in ~/.local/bin too
+    existed = venv.exists()
     try:
-        out = subprocess.run(command, shell=True, cwd=where, env=env, capture_output=True, text=True)
+        out = _run(command, where, env)
         found = record(venv, where) if out.returncode == 0 and venv.is_dir() else {}
     finally:
         shutil.rmtree(where, ignore_errors=True)
+    if out.returncode != 0 and not existed:  # half built: a retry would take it for done and skip setup
+        shutil.rmtree(venv, ignore_errors=True)
     return out, found
+
+
+def _run(command: str, where: Path, env: dict) -> subprocess.CompletedProcess:
+    """setup, stopped with everything it started once it runs past SETUP_TIMEOUT. That ends like a
+    failed setup: code 124 and a plain last line."""
+    proc = subprocess.Popen(command, shell=True, cwd=where, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            text=True, start_new_session=True)  # its own group, so a stop reaches what it started
+    try:
+        out, err = proc.communicate(timeout=SETUP_TIMEOUT)
+        return subprocess.CompletedProcess(command, proc.returncode, out, err)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except (OSError, AttributeError):  # no process groups (Windows): the shell at least
+            proc.kill()
+        out, err = proc.communicate()
+        span = f"{SETUP_TIMEOUT // 60} minutes" if SETUP_TIMEOUT >= 120 else f"{SETUP_TIMEOUT} second{'s' * (SETUP_TIMEOUT != 1)}"
+        return subprocess.CompletedProcess(command, 124, out, (err or "") + f"\nit ran past {span}, so it was stopped\n")
 
 
 def _site_packages(venv: Path) -> list[Path]:
