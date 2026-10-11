@@ -42,17 +42,22 @@ def test_ledger_detects_tampering(repo):
 
 def test_a_line_torn_by_a_crash_is_dropped_before_the_next_append(tmp_path):
     """A writer that died mid-line leaves a tail with no newline. The next append chains to the
-    last whole entry, so the torn tail goes, instead of joining the new line and breaking every read."""
+    last whole entry, so the torn tail moves to ledger.jsonl.torn, kept as written, instead of
+    joining the new line and breaking every read."""
     from parallax.ledger import Ledger
     ledger = Ledger(tmp_path / "ledger.jsonl")
     first = ledger.append("task.created", "human")
+    torn = '{"id": "torn", "kind": "task.dra'
     with ledger.path.open("a") as f:
-        f.write('{"id": "torn", "kind": "task.dra')
+        f.write(torn)
     second = ledger.append("task.approved", "human")
     assert [e["id"] for e in ledger.entries()] == [first["id"], second["id"]]
     assert second["prev"] == first["hash"]
     assert ledger.verify() == (True, "ledger intact")
     assert ledger.path.read_text().endswith("\n")
+    side = (tmp_path / "ledger.jsonl.torn").read_bytes().split(b"\n")
+    assert side[0].startswith(b"torn tail at 20") and side[0].endswith(b"Z, 32 bytes:")
+    assert side[1] == torn.encode() and side[2:] == [b""]  # the bytes exactly, then a newline
 
 
 def ids(monkeypatch, *prefixes):

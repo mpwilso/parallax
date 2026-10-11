@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sys
 import threading
 import uuid
@@ -114,11 +115,20 @@ class Ledger:
     def _drop_torn_tail(self) -> None:
         """The caller holds the lock. A tail with no newline is a line whose writer died mid-write:
         no writer can finish it now, entries() never read it, and the new entry chains past it.
-        Appending after it would join the two into one line that no read can parse, so it goes."""
+        Appending after it would join the two into one line that no read can parse, so it moves to
+        the side file (LEDGER.torn), kept as written, and only then leaves the ledger."""
         raw = self.path.read_bytes()
-        if raw and not raw.endswith(b"\n"):
-            with self.path.open("r+b") as f:
-                f.truncate(raw.rfind(b"\n") + 1)
+        if not raw or raw.endswith(b"\n"):
+            return
+        keep = raw.rfind(b"\n") + 1
+        tail = raw[keep:]
+        when = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        with self.path.with_name(self.path.name + ".torn").open("ab") as side:
+            side.write(f"torn tail at {when}, {len(tail)} bytes:\n".encode() + tail + b"\n")
+            side.flush()
+            os.fsync(side.fileno())  # saved for good before the ledger loses it
+        with self.path.open("r+b") as f:
+            f.truncate(keep)
 
     def verify(self) -> tuple[bool, str]:
         prev = GENESIS

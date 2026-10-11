@@ -5,7 +5,7 @@ What changed in each release. The full notes for each are on the [releases page]
 ## Unreleased
 
 Fixed:
-- A ledger line torn by a crash mid-write no longer breaks the ledger. The next entry used to join it, making a line no read could parse again; the torn tail is now cut before the next append. No whole entry is touched.
+- A ledger line torn by a crash mid-write no longer breaks the ledger. The next entry used to join it, making a line no read could parse again; the torn tail now moves, byte for byte, to `.parallax/ledger.jsonl.torn` before the next append. No whole entry is touched.
 - A `[build] setup` that made the venv and then failed left it behind, and the retry used it without running setup again. A failed setup now removes a venv it made.
 - `[build] setup` had no time limit, so a stalled install hung the build. It now stops after 30 minutes, the same as a test run, and fails like any other setup.
 - `parallax doctor` finds the project from a subfolder, and no longer leaves a ledger in a folder outside a project.
