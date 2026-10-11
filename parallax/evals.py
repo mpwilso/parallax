@@ -30,7 +30,8 @@ from pathlib import Path
 from typing import Callable
 
 from . import build, fingerprint, installs, lifecycle, lint, pilot, sandbox, status, testrun, tree
-from .core import POLICY_FILE, ParallaxError, Project, git_failed
+from .core import POLICY_FILE, ParallaxError, Project
+from .git import out as _git
 
 CASES_FILE = Path("evals") / "cases.toml"
 RESULTS_DIR = Path("evals") / "results"
@@ -77,13 +78,6 @@ def load_cases(root: Path, only: list[str] | None = None) -> list[Case]:
 
 
 # plumbing -------------------------------------------------------------------------------------
-
-def _git(cwd: Path, *args: str) -> str:
-    out = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace")
-    if out.returncode != 0:
-        raise git_failed(args, out.stderr or out.stdout)
-    return out.stdout.strip()
-
 
 def cache_repo(case: Case) -> Path:
     """A full clone of the upstream repo, fetched once and reused. No agent is ever given it."""

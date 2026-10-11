@@ -7,12 +7,13 @@ from __future__ import annotations
 import hashlib
 import os
 import re
-import subprocess
 import tomllib
 import uuid
 from pathlib import Path
 
 from . import status
+from .git import git_failed  # noqa: F401  (modules import it from here)
+from .git import out as _git
 from .ledger import Ledger
 from .policy import DEFAULT_POLICY, Policy
 
@@ -42,28 +43,6 @@ def refuse_inside_task(root: Path) -> None:
         raise ParallaxError("tasks can't create tasks or make decisions")
 
 
-GIT_WRONG = ("fatal:", "error:")
-
-
-def git_failed(args, stderr: str | bytes) -> ParallaxError:
-    """A failed git command, said with the command and git's own error. git writes progress lines such
-    as "Preparing worktree (new branch ...)" to stderr too, so the message starts at the first line
-    that says what went wrong, and leaves out hints. With no such line, it's all of stderr."""
-    if isinstance(stderr, bytes):
-        stderr = stderr.decode(errors="replace")
-    lines = [line.strip() for line in stderr.splitlines() if line.strip()]
-    first = next((i for i, line in enumerate(lines) if line.startswith(GIT_WRONG)), 0)
-    said = [line for line in lines[first:] if not line.startswith("hint:")]
-    return ParallaxError(f"git {' '.join(str(a) for a in args)} failed: {' '.join(said) or 'no error from git'}")
-
-
-def _git(repo: Path, *args: str) -> str:
-    # git speaks UTF-8; Windows' default (cp1252) crashes on diffs with characters like box drawing
-    result = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True,
-                            encoding="utf-8", errors="replace")
-    if result.returncode != 0:
-        raise git_failed(args, result.stderr)
-    return result.stdout.strip()
 
 
 SLUG_SKIP = {"a", "an", "the", "is", "are", "was", "were", "be", "for", "to", "of", "in", "on", "and", "or",

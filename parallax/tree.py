@@ -12,13 +12,13 @@ Checks that need no model, all against the approved plan:
 """
 from __future__ import annotations
 
-import os
 import re
 import subprocess
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from pathlib import Path, PurePosixPath
 
+from . import git
 from .core import ParallaxError, git_failed
 from .guard import is_protected
 
@@ -49,12 +49,19 @@ class Staged:
 
 
 def _git(wt: Path, *args: str, index: Path | None = None, text: bool = True) -> str:
-    env = {**os.environ, "GIT_INDEX_FILE": str(index)} if index else None
-    out = subprocess.run(["git", "-C", str(wt), *args], capture_output=True, env=env, text=text,
-                         encoding="utf-8" if text else None, errors="replace" if text else None)
-    if out.returncode != 0:
-        raise git_failed(args, out.stderr)
-    return out.stdout
+    """Unstripped: diffs and -z lists keep their last byte. index: a throwaway GIT_INDEX_FILE."""
+    return git.out(wt, *args, env={"GIT_INDEX_FILE": str(index)} if index else None, text=text, strip=False)
+
+
+def reviewed_diff(project, task_id: str) -> str:
+    """The reviewed tree against its base, once there is one; the worktree before that. What the
+    terminal, the card and the Ask box show as the change."""
+    from .status import attempt
+    staged = [e for e in attempt(project.ledger.entries(), task_id) if e["kind"] == "check.staged"]  # this attempt's
+    if not staged:
+        return project.diff(task_id)
+    t = project.task(task_id)
+    return git.run(project.git_at(task_id), "diff", t["base"], staged[-1]["data"]["tree"]).stdout.strip()
 
 
 def _matches(path: str, patterns: tuple[str, ...]) -> bool:

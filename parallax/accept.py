@@ -26,14 +26,8 @@ import time
 from pathlib import Path
 
 from . import lifecycle, lint, memcap, record, sandbox, secretscan, tools, tree
-from .core import ParallaxError, Project, git_failed, refuse_inside_task
-
-
-def _git(root: Path, *args: str, env: dict | None = None, input: str | None = None) -> str:
-    out = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, env=env, input=input)
-    if out.returncode != 0:
-        raise git_failed(args, out.stderr)
-    return out.stdout.strip()
+from .core import ParallaxError, Project, refuse_inside_task
+from .git import out as _git
 
 
 def _last(project: Project, task_id: str, kind: str) -> dict | None:
@@ -100,7 +94,7 @@ def accept(project: Project, task_id: str, reason: str = "", merging: bool = Fal
     rec.write_text(record.write(project, task_id, changed, plan), encoding="utf-8")
 
     with tempfile.TemporaryDirectory() as tmp:
-        env = {**os.environ, "GIT_INDEX_FILE": str(Path(tmp) / "index")}
+        env = {"GIT_INDEX_FILE": str(Path(tmp) / "index")}
         _git(project.root, "read-tree", reviewed, env=env)
         folder = lifecycle.task_dir(project, task_id)
         for f in sorted(folder.iterdir()):

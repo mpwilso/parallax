@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import ast
 import json
-import os
 import re
 import subprocess
 import time
@@ -28,7 +27,8 @@ from types import SimpleNamespace
 from typing import Callable
 
 from . import build, evals, installs, lifecycle, lint, reticle, review, sandbox
-from .core import POLICY_FILE, ParallaxError, Project, git_failed
+from . import git
+from .core import POLICY_FILE, ParallaxError, Project
 
 MAX_VERSIONS = 3
 MAX_TRIES = 12            # candidate versions checked against the hidden tests per case
@@ -43,11 +43,8 @@ INTEGER = re.compile(r"(?<![\w.])(\d+)(?![\w.])")
 
 
 def _git(repo: Path, *args: str, env: dict | None = None, data: bytes | None = None) -> str:
-    out = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, input=data,
-                         env={**os.environ, **(env or {})})
-    if out.returncode != 0:
-        raise git_failed(args, out.stderr)
-    return out.stdout.decode(errors="replace").strip()
+    """Bytes in and out, so no newline is translated; the output decoded as git wrote it."""
+    return git.out(repo, *args, env=env, input=data, text=False, strip=False).decode(errors="replace").strip()
 
 
 def fix_files(cache: Path, case) -> dict[str, bytes | None]:

@@ -308,8 +308,8 @@ def document(project: Project, task_id: str, name: str) -> str:
     """The diff, or one of the task's documents, as plain text."""
     project.task(task_id)  # a known task only: the id becomes a path below
     if name == "diff":
-        from .cli import _reviewed_diff
-        text = _reviewed_diff(project, task_id)
+        from .tree import reviewed_diff
+        text = reviewed_diff(project, task_id)
     elif name in ("intent", "spec", "plan", "record"):
         path = lifecycle.found_doc(project, task_id, name)
         text = path.read_text(encoding="utf-8") if path else ""

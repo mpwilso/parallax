@@ -41,7 +41,7 @@ def _part(title: str, text: str) -> str:
 
 def record(project: Project, task_id: str) -> str:
     """The task's record as one text: what the model may know, and all it may know."""
-    from .cli import _reviewed_diff
+    from .tree import reviewed_diff
     t = project.task(task_id)
     entries = [e for e in project.ledger.entries() if e["data"].get("task") == task_id]
     docs = {d: (p.read_text(encoding="utf-8") if (p := lifecycle.found_doc(project, task_id, d)) else "")
@@ -59,7 +59,7 @@ def record(project: Project, task_id: str) -> str:
     spend = ("\n".join(f"{s}: ${v:.4f}" for s, v in stages) + f"\nin all, this attempt: ${task_spent(project, task_id):.4f}"
              if stages else "")
     try:
-        change = _reviewed_diff(project, task_id)
+        change = reviewed_diff(project, task_id)
     except ParallaxError:
         change = ""
     full = _full_output(project, task_id)

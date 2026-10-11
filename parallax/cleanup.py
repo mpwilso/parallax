@@ -14,15 +14,11 @@ from __future__ import annotations
 import hashlib
 import os
 import shutil
-import subprocess
 from pathlib import Path
 
 from . import drafts, sandbox, tree
+from .git import run as _git
 from .core import Project, worktrees_home
-
-
-def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
 
 
 def _remove(project: Project, task_id: str) -> dict:

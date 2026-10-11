@@ -175,7 +175,8 @@ def _run(args) -> int:
         return _watch(proj, t["task"]) if args.wait else 0
 
     if args.cmd == "diff":
-        print(_reviewed_diff(proj, args.task) or "no changes")
+        from .tree import reviewed_diff
+        print(reviewed_diff(proj, args.task) or "no changes")
         return 0
 
     if args.cmd == "decide":
@@ -357,18 +358,6 @@ def _shaped(proj: Project, text: str) -> None:
     if repairs:
         proj.ledger.append("lint.fitted", "parallax", "; ".join(dict.fromkeys(repairs)), original=text)
     print(fitted.rstrip("\n"))
-
-
-def _reviewed_diff(proj: Project, task_id: str) -> str:
-    """The reviewed tree against its base, once there is one; the worktree before that."""
-    import subprocess
-    from .status import attempt
-    staged = [e for e in attempt(proj.ledger.entries(), task_id) if e["kind"] == "check.staged"]  # this attempt's
-    if not staged:
-        return proj.diff(task_id)
-    t = proj.task(task_id)
-    return subprocess.run(["git", "-C", str(proj.git_at(task_id)), "diff", t["base"], staged[-1]["data"]["tree"]],
-                          capture_output=True, text=True, encoding="utf-8", errors="replace").stdout.strip()
 
 
 def _watch(proj: Project, task_id: str, every: float = 5.0) -> int:
