@@ -300,8 +300,8 @@ def _run(args) -> int:
     if args.cmd == "log":
         for e in proj.ledger.entries()[-args.n:]:
             extra = " ".join(f"{k}={v}" for k, v in e["data"].items() if k in LOG_FIELDS)
-            e["reason"] = (e["reason"].splitlines() or [""])[0]  # one entry, one line; the ledger has it all
-            print(f"{e['ts']}  {e['id']}  {e['kind']:<18} {e['actor']:<6} {extra}  {e['reason']}")
+            reason = (e["reason"].splitlines() or [""])[0]  # one entry, one line; the ledger has it all
+            print(f"{e['ts']}  {e['id']}  {e['kind']:<18} {e['actor']:<6} {extra}  {reason}")
         return 0
 
     if args.cmd == "verify":

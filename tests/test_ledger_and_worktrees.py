@@ -109,3 +109,98 @@ def test_a_git_failure_says_gits_error_and_the_command_not_its_progress_line(rep
     assert str(git_failed(["checkout", "x"], stderr)) == \
         "git checkout x failed: error: Your local changes would be overwritten: README.md"
     assert str(git_failed(["status"], b"something odd\n")) == "git status failed: something odd"  # no error line: all of it
+
+
+def counting_loads(monkeypatch):
+    """The ledger's json.loads, counted: one call per line parsed."""
+    from types import SimpleNamespace
+    from parallax import ledger
+    calls = []
+
+    def loads(text, *a, **kw):
+        calls.append(text)
+        return json.loads(text, *a, **kw)
+    monkeypatch.setattr(ledger, "json", SimpleNamespace(loads=loads, dumps=json.dumps))
+    return calls
+
+
+def test_reads_of_an_unchanged_ledger_reuse_one_parse(tmp_path, monkeypatch):
+    """/api/board reads the ledger several times per task, each request with a new Project. Reads of
+    an unchanged file reuse one parse, across Ledger objects; a change to its size or mtime (what
+    /api/version reports) is read again, from any writer."""
+    import os
+    from parallax.ledger import Ledger
+    path = tmp_path / "ledger.jsonl"
+    for n in range(3):
+        Ledger(path).append("task.created", "human", n=n)
+    calls = counting_loads(monkeypatch)
+    for _ in range(3):
+        assert [e["data"]["n"] for e in Ledger(path).entries()] == [0, 1, 2]
+    assert len(calls) == 3  # three lines, parsed once
+
+    with path.open("a") as f:  # another process appends
+        f.write(json.dumps({"kind": "outside", "data": {"n": 3}}) + "\n")
+    assert [e["data"]["n"] for e in Ledger(path).entries()] == [0, 1, 2, 3]
+
+    st = os.stat(path)  # the same size, other bytes, another mtime
+    path.write_text(path.read_text().replace('"outside"', '"outsidE"'))
+    os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000))
+    assert Ledger(path).entries()[-1]["kind"] == "outsidE"
+
+
+def test_a_write_through_the_ledger_drops_the_cached_parse(tmp_path):
+    """Even a file put back to the cached size and mtime afterwards is read again: a write through
+    the Ledger forgets the parse instead of trusting the stat."""
+    import os
+    from parallax.ledger import Ledger
+    path = tmp_path / "ledger.jsonl"
+    ledger = Ledger(path)
+    ledger.append("one", "human")
+    before, st = path.read_bytes(), os.stat(path)
+    assert [e["kind"] for e in ledger.entries()] == ["one"]
+    ledger.append("two", "human")
+    path.write_bytes(before.replace(b'"one"', b'"uno"'))
+    os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns))
+    assert [e["kind"] for e in ledger.entries()] == ["uno"]
+
+
+def test_a_torn_tail_is_still_left_out_of_cached_reads(tmp_path):
+    from parallax.ledger import Ledger
+    ledger = Ledger(tmp_path / "ledger.jsonl")
+    first = ledger.append("task.created", "human")
+    assert [e["id"] for e in ledger.entries()] == [first["id"]]
+    with ledger.path.open("a") as f:
+        f.write('{"id": "torn", "kind": "task.dra')
+    assert [e["id"] for e in ledger.entries()] == [first["id"]]
+    with ledger.path.open("a") as f:  # still being written: nothing new until its newline
+        f.write('fted"')
+    assert [e["id"] for e in ledger.entries()] == [first["id"]]
+    second = ledger.append("task.approved", "human")
+    assert [e["id"] for e in ledger.entries()] == [first["id"], second["id"]]
+    assert (tmp_path / "ledger.jsonl.torn").read_bytes().split(b"\n")[1] == b'{"id": "torn", "kind": "task.drafted"'
+    assert ledger.verify() == (True, "ledger intact")
+
+
+def test_entries_are_shared_between_reads_so_they_cant_be_changed(tmp_path):
+    """A cached entry handed to every reader can't be changed by one of them; a copy can. The list
+    itself is each caller's own."""
+    import copy
+    from parallax.ledger import Ledger
+    ledger = Ledger(tmp_path / "ledger.jsonl")
+    ledger.append("task.created", "human", "a reason", files=["a.py"], meta={"k": 1})
+    e = ledger.entries()[0]
+    for change in (lambda: e.__setitem__("reason", "x"), lambda: e["data"].update(k=2), lambda: e.pop("id"),
+                   lambda: e["data"]["files"].append("b.py"), lambda: e["data"]["meta"].setdefault("j", 0),
+                   lambda: e["data"]["files"].sort()):
+        with pytest.raises(TypeError, match="read-only"):
+            change()
+    mine = ledger.entries()
+    mine.append({"kind": "mine"})
+    assert len(ledger.entries()) == 1 and ledger.entries()[0] == e
+    assert json.loads(json.dumps(e, sort_keys=True)) == e and dict(e) == e and {**e}["reason"] == "a reason"
+    deep = copy.deepcopy(e)
+    deep["data"]["files"].append("b.py")
+    assert type(deep) is dict and deep["data"]["files"] == ["a.py", "b.py"] and e["data"]["files"] == ["a.py"]
+    shallow = copy.copy(e)
+    shallow["reason"] = "x"
+    assert e["reason"] == "a reason"
