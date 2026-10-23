@@ -1,4 +1,5 @@
-"""Running git: the one helper every module uses, so each call reads its output the same way.
+"""Running git: the shared helper, so each call reads its output the same way. Some modules
+still call git through subprocess directly; new code goes through here.
 
 run() never raises on git's exit code; out() returns git's stdout and raises git_failed when git
 fails. Output is UTF-8 with bad bytes replaced (git speaks UTF-8; Windows' default, cp1252, crashed
