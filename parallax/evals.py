@@ -62,6 +62,12 @@ def home() -> Path:
     return sandbox.data_home() / "evals"
 
 
+def scratch_path(r: dict) -> Path:
+    """A result's scratch repo. Results record it relative to home(), so a result file carries no
+    machine's home directory. An older result with an absolute path still resolves."""
+    return home() / r["scratch"]
+
+
 def load_cases(root: Path, only: list[str] | None = None) -> list[Case]:
     path = Path(root) / CASES_FILE
     if not path.is_file():
@@ -322,7 +328,7 @@ def run_case(case: Case, where: Path, ceiling: float, policy, pipeline: Pipeline
         project = Project.init(repo, actor="parallax")  # REVIEW.md: the general template, as any repo gets
         task_id = pipeline(project, case.goal.strip())
         r.update(score(project, task_id, case, cache, runner))
-        r["scratch"] = str(repo)
+        r["scratch"] = str(repo.relative_to(home()))  # relative: the file names no machine's home
     except Exception as err:  # a crashed case is a result too, never skipped quietly
         r.update({"end": "error", "error": f"{type(err).__name__}: {err}"[:300]})
         r.setdefault("cost_usd", 0.0)

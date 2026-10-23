@@ -16,6 +16,6 @@
  "decisions": [
   "the budget cap ran out ($0.69 of $0.67 estimated)."
  ],
- "scratch": "/home/matt/.local/share/parallax/evals/runs/41250f/tomlkit-512/repo",
+ "scratch": "runs/41250f/tomlkit-512/repo",
  "seconds": 139.4
 }

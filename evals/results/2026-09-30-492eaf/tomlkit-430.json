@@ -48,6 +48,6 @@
  ],
  "reticle_cost_usd": 0.0339,
  "reticle_false_alarm_rework_usd": 0.2468,
- "scratch": "/home/matt/.local/share/parallax/evals/runs/492eaf/tomlkit-430/repo",
+ "scratch": "runs/492eaf/tomlkit-430/repo",
  "seconds": 162.7
 }

@@ -21,6 +21,6 @@
  "seconds_to_ready": 287.0,
  "touches": 1,
  "decisions": [],
- "scratch": "/home/matt/.local/share/parallax/evals/runs/7f9c74/tabulate-231/repo",
+ "scratch": "runs/7f9c74/tabulate-231/repo",
  "seconds": 292.0
 }

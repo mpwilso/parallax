@@ -38,6 +38,6 @@
  ],
  "reticle_cost_usd": 0.0606,
  "reticle_false_alarm_rework_usd": 1.0561,
- "scratch": "/home/matt/.local/share/parallax/evals/runs/492eaf/pathspec-77/repo",
+ "scratch": "runs/492eaf/pathspec-77/repo",
  "seconds": 444.5
 }

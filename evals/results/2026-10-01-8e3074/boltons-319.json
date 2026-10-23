@@ -40,6 +40,6 @@
  "reticle_weak": [],
  "reticle_cost_usd": 0.0281,
  "reticle_false_alarm_rework_usd": 0.0,
- "scratch": "/home/matt/.local/share/parallax/evals/runs/8e3074/boltons-319/repo",
+ "scratch": "runs/8e3074/boltons-319/repo",
  "seconds": 152.5
 }

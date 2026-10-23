@@ -36,6 +36,6 @@
  ],
  "reticle_cost_usd": 0.0664,
  "reticle_false_alarm_rework_usd": 0.0,
- "scratch": "/home/matt/.local/share/parallax/evals/runs/492eaf/cachetools-387/repo",
+ "scratch": "runs/492eaf/cachetools-387/repo",
  "seconds": 216.1
 }

@@ -4,6 +4,8 @@ What changed in each release. The full notes for each are on the [releases page]
 
 ## Unreleased
 
+- Eval results record the scratch repo relative to the evals home, not as an absolute path, so a result file names no machine's home directory. The 41 recorded results were rewritten the same way; `evals.scratch_path` resolves old and new.
+
 Fixed:
 - A cloned repo's own `parallax.policy.toml` ran its `[build] setup` and `[merge] test_command` as you on the first build or merge, with no prompt. The first task to need either now stops with a card showing both commands; trust records your answer once for the repo, and a changed command asks again.
 - A task the UI couldn't display was noted only in the terminal running `parallax ui`. The failure now goes to the ledger too (`view.broken`: the task, where it broke, the error's one line), once per distinct error, and the broken row, card and `parallax task list` cite that entry.

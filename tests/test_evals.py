@@ -303,7 +303,8 @@ def test_the_scratch_copy_is_never_the_working_repo(proj, upstream):
     before = subprocess.run(["git", "-C", str(proj.root), "status", "--porcelain"], capture_output=True, text=True).stdout
     out, _ = run(proj, [case_for(upstream)], scripted(maker(FIXED), FakeChecker()))
     r = result(out)
-    assert Path(r["scratch"]).is_relative_to(evals.home()) and not Path(r["scratch"]).is_relative_to(proj.root)
+    assert not Path(r["scratch"]).is_absolute()
+    assert evals.scratch_path(r).is_relative_to(evals.home()) and not evals.scratch_path(r).is_relative_to(proj.root)
     assert [e["kind"] for e in proj.ledger.entries()] == ["project.init"]  # no task in your ledger
     after = subprocess.run(["git", "-C", str(proj.root), "status", "--porcelain"], capture_output=True, text=True).stdout
     assert set(after.splitlines()) - set(before.splitlines()) == {"?? evals/"}  # only the results
@@ -343,7 +344,7 @@ def test_each_case_runs_hands_free_under_your_policy_and_its_ceiling(proj, upstr
 
     (proj.root / "REVIEW.md").write_text(review.TEMPLATE + "\n7. A rule for this repo only.\n")
     out, _ = run(proj, [case_for(upstream)], scripted(maker(FIXED), FakeChecker()))
-    scratch = Project(Path(result(out)["scratch"]))
+    scratch = Project(evals.scratch_path(result(out)))
     [g] = [e for e in scratch.ledger.entries() if e["kind"] == "gate.approved"]
     assert g["actor"] == "parallax" and "within auto_launch_usd $3.00" in g["data"]["rule"]
     assert (scratch.root / "REVIEW.md").read_text() == review.TEMPLATE  # not this repo's own REVIEW.md
@@ -417,3 +418,15 @@ def test_the_eval_command_needs_a_budget_and_stops_before_spending_past_it(proj,
     from parallax import memcap
     assert set(memory_guards) == {(memcap.EVAL, "the eval run")}  # every eval run is under the 4 GB cap
     assert memcap.EVAL == 4 * memcap.GB
+
+
+def test_recorded_results_carry_no_absolute_scratch_path():
+    """The tracked eval results name their scratch repo relative to evals.home(), not under anyone's home directory."""
+    results = Path(__file__).resolve().parent.parent / "evals" / "results"
+    checked = 0
+    for path in results.rglob("*.json"):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict) and "scratch" in data:
+            checked += 1
+            assert not Path(data["scratch"]).is_absolute(), path
+    assert checked > 0

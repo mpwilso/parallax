@@ -21,6 +21,6 @@
  "seconds_to_ready": 123.0,
  "touches": 1,
  "decisions": [],
- "scratch": "/home/matt/.local/share/parallax/evals/runs/41250f/boltons-337/repo",
+ "scratch": "runs/41250f/boltons-337/repo",
  "seconds": 123.7
 }

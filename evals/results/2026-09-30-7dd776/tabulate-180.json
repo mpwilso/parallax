@@ -39,6 +39,6 @@
  "reticle_weak": [],
  "reticle_cost_usd": 0.0253,
  "reticle_false_alarm_rework_usd": 0.0,
- "scratch": "/home/matt/.local/share/parallax/evals/runs/7dd776/tabulate-180/repo",
+ "scratch": "runs/7dd776/tabulate-180/repo",
  "seconds": 109.1
 }
