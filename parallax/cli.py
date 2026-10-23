@@ -161,8 +161,8 @@ def _run(args) -> int:
                     print(f"{tid}  [{st}]{cost}  {_line(t['goal'], 100)}")
                 except Exception:  # one task that can't be shown never hides the rest
                     from .views import BROKEN, log_broken
-                    log_broken(tid, "its line")
-                    print(f"{tid}  {BROKEN}")
+                    e = log_broken(proj, tid, "its line")
+                    print(f"{tid}  {BROKEN}" + (f" (ledger {e['id']})" if e else ""))
         elif args.tcmd == "diff":
             print(proj.diff(args.task) or "no changes")
         return 0

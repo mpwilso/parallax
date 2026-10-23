@@ -9,7 +9,7 @@ import re
 import sys
 import traceback
 
-from . import decide, inbox, lifecycle, live, progress, show, stats, status
+from . import decide, inbox, lifecycle, lint, live, progress, show, stats, status
 from .core import Project
 
 MAX_TEXT = 200_000
@@ -23,17 +23,42 @@ RISK = {"guard": 0, "policy": 0, "scope": 1, "conflict": 1, "stuck": 2, "tool": 
 BROKEN = "couldn't display this task"
 
 
-def log_broken(task_id: str, where: str) -> None:
-    """The traceback goes to the server's terminal; the page and the list show the task as broken."""
-    print(f"parallax: {BROKEN} {task_id} ({where})\n{traceback.format_exc()}", file=sys.stderr, flush=True)
+def log_broken(project: Project | None, task_id: str | None, where: str) -> dict | None:
+    """Called from an except block. The traceback goes to the server's terminal, and the failure to the
+    ledger as view.broken (the task, where it broke, the error's one line), once per distinct error: the
+    page polls the board, so the same failure isn't written again on every refresh. Returns that entry, so
+    the row and the card can cite it. The page and the list show the task as broken."""
+    err = sys.exc_info()[1]
+    error = " ".join(f"{type(err).__name__}: {err}".split())[:300] if err else "unknown error"
+    print(f"parallax: {BROKEN} {task_id or 'the board'} ({where})\n{traceback.format_exc()}", file=sys.stderr, flush=True)
+    if project is None:
+        return None
+
+    def same(e: dict) -> bool:
+        return e["kind"] == "view.broken" and e["data"].get("task") == task_id and e["data"].get("where") == where \
+            and e["data"].get("error") == error
+    seen = [e for e in project.ledger.entries() if same(e)]
+    if seen:
+        return seen[-1]
+    what = f"task {task_id}" if task_id else "the board"
+    return project.ledger.append_if(lambda entries: not any(same(e) for e in entries), "view.broken", "parallax",
+                                    lint.one_sentence(f"the UI couldn't display {what} ({where}): {error}"),
+                                    where=where, error=error, **({"task": task_id} if task_id else {}))
 
 
-def broken_row(task_id: str, t: dict | None = None) -> dict:
-    """A row for a task whose own line couldn't be built: its id, and a plain sentence. Nothing else."""
+def broken_line(task_id: str, entry: dict | None) -> str:
+    cite = f" (ledger {entry['id']})" if entry else ""
+    return (f"Task {task_id}: {BROKEN}{cite}. To see why, run parallax show {task_id} in a terminal, "
+            f"or read that ledger entry; every other task still works.")
+
+
+def broken_row(task_id: str, t: dict | None = None, entry: dict | None = None) -> dict:
+    """A row for a task whose own line couldn't be built: its id, a plain sentence, and the ledger entry
+    that says why. Nothing else."""
     t = t or {}
     return {"task": task_id, "title": f"Task {task_id}", "status": t.get("status", ""), "state": "needs you",
             "cost_usd": round(t.get("cost_usd") or 0, 2), "last": t.get("last"), "kind": "broken", "secret": False,
-            "broken": True, "line": f"Task {task_id}: {BROKEN}. To see why, run parallax show {task_id} in a terminal; every other task still works.",
+            "broken": True, "line": broken_line(task_id, entry),
             "chip": "Can't display", "strip": [], "spend": None, "started": ""}
 
 
@@ -55,9 +80,8 @@ def board(project: Project) -> dict:
             state = status.board(t["status"])
             columns[state].append({"task": tid, "title": inbox.title(project, tid), "status": t["status"], "state": state,
                                    "cost_usd": round(t.get("cost_usd") or 0, 2), "last": t.get("last")})
-        except Exception:
-            log_broken(tid, "its title")
-            broken.append(broken_row(tid, t))
+        except Exception:  # recorded, never hidden: the row says so and cites the entry
+            broken.append(broken_row(tid, t, log_broken(project, tid, "its title")))
     waiting = []
     for item in columns["needs you"] + columns["ready"]:
         try:
@@ -67,9 +91,8 @@ def board(project: Project) -> dict:
             item["secret"] = bool(dec and any(f.get("secret") and f.get("size") for f in decide.scope_files(dec.item)))
             item.update(_row(project, item, dec))
             waiting.append(item)
-        except Exception:
-            log_broken(item["task"], "its row")
-            broken.append(broken_row(item["task"], item))
+        except Exception:  # recorded, never hidden
+            broken.append(broken_row(item["task"], item, log_broken(project, item["task"], "its row")))
     waiting.sort(key=lambda i: (not i["secret"], RISK.get(i["kind"], 5), i["last"] or ""))
     working = []
     for s in ("drafting", "building", "checking", "merging"):
@@ -84,29 +107,28 @@ def board(project: Project) -> dict:
                             agent=live.agent_of(what), kind=None)
                 item.update(_row(project, item, None))
                 working.append(item)
-            except Exception:
-                log_broken(i["task"], "its row")
-                broken.append(broken_row(i["task"], i))
+            except Exception:  # recorded, never hidden
+                broken.append(broken_row(i["task"], i, log_broken(project, i["task"], "its row")))
     done = []
-    touches = _or_log(lambda: stats.touches(project), {}, "all", "touch counts")
+    touches = _or_log(project, lambda: stats.touches(project), {}, None, "touch counts")
     for item in sorted(columns["done"], key=lambda i: i["last"] or "", reverse=True):
         try:
             item["merge"] = item["status"] == "accepted"  # accepted, and the merge is still yours
             item.update(progress.done_row(project, item["task"], touches))
             done.append(item)
-        except Exception:
-            log_broken(item["task"], "its done row")
-            broken.append(broken_row(item["task"], item))
+        except Exception:  # recorded, never hidden
+            broken.append(broken_row(item["task"], item, log_broken(project, item["task"], "its done row")))
     waiting = broken + waiting  # a task that can't be shown is one to look at: first, and never silent
     return {"columns": columns, "waiting": waiting, "working": working, "done": done, "count": len(waiting),
-            "overview": _or_log(lambda: progress.overview(project), [], "all", "the overview")}
+            "overview": _or_log(project, lambda: progress.overview(project), [], None, "the overview")}
 
 
-def _or_log(build, fallback, task_id: str, where: str):
+def _or_log(project: Project, build, fallback, task_id: str | None, where: str):
+    """build(), or fallback with the failure recorded (log_broken). task_id None: it's about the board."""
     try:
         return build()
-    except Exception:
-        log_broken(task_id, where)
+    except Exception:  # recorded, never hidden
+        log_broken(project, task_id, where)
         return fallback
 
 
@@ -152,9 +174,8 @@ def card(project: Project, task_id: str) -> dict:
     project.task(task_id)  # an unknown id is still an error, not a broken card
     try:
         return _card(project, task_id)
-    except Exception:
-        log_broken(task_id, "its card")
-        line = f"Task {task_id}: {BROKEN}. To see why, run parallax show {task_id} in a terminal; every other task still works."
+    except Exception:  # recorded, never hidden: the card says so and cites the entry
+        line = broken_line(task_id, log_broken(project, task_id, "its card"))
         return {"task": task_id, "title": f"Task {task_id}", "status": "", "state": "needs you", "cost_usd": 0,
                 "report": {"type": "", "bottom": line, "not_looked_at": "", "next": "", "sections": {}},
                 "unseen": [], "found": [], "changed": [], "redraft": False, "details": [], "actions": {"kind": "none"},

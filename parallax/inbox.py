@@ -29,7 +29,7 @@ def items(project: Project) -> list[dict]:
                 out.append({"task": tid, "state": where, "title": title(project, tid), **({"overlaps": said} if said else {})})
         except Exception:
             from .views import log_broken
-            log_broken(tid, "its inbox line")
+            log_broken(project, tid, "its inbox line")
             out.append({"task": tid, "state": "broken", "title": "couldn't display this task"})
     return out
 

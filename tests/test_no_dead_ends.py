@@ -298,8 +298,10 @@ def test_stops_after_accept_and_a_broken_card_name_an_action_too(repo, monkeypat
     proj.ledger.append("stuck.raised", "parallax", "the change goes outside the plan", task=bad, stage="scope",
                        files=[{"path": "a.txt"}, {"path": "b.txt"}])  # deliberately broken: no cause or size
     broken = views.card(proj, bad)
+    [rec] = kinds(proj, "view.broken")  # the failure is recorded, and the card cites it
     assert broken["broken"] and broken["report"]["bottom"] == (
-        f"Task {bad}: couldn't display this task. To see why, run parallax show {bad} in a terminal; every other task still works.")
+        f"Task {bad}: couldn't display this task (ledger {rec['id']}). To see why, run parallax show {bad} in a terminal, "
+        "or read that ledger entry; every other task still works.")
 
 
 # one question when you allow a higher budget ------------------------------------------------------------
