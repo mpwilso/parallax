@@ -885,6 +885,8 @@ def test_the_merging_card_says_what_it_is_doing_and_its_buttons_cant_be_clicked(
     policy.write_text(policy.read_text().replace('test_command = ""              # Accept and merge',
                                                  'test_command = "scripts/test.sh"              # Accept and merge'))
     proj.reload_policy()
+    from parallax import trust
+    trust.approve(proj, "the test's own policy")  # as you would have, on its card, the first time
     go = threading.Event()
 
     def held(project, commit, command):  # the pre-merge run, held until the page has been looked at

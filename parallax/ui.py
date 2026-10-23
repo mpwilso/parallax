@@ -136,10 +136,13 @@ def act(project: Project, path: str, body: dict) -> dict:
         if body.get("merge"):
             from .accept import merge_now
             from .accept import Stopped
+            from .trust import Untrusted
             try:
                 return {"message": merge_now(project, task), "merged": True}
             except Stopped as err:  # your Stop, during the pre-merge test run: nothing moved
                 return {"message": f"stopped {task}: {err}. it waits for you: resume, send back or drop."}
+            except Untrusted as err:  # the policy's test command hasn't had your OK: its card asks, then merges
+                return {"message": f"accepted {task} as {e['data']['commit'][:7]}, but {err}. its card asks you first."}
             except ParallaxError as err:
                 return {"message": f"accepted {task} as {e['data']['commit'][:7]}, but {err}. merge it yourself:",
                         "merge": merge_command(e, project)}

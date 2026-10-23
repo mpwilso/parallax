@@ -5,7 +5,7 @@ import pytest
 
 from fakes import FakeChecker, FakeDrafter, ScriptedAgent, good_probe, junit_runner
 from realout import line
-from parallax import build, decide, lifecycle, pilot, show, views
+from parallax import build, decide, lifecycle, pilot, show, trust, views
 from parallax.agents.base import Review
 from parallax.core import ParallaxError, Project
 from test_check import approved, blocker, built, kinds, run
@@ -162,6 +162,9 @@ STOPS = [  # (ledger kind, data, reason): one per kind of stop the card, the inb
     ("stuck.raised", {"budget": True}, "Maker spent $3.10 of the $3.80 cap, leaving Field $0.20, so the budget cap ran out"),
     ("stuck.raised", {"over_limit": True, "named": 8.0, "limit": 5.0, "size": "small"},
      "your budget of $8 is over the $5 limit for small tasks"),
+    ("stuck.raised", {"commands_sha": "a" * 64, "setup": "make venv", "test_command": ""},
+     "the [build] setup command runs as you, and you haven't approved this policy's commands yet: "
+     "[build] setup: make venv; [merge] test_command: none"),
     ("review.requested", {}, "your policy reviews every plan (review_plans)"),
     ("review.requested", {}, "the budget cap ($4.00) is over auto_launch_usd ($3.00)"),
     ("task.stopped", {"stage": "Maker building", "spent_usd": 0.4}, "stopped in parallax ui"),  # your Stop: no item
@@ -245,6 +248,7 @@ def test_a_failed_setup_retry_comes_back_with_its_actions(repo):
     (repo / POLICY_FILE).write_text('[build]\nsetup = "echo the mirror is down >&2; exit 3"\n')
     make_key()
     proj = Project.init(repo)
+    trust.approve(proj, "the test's own policy")
     tid = pilot.intake(proj, WANT)["task"]
     assert pilot_once(proj, tid, FakeDrafter(docs())) == "stuck"
     assert decide.decision(proj, tid).kind == "error"

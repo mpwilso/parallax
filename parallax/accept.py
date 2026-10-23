@@ -25,7 +25,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import lifecycle, lint, memcap, record, sandbox, secretscan, tools, tree
+from . import lifecycle, lint, memcap, record, sandbox, secretscan, tools, tree, trust
 from .core import ParallaxError, Project, refuse_inside_task
 from .git import out as _git
 
@@ -242,6 +242,8 @@ def merge_now(project: Project, task_id: str, runner=None) -> str:
     if _last(project, task_id, "merge.started") and project.task(task_id)["status"] == "merging":
         raise ParallaxError(f"task {task_id} is already merging. its card says how far it has got")
     d = acc["data"]
+    if project.policy.merge["test_command"].strip():  # a command from the policy file: your OK first, before anything starts
+        trust.check(project, task_id, "the [merge] test_command")
     ff = subprocess.run(["git", "-C", str(project.root), "merge-base", "--is-ancestor", "HEAD", d["commit"]],
                         capture_output=True).returncode == 0
     project.ledger.append("merge.started", "parallax", "Accept and merge is running", task=task_id, target=d.get("target"),

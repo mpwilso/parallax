@@ -10,7 +10,7 @@ import pytest
 
 from fakes import FakeChecker, FakeDrafter, ScriptedAgent, good_probe
 from sandboxcheck import why_not
-from parallax import approvals, build, guard, lifecycle, preflight, sandbox
+from parallax import approvals, build, guard, lifecycle, preflight, sandbox, trust
 from parallax.agents.base import Finding, Review
 from parallax.agents.claude import tool_to_action
 from parallax.cli import main
@@ -159,6 +159,7 @@ def test_the_setup_command_makes_the_venv_once_as_you(repo):
     (repo / POLICY_FILE).write_text('[build]\nsetup = "mkdir -p \\"$PARALLAX_VENV/bin\\" && pwd > \\"$PARALLAX_VENV/where\\""\n')
     make_key()
     proj = Project.init(repo)
+    trust.approve(proj, "the test's own policy")
     tid = approved_task(proj)
     p = build.prepare(proj, tid)
     assert p.venv == p.home / "venv" and (p.venv / "where").read_text().strip() == str(p.home / "setup-base")

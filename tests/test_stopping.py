@@ -165,6 +165,8 @@ def test_stopping_the_pre_merge_test_run_never_moves_the_base_branch(repo, monke
     policy = repo / "parallax.policy.toml"
     policy.write_text(policy.read_text().replace('test_command = "sleep 30"', 'test_command = "true"'))
     proj.reload_policy()
+    from parallax import trust
+    trust.approve(proj, "the changed test command")  # a changed command asks again; this is that answer
     assert decide.apply(proj, tid, "resume").startswith(f"merged {tid} into ")
     assert proj.task(tid)["status"] == "merged"
 

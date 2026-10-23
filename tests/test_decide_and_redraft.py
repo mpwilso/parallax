@@ -1,7 +1,7 @@
 import pytest
 
 from fakes import FakeChecker, FakeDrafter, ScriptedAgent, good_probe, junit_runner
-from parallax import build, costs, decide, inbox, lifecycle, lint, pilot, preflight, show, stats, status
+from parallax import build, costs, decide, inbox, lifecycle, lint, pilot, preflight, show, stats, status, trust
 from parallax.accept import accept
 from parallax.agents.base import Finding, Review
 from parallax.cli import main
@@ -303,6 +303,7 @@ def test_setup_records_how_long_it_took(proj):
     from parallax.core import POLICY_FILE
     (proj.root / POLICY_FILE).write_text('[build]\nsetup = "python3 -c \'import time; time.sleep(0.2)\'"\n')
     proj.reload_policy()
+    trust.approve(proj, "the test's own policy")
     tid = pilot.intake(proj, WANT)["task"]
     assert pilot_run(proj, tid) == "ready"
     [ran] = kinds(proj, "setup.ran")

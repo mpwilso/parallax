@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from fakes import FakeDrafter
-from parallax import build, decide, doctor, pilot, show, tools, views
+from parallax import build, decide, doctor, pilot, show, tools, trust, views
 from parallax.core import POLICY_FILE, Project
 from test_lifecycle_gates import WANT, docs, make_key
 from test_no_dead_ends import pilot_once
@@ -45,6 +45,7 @@ def setup_project(repo, monkeypatch):
     (repo / POLICY_FILE).write_text(f"[build]\nsetup = '{SETUP}'\n")
     make_key()
     proj = Project.init(repo)
+    trust.approve(proj, "the test's own policy")
     monkeypatch.setattr(build, "_spawn", lambda *a: 1)
     return proj, pilot.intake(proj, WANT)["task"]
 
@@ -113,6 +114,7 @@ def test_a_program_setup_runs_inside_a_script_is_named_too(repo, monkeypatch, ba
     (repo / POLICY_FILE).write_text("[build]\nsetup = './make-venv.sh'\n")
     make_key()
     proj = Project.init(repo)
+    trust.approve(proj, "the test's own policy")
     monkeypatch.setattr(build, "_spawn", lambda *a: 1)
     tid = pilot.intake(proj, WANT)["task"]
     assert pilot_once(proj, tid, FakeDrafter(docs())) == "stuck"

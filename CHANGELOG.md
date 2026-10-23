@@ -2,6 +2,11 @@
 
 What changed in each release. The full notes for each are on the [releases page](https://github.com/mpwilso/parallax/releases).
 
+## Unreleased
+
+Fixed:
+- A cloned repo's own `parallax.policy.toml` ran its `[build] setup` and `[merge] test_command` as you on the first build or merge, with no prompt. The first task to need either now stops with a card showing both commands; trust records your answer once for the repo, and a changed command asks again.
+
 ## 0.2.3 (2026-10-11)
 
 Changed:

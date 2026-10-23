@@ -202,8 +202,11 @@ def _run(args) -> int:
         return 0 if lines[-1].startswith("ready") else 1
 
     if args.cmd == "build":
-        from . import build
-        p = build.prepare(proj, args.task)
+        from . import build, trust
+        try:
+            p = build.prepare(proj, args.task)
+        except trust.Untrusted as err:  # the question is in the inbox: the card, or decide, answers it
+            raise ParallaxError(f"{err}. parallax decide {args.task} trust runs them, and the build") from None
         build.launch(proj, p)  # the builder preflights first, whoever starts it
         from .budgets import shown
         print(f"building {args.task}, estimated budget {shown(p.left)}. parallax stop ends it.")

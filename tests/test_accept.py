@@ -358,13 +358,17 @@ def test_merge_now_wont_merge_into_any_branch_but_the_one_accept_recorded(repo):
 
 # Accept and merge runs the project's tests first, on the exact commit it would land ------------------------
 
-def _with_merge_tests(repo, proj, command="make test"):
+def _with_merge_tests(repo, proj, command="make test", trusted=True):
+    """trusted: you've approved the policy's commands, as you would have on a card the first time."""
     from parallax.core import POLICY_FILE
     policy = repo / POLICY_FILE
     policy.write_text(policy.read_text().replace('test_command = ""              # Accept and merge',
                                                  f'test_command = "{command}"              # Accept and merge'))
     proj.reload_policy()
     assert proj.policy.merge["test_command"] == command
+    if trusted:
+        from parallax import trust
+        trust.approve(proj, "the test's own policy")
 
 
 class Runner:

@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable
 
-from . import budgets, costs, lifecycle, lint, pilot, status, tools
+from . import budgets, costs, lifecycle, lint, pilot, status, tools, trust
 from .core import ParallaxError, Project
 
 
@@ -41,7 +41,8 @@ class Decision:
     @property
     def owner(self) -> str:
         """Whose call this is, by kind: security for a secrets or protected-path item, else you."""
-        return "security" if self.kind == "guard" or (self.kind == "scope" and self.extra.get("secret")) else "you, as the engineer"
+        return "security" if self.kind in ("guard", "policy") or (self.kind == "scope" and self.extra.get("secret")) \
+            else "you, as the engineer"
 
     @property
     def why_human(self) -> str:
@@ -68,6 +69,7 @@ WHY_HUMAN = {  # one short sentence per kind: why code stopped instead of decidi
     "tool": "a program the build needs isn't installed where Parallax can find it, and only you can install it",
     "loop": "running it again would buy the same result, so what to change is yours",
     "stopped": "you stopped it, so only you can say how it goes on",
+    "policy": "the policy file's commands run as you, outside the sandbox, and only you can say they're yours to run",
 }
 
 
@@ -146,6 +148,14 @@ def decision(project: Project, task_id: str) -> Decision | None:
 
     d, why = item["data"], " ".join(item["reason"].split())
     stage = d.get("stage")
+    if d.get("commands_sha"):  # the policy file's commands would run as you for the first time (trust.py)
+        merging = _was_merging(project, task_id)
+        decline = Option("by hand", "leaves the merge to you: the task stays accepted, and its card shows the command", True) \
+            if merging else DROP
+        return Decision("policy", "The policy file's commands run as you: run them?",
+                        [Option("trust", "runs them as you, for exactly these commands until one changes, and the task goes on"),
+                         decline], "trust", "the merge" if merging else "the build", item,
+                        {k: d.get(k) or "" for k in trust.SETTINGS})
     if d.get("turns"):
         return Decision("turns", "Maker used every turn it had without finishing: run it again, or redraft?",
                         [RETRY, REJECT, DROP], "retry", "the rest of the build and check", item)
@@ -324,13 +334,22 @@ def apply(project: Project, task_id: str, name: str, reason: str = "", spawn: Ca
         project.resolve(dec.item["id"], True, said)
         if dec.kind in ("rework", "checker", "loop"):
             return f"accepted the risk on {task_id}. it's Ready: parallax accept {task_id} commits it."
+    elif name == "trust":  # the commands the card showed, recorded once for the repo; then the task goes on
+        trust.approve(project, said, dec.item)
+        project.resolve(dec.item["id"], True, said)
+    elif name == "by hand":  # the merge stays yours: the task goes back to accepted, and the card gives the command
+        project.resolve(dec.item["id"], False, said)
+        project.ledger.append("merge.stopped", "human", said, task=task_id)
+        return f"left the merge of {task_id} to you. its card shows the command."
     elif dec.item:  # retry, plan
         project.resolve(dec.item["id"], True, said)
-    if name == "resume" and _was_merging(project, task_id):  # stopped during Accept and merge: run it again
+    if name in ("resume", "trust") and _was_merging(project, task_id):  # stopped during Accept and merge: run it again
         from .accept import merge_now
         return merge_now(project, task_id)
     try:
         mode = pilot.resume(project, task_id, spawn, preflight_runner)
+    except trust.Untrusted as err:  # the policy changed since the card asked: it asks again, in the inbox
+        raise ParallaxError(f"{err}. it's back in the inbox: its card asks before they run") from None
     except tools.MissingTool as err:  # back in the inbox, naming the program and the fix
         project.ledger.append("stuck.raised", "parallax", err.missing.text, task=task_id,
                               missing_tool=err.missing.tool, fix=err.missing.fix)

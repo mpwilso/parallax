@@ -22,7 +22,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
-from . import costs, guard, installs, lifecycle, lint, memcap, outputs, preflight, sandbox, sandboxfail, tools
+from . import costs, guard, installs, lifecycle, lint, memcap, outputs, preflight, sandbox, sandboxfail, tools, trust
 from .agents.base import Agent, AgentResult
 from .core import ROOT_ENV, TASK_ENV, ParallaxError, Project, inside_task, refuse_inside_task
 from .gate import Scope, make_permission_fn
@@ -88,6 +88,7 @@ def _setup_venv(project: Project, task_id: str, worktree: Path, home: Path) -> P
     venv = home / "venv"
     if installs.ready(venv):
         return venv
+    trust.check(project, task_id, "the [build] setup command")  # a command from the policy file: never before you've seen it
     shutil.rmtree(venv, ignore_errors=True)  # half built, or not there: setup makes it from nothing
     lacking = tools.for_command(command, WHY_SETUP)
     if lacking:  # named before anything runs, with its fix, never a shell's raw "not found"
@@ -410,6 +411,8 @@ def run_mode(project: Project, task_id: str, mode: str, drafter_for, maker_for, 
     except tools.MissingTool as err:  # which program, and the fix, never a raw error
         project.ledger.append("stuck.raised", "parallax", err.missing.text, task=task_id,
                               missing_tool=err.missing.tool, fix=err.missing.fix)
+        status = "stuck"
+    except trust.Untrusted:  # the policy's commands wait for your OK: the question is already in the inbox
         status = "stuck"
     except Exception as err:  # nothing fails quietly in the background: it comes to you
         project.ledger.append("stuck.raised", "parallax", lint.one_sentence(

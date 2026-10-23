@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from parallax import build, installs, lifecycle, testrun, tree
+from parallax import build, installs, lifecycle, testrun, tree, trust
 from parallax.core import POLICY_FILE, Project
 from test_evals import plain_runner
 from test_lifecycle_gates import docs, make_key
@@ -37,6 +37,7 @@ def task_with(repo: Path, files: dict[str, str], setup: str, plan_files=("src/pk
     (repo / POLICY_FILE).write_text(f"[build]\nsetup = '{setup}'\n")
     make_key()
     proj = Project.init(repo)
+    trust.approve(proj, "the test's own policy")
     tid = proj.new_task("add mul", intent=True)["task"]
     plan = docs()["plan"].replace('files = ["README.md", "tests/test_readme.py"]', f"files = {list(plan_files)!r}".replace("'", '"'))
     plan = plan.replace('tests = ["tests/test_readme.py"]', 'tests = ["tests/test_pkg.py"]')

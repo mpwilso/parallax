@@ -15,10 +15,11 @@ A cold sweep of the repo before it went public, against [THREAT_MODEL.md](THREAT
 | Low | The secrets scan missed common key shapes. | Eight more patterns (OpenAI project keys, Stripe, GitLab, npm, PyPI, Hugging Face, Slack webhooks, JWTs). Still best effort. |
 | Low | `parallax init` copied a repo's example policy, `[build] setup` included, which runs as you. | `init` shows the command and asks once; non-interactive means left out. |
 | Low | Two threat-model claims had no code behind them: no memory across tasks, and `file:` blocked in Field's browser. | Auto-memory is off for every agent in its environment and Maker's settings, per the Claude Code docs; the `file:` claim names the pinned MCP version it relies on, and the pin test says to recheck it if the version moves. |
+| Medium (found 2026-10-23) | A cloned repo's own `parallax.policy.toml` ran its `[build] setup` and `[merge] test_command` as you on the first build or merge, with no prompt. | The first task to need either stops with a card showing both commands; trust records your answer once for the repo, keyed on the commands' hash, and a changed command asks again. (`trust.check`) |
 
 ## Knowingly open
 
-- **The `[build] setup` command runs as you**, on a fresh copy of the base commit. That is by design, the same trust as running a repo's Makefile; `init` now asks before adopting one.
+- **The `[build] setup` and `[merge] test_command` commands run as you**, setup on a fresh copy of the base commit. That is by design, the same trust as running a repo's Makefile; `init` asks before adopting a setup command from the repo's example policy, and since 2026-10-23 neither command runs until you've approved the policy's commands on a card. What you approve is the command text; what it does when run is yours to read.
 - **Second Eye reads the diff and can't run code.** A test Maker wrote that passes without the change, or that exercises nothing, is caught only if Second Eye notices. Proving tests bite (a verifier that writes tests from the intent before the build) is planned, not built.
 - **The hash chain proves only that the sandboxed agents didn't tamper.** Approvals are HMAC signatures with your key; a third party can verify the chain and the file hashes, not who approved. An asymmetric signature would close that.
 - **The stale-run check depends on someone running a command or having the UI open.** A machine asleep with a task mid-run is noticed when it wakes.

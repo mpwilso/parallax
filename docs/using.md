@@ -34,7 +34,7 @@ It shows the stages, the bottom line, the one question with its options and whic
 
 ## Accept, or accept and merge
 
-Accept commits the reviewed change to the task's branch and shows the merge command, which you run. Accept and merge also lands it on your base branch here: a fast-forward when your base branch is still where the task began, or your base branch merged into the task first when it has moved on. Either way your project's tests run on the exact commit your base branch would become (`[merge] test_command` in the policy; Parallax's own is `scripts/test.sh`), and that gate is the only check. If they fail, or the merge hits a conflict, your base branch doesn't move, and the card says why and leaves the merge to you. Parallax never merges without your click, and never pushes.
+Accept commits the reviewed change to the task's branch and shows the merge command, which you run. Accept and merge also lands it on your base branch here: a fast-forward when your base branch is still where the task began, or your base branch merged into the task first when it has moved on. Either way your project's tests run on the exact commit your base branch would become (`[merge] test_command` in the policy; Parallax's own is `scripts/test.sh`), and that gate is the only check. That command runs as you, so the first time, and again whenever it or `[build] setup` changes, the card shows both commands and asks before running them; trust records your answer for the repo. If they fail, or the merge hits a conflict, your base branch doesn't move, and the card says why and leaves the merge to you. Parallax never merges without your click, and never pushes.
 
 ## Merging
 

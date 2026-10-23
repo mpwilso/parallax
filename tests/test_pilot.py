@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from fakes import FakeChecker, FakeDrafter, ScriptedAgent, good_probe, junit_runner
-from parallax import approvals, build, decide, inbox, lifecycle, lint, pilot, planfit, preflight, show, stats
+from parallax import approvals, build, decide, inbox, lifecycle, lint, pilot, planfit, preflight, show, stats, trust
 from parallax.accept import accept
 from parallax.cli import main
 from parallax.core import POLICY_FILE, Project
@@ -277,6 +277,7 @@ def test_drafters_leftovers_are_cleaned_so_setup_still_runs(repo, monkeypatch):
     (repo / POLICY_FILE).write_text('[build]\nsetup = "mkdir -p \\"$PARALLAX_VENV/bin\\""\n')
     make_key()
     proj = Project.init(repo)
+    trust.approve(proj, "the test's own policy")
     monkeypatch.setattr(build, "_spawn", lambda *a: 1)
     tid = pilot.intake(proj, WANT)["task"]
     wt = Path(proj.task(tid)["worktree"])
