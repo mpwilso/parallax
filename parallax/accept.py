@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 import tempfile
 import threading
 import time
@@ -28,6 +27,7 @@ from pathlib import Path
 from . import lifecycle, lint, memcap, record, sandbox, secretscan, tools, tree, trust
 from .core import ParallaxError, Project, refuse_inside_task
 from .git import out as _git
+from .git import run as _git_run
 
 
 def _last(project: Project, task_id: str, kind: str) -> dict | None:
@@ -36,8 +36,7 @@ def _last(project: Project, task_id: str, kind: str) -> dict | None:
 
 
 def signing_key(root: Path) -> str:
-    out = subprocess.run(["git", "-C", str(root), "config", "--get", "user.signingkey"], capture_output=True, text=True)
-    return out.stdout.strip()
+    return _git_run(root, "config", "--get", "user.signingkey").stdout.strip()
 
 
 def message(project: Project, task_id: str, head: str) -> str:
@@ -110,7 +109,7 @@ def accept(project: Project, task_id: str, reason: str = "", merging: bool = Fal
                   input=msg)
     branch = t["branch"]
     _git(project.root, "update-ref", f"refs/heads/{branch}", commit)
-    subprocess.run(["git", "-C", str(wt), "reset", "-q"], capture_output=True)  # the worktree's index follows
+    _git_run(wt, "reset", "-q")  # the worktree's index follows
 
     # the commit now holds docs/tasks/<id>/. git won't merge over untracked copies of the same files,
     # even identical ones, so they move out of your checkout; the merge brings them back, tracked
@@ -122,8 +121,7 @@ def accept(project: Project, task_id: str, reason: str = "", merging: bool = Fal
             shutil.rmtree(kept)
         shutil.move(str(lifecycle.task_dir(project, task_id)), str(kept))
 
-    target = subprocess.run(["git", "-C", str(project.root), "symbolic-ref", "--short", "-q", "HEAD"],
-                            capture_output=True, text=True).stdout.strip()
+    target = _git_run(project.root, "symbolic-ref", "--short", "-q", "HEAD").stdout.strip()
     ff = _git(project.root, "rev-parse", "HEAD") == base
     return project.ledger.append("task.accepted", "human", reason, task=task_id, commit=commit, tree=committed_tree,
                                  reviewed=reviewed, branch=branch, target=target, ff=ff, signed=bool(key),
@@ -139,7 +137,7 @@ def run_tests(project: Project, commit: str, command: str) -> tuple[int, str]:
     the memory cap. Returns (exit code, output). The worktree is removed whatever happens."""
     folder = sandbox.data_home() / "merge-check" / commit[:12]
     if folder.exists():
-        subprocess.run(["git", "-C", str(project.root), "worktree", "remove", "--force", str(folder)], capture_output=True)
+        _git_run(project.root, "worktree", "remove", "--force", str(folder))
         shutil.rmtree(folder, ignore_errors=True)
     folder.parent.mkdir(parents=True, exist_ok=True)
     _git(project.root, "worktree", "add", "--detach", str(folder), commit)
@@ -150,7 +148,7 @@ def run_tests(project: Project, commit: str, command: str) -> tuple[int, str]:
                          on_start=(lambda pid: pidfile.write_text(f"{pid}\n")) if pidfile else None)
         return out.code, out.output if not out.timed_out else out.output + f"\nthe tests ran past {TEST_TIMEOUT // 60} minutes"
     finally:
-        subprocess.run(["git", "-C", str(project.root), "worktree", "remove", "--force", str(folder)], capture_output=True)
+        _git_run(project.root, "worktree", "remove", "--force", str(folder))
 
 
 TEST_RUNNER = run_tests  # tests replace this; they never run a real suite
@@ -164,26 +162,25 @@ def merge_base_in(project: Project, d: dict) -> str:
     head = _git(project.root, "rev-parse", "HEAD")
     folder = sandbox.data_home() / "merge-in" / d["commit"][:12]
     if folder.exists():
-        subprocess.run(["git", "-C", str(project.root), "worktree", "remove", "--force", str(folder)], capture_output=True)
+        _git_run(project.root, "worktree", "remove", "--force", str(folder))
         shutil.rmtree(folder, ignore_errors=True)
     folder.parent.mkdir(parents=True, exist_ok=True)
     _git(project.root, "worktree", "add", "--detach", str(folder), d["commit"])
     try:
         key = signing_key(project.root)
         msg = f"Merge {d['target']} into {d['task']}\n\nParallax-Task: {d['task']}\n"
-        out = subprocess.run(["git", "-C", str(folder), "merge", "--no-ff", "--no-edit", "--no-verify",
-                              *(["-S"] if key else []), "-m", msg, head], capture_output=True, text=True)  # no hooks
+        out = _git_run(folder, "merge", "--no-ff", "--no-edit", "--no-verify", *(["-S"] if key else []),
+                       "-m", msg, head)  # no hooks
         if out.returncode != 0:
-            clash = subprocess.run(["git", "-C", str(folder), "diff", "--name-only", "--diff-filter=U"],
-                                   capture_output=True, text=True).stdout.split()
-            subprocess.run(["git", "-C", str(folder), "merge", "--abort"], capture_output=True)
+            clash = _git_run(folder, "diff", "--name-only", "--diff-filter=U").stdout.split()
+            _git_run(folder, "merge", "--abort")
             where = ", ".join(clash[:5]) + ("..." if len(clash) > 5 else "") if clash else "its files"
             free_branch(project, d["branch"])
             raise Conflict(f"merging {d['target']} into it hit a conflict in {where}, so {d['target']} didn't move. "
                            f"to resolve it, in your repo's folder: {conflict_prose(d, clash)}", clash)
         return _git(folder, "rev-parse", "HEAD")
     finally:
-        subprocess.run(["git", "-C", str(project.root), "worktree", "remove", "--force", str(folder)], capture_output=True)
+        _git_run(project.root, "worktree", "remove", "--force", str(folder))
         shutil.rmtree(folder, ignore_errors=True)
 
 
@@ -213,12 +210,12 @@ def free_branch(project: Project, branch: str) -> None:
     """A task's own worktree may still have its branch checked out, and then git checkout of it fails
     in your checkout. The task is accepted, so its worktree is done with: detach it there, which keeps
     every file. Only Parallax's own worktrees; never yours."""
-    out = subprocess.run(["git", "-C", str(project.root), "worktree", "list", "--porcelain"], capture_output=True, text=True).stdout
+    out = _git_run(project.root, "worktree", "list", "--porcelain").stdout
     home = str(sandbox.data_home())
     for block in out.split("\n\n"):
         lines = dict(line.split(" ", 1) for line in block.splitlines() if " " in line)
         if lines.get("branch") == f"refs/heads/{branch}" and lines.get("worktree", "").startswith(home):
-            subprocess.run(["git", "-C", lines["worktree"], "checkout", "-q", "--detach"], capture_output=True)
+            _git_run(Path(lines["worktree"]), "checkout", "-q", "--detach")
 
 
 def first_failure(output: str, code: int) -> str:
@@ -244,8 +241,7 @@ def merge_now(project: Project, task_id: str, runner=None) -> str:
     d = acc["data"]
     if project.policy.merge["test_command"].strip():  # a command from the policy file: your OK first, before anything starts
         trust.check(project, task_id, "the [merge] test_command")
-    ff = subprocess.run(["git", "-C", str(project.root), "merge-base", "--is-ancestor", "HEAD", d["commit"]],
-                        capture_output=True).returncode == 0
+    ff = _git_run(project.root, "merge-base", "--is-ancestor", "HEAD", d["commit"]).returncode == 0
     project.ledger.append("merge.started", "parallax", "Accept and merge is running", task=task_id, target=d.get("target"),
                           ff=ff, pid=os.getpid())
     try:
@@ -270,13 +266,11 @@ def _not_stopped(project: Project, task_id: str, d: dict) -> None:
 
 
 def _merge(project: Project, task_id: str, d: dict, runner=None) -> str:
-    on = subprocess.run(["git", "-C", str(project.root), "symbolic-ref", "--short", "-q", "HEAD"],
-                        capture_output=True, text=True).stdout.strip()
+    on = _git_run(project.root, "symbolic-ref", "--short", "-q", "HEAD").stdout.strip()
     if not d.get("target") or on != d["target"]:
         raise ParallaxError(f"can't merge from here: your checkout is on {on or 'no branch'}, not {d.get('target') or 'a branch'}. "
                             f"run git checkout {d.get('target') or 'the base branch'}, then the merge command below")
-    ff = subprocess.run(["git", "-C", str(project.root), "merge-base", "--is-ancestor", "HEAD", d["commit"]],
-                        capture_output=True).returncode == 0
+    ff = _git_run(project.root, "merge-base", "--is-ancestor", "HEAD", d["commit"]).returncode == 0
     # the base branch has moved on since the task began: merge it into the task, outside your checkout,
     # and land that merge commit instead. Nothing has moved yet if it conflicts
     from .stopping import merge_pidfile
@@ -309,7 +303,7 @@ def _merge(project: Project, task_id: str, d: dict, runner=None) -> str:
     _not_stopped(project, task_id, d)  # the last moment before anything moves
     if not ff:  # the branch takes the merge commit, which has your HEAD as a parent, so this still fast-forwards
         _git(project.root, "update-ref", f"refs/heads/{d['branch']}", landing)
-    out = subprocess.run(["git", "-C", str(project.root), "merge", "--ff-only", "-q", d["branch"]], capture_output=True, text=True)
+    out = _git_run(project.root, "merge", "--ff-only", "-q", d["branch"])
     if out.returncode != 0:
         why = next((line.strip() for line in (out.stderr or out.stdout).splitlines() if line.strip()), "git refused")
         raise ParallaxError(f"can't fast-forward {d['target']} to it: {why.removeprefix('fatal: ').rstrip('.')}. "
@@ -344,8 +338,7 @@ def merge_command(accepted: dict, project: Project | None = None) -> str:
         stop = last_stop(project, d["task"])
         if stop and stop["data"].get("commands"):
             return "\n".join(stop["data"]["commands"])
-        if d["ff"] and subprocess.run(["git", "-C", str(project.root), "merge-base", "--is-ancestor", d["target"], d["commit"]],
-                                      capture_output=True).returncode != 0:
+        if d["ff"] and _git_run(project.root, "merge-base", "--is-ancestor", d["target"], d["commit"]).returncode != 0:
             return f"git checkout {d['target']} && git merge {d['branch']}"
     return f"git merge {'--ff-only ' if d['ff'] else ''}{d['branch']}"
 
@@ -359,10 +352,8 @@ def confirm_merges(project: Project) -> list[str]:
         if e["kind"] != "task.accepted" or d["task"] in confirmed:
             continue
         ref = f"refs/heads/{d['target']}" if d.get("target") else "HEAD"
-        head = subprocess.run(["git", "-C", str(project.root), "rev-parse", "-q", "--verify", ref],
-                              capture_output=True, text=True).stdout.strip()
-        if head and subprocess.run(["git", "-C", str(project.root), "merge-base", "--is-ancestor", d["commit"], head],
-                                   capture_output=True).returncode == 0:
+        head = _git_run(project.root, "rev-parse", "-q", "--verify", ref).stdout.strip()
+        if head and _git_run(project.root, "merge-base", "--is-ancestor", d["commit"], head).returncode == 0:
             project.ledger.append("merge.confirmed", "parallax", "the accepted commit is in the branch unchanged",
                                   task=d["task"], commit=d["commit"], target=d.get("target"), head=head)
             from .cleanup import merged
