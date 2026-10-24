@@ -27,6 +27,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false   # the token stays out of .git/config; nothing here pushes
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -37,7 +39,8 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y bubblewrap socat ripgrep
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
-          npm install -g @anthropic-ai/sandbox-runtime
+          # pinned to one release, like the actions above, so a new publish can't change this run on its own
+          npm install -g @anthropic-ai/sandbox-runtime@0.0.79
       - name: Chromium for the browser tests, the version scripts/test.sh pins
         run: scripts/test.sh browser
       - name: Lint and the full suite, browser tests included, as scripts/test.sh runs them. No test calls a model.

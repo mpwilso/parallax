@@ -7,3 +7,5 @@ __pycache__/
 parallax.policy.toml
 .impeccable/
 uv.lock
+.env
+.env.*
