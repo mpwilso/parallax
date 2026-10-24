@@ -252,7 +252,7 @@ def test_the_namespace_hint_names_a_heading_that_exists():
     from pathlib import Path
     root = Path(__file__).resolve().parents[1]
     assert "### Allow user namespaces" in (root / "docs" / "wsl.md").read_text(encoding="utf-8")
-    setup = (root / "README.md").read_text(encoding="utf-8").split("\n## Setup\n", 1)[1]
+    setup = (root / "README.md").read_text(encoding="utf-8").split("\n## Try it\n", 1)[1]  # the setup steps live there
     step_1 = setup.split("\n1. ", 1)[1].split("\n2. ", 1)[0]
     assert "sysctl -w kernel.apparmor_restrict_unprivileged_userns=0" in step_1  # the line the hint names
 

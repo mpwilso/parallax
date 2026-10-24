@@ -13,6 +13,9 @@ Fixed:
 Changed:
 - `parallax/accept.py` calls git through `parallax/git.py` like the rest, instead of nineteen direct `subprocess.run` calls. No behavior change.
 
+Docs:
+- The README is restructured and shorter (133 lines to 94): the plain sentence and the status line first, then What it does, Try it, What was measured, Limits, How it was built and The other tools. Setup detail, Stop and remove, the tests and the full list of limits moved to `docs/using.md`. `tests/test_readme_rules.py` holds the README to under 155 lines, no dashes as punctuation, links that resolve, no bare placeholders and no "only", "first" or "best" in its prose. `docs/brand/README.md` says what each brand file is and where it is used.
+
 ## 0.2.3 (2026-10-11)
 
 Changed:

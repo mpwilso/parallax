@@ -5,115 +5,55 @@
   </picture>
 </p>
 
-[![tests](https://github.com/mpwilso/parallax/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/mpwilso/parallax/actions/workflows/tests.yml)
+<a href="https://github.com/mpwilso/parallax/actions/workflows/tests.yml"><img src="https://github.com/mpwilso/parallax/actions/workflows/tests.yml/badge.svg" alt="CI"></a>
 
 **Agents do the work. You make the calls.**
 
-Status: A portfolio project, built to show how I design, test and judge an AI tool, and a working prototype I use on this repo. In one eval run, 10 of 11 real open-source fixes passed their maintainers' hidden tests. The runs are in docs/, including the misses.
+AI coding agents build in a locked-down sandbox. You make one decision per task: accept or send back.
+
+Status: a portfolio project, built to show how I design, test and judge an AI tool. In eval run 8e3074, 10 of 11 real open-source fixes passed their maintainers' hidden tests, each Ready with one decision ([docs/evals.md](docs/evals.md#results)).
 
 <p align="center"><img src="docs/brand/demo.gif" alt="The app: a task typed in, Focus, Reticle, Maker and Second Eye taking their turns, the card turning Ready, and the accept" width="800"></p>
 
 <p align="center"><sub>Demo with scripted agents, so it runs in seconds and costs nothing. Real runs are in <a href="docs/ui-runs/">docs/ui-runs/</a>.</sub></p>
 
-Cost of entry: Linux or WSL2 only (macOS is untested), root `apt` installs, a `sysctl` that relaxes AppArmor's limit on unprivileged user namespaces (Ubuntu 24.04 and later), Node 22, and a logged-in Claude Code. [Setup](#setup) has every step.
+**3 min 25 s from request to Ready, $0.92 in agent costs (estimate), 1 decision: accept.** One real task, a one-line README fix, run through the UI. All three real runs, with every screen and cost: [docs/ui-runs/](docs/ui-runs/README.md).
 
-Parallax is a local tool for developers who use AI coding agents. The agents plan, build and check the work on their own, inside a sandbox. Parallax checks what they produce and only comes to you when a person has to decide. For most tasks that's one decision: accept the result or send it back.
-
-Parallax is one of six tools, and one of three that run in order. [Loupe](https://github.com/mpwilso/loupe) writes the story, Parallax builds it under a gated agent loop and keeps the record, and [ISR](https://github.com/mpwilso/isr) tells the person accepting it what is left. Each runs on its own, and they have been run in that order once, on one change: [ISR's run log](https://github.com/mpwilso/isr/blob/master/docs/run-log.md#the-first-story-first-run-on-a-real-parallax-change-e3108e-2026-10-05). The other three stand alone: [Polarizer](https://github.com/mpwilso/polarizer) sits between an agent and its MCP servers and holds risky tool calls until a person approves them, where Parallax gates the whole build; [Mordecai](https://github.com/mpwilso/mordecai) judges whether a skill helps; and [Project Max-Q](https://github.com/mpwilso/Project-Max-Q) ranks job postings and checks resume claims.
-
-| 3 min 25 s from request to Ready | $0.92 in agent costs (estimate) | 1 decision: accept |
-|:---:|:---:|:---:|
-
-A real task: a one-line README fix, run through the UI. All three real runs, with every screen and cost: [docs/ui-runs/](docs/ui-runs/README.md).
-
-## Why it exists
-
-AI can now write code faster than people can review it. The bottleneck has moved to judgment: what to build, what to trust, what to ship. Parallax runs the execution without you, and every question that reaches you comes with what you need to answer it.
-
-## How a task moves
+## What it does
 
 <p align="center"><img src="docs/brand/flow.svg" width="900" alt="How a task moves: you describe it, Focus writes a plan, Parallax checks the plan and starts the build when it's small and safe, Reticle writes tests of what you asked, Maker builds in a sandbox, your tests, Reticle's, Second Eye and Field check it, and one card comes back for your accept and your merge, every step on a tamper-evident log"></p>
 
-## The agents
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/party-animated-dark.svg"><img src="docs/brand/party-animated-light.svg" alt="Focus, Reticle, Maker, Second Eye and Field" width="450"></picture>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/party-animated-dark.svg">
-  <img src="docs/brand/party-animated-light.svg" alt="Focus, Reticle, Maker, Second Eye and Field" width="450">
-</picture>
+**Focus** drafts the intent and plan. **Reticle** writes tests of what you asked, before the build; Maker can't see or change them. **Maker** builds in the sandbox. **Second Eye** is the blind checker: it gets the goal, the review rules and the change itself, never the plan or the builder's notes, and a test pins that. **Field** is the UI tester, which uses your app in a real browser and leaves tests behind. In the UI a portrait moves while its agent is working.
 
-**Focus** drafts the intent and plan. **Reticle** writes tests of what you asked, before the build; Maker can't see or change them. **Maker** builds in the sandbox. **Second Eye** is the blind checker: it sees only the result, never the making. **Field** is the UI tester, which uses your app in a real browser and leaves tests behind. In the UI a portrait moves only while its agent is working.
-
-## What's distinctive
-
-**The rules are the baseline. Nothing gets measured without them.**
-
-- **One decision per task, and it's measured.** `parallax stats` counts how often each task needed you. The goal is once: accept.
+- **One decision per task, measured, and one way through, tested.** `parallax stats` counts how often each task needed you; the goal is once: accept. Start work from the app or the terminal, or pick it back up, and every way in passes the same checks before an agent runs: your signed approval, a spending cap, a test of the sandbox, an entry in the log. One test proves that for every way in.
 - **Every question comes ready to answer:** the options, what each one does, whose call it is and why a person has to make it, and a recommendation written by code, not by a model.
 - **What an agent may reach is part of what you approve.** Network access, files outside its workspace and new dependencies are listed in the plan, and the sandbox is tested before every launch. A plan that asks for more never starts without you.
-- **The reviewer never sees how the work was made.** Second Eye gets only the goal, the review rules and the change itself, never the plan or the builder's notes. A test pins that.
 - **Code decides what happens next, not a model.** Every step goes into a tamper-evident log, and every approval is signed with a key the agents can't read.
-- **Many ways in, one way through.** Start work from the app or the terminal, and pick it back up several ways: every one passes the same checks before any agent runs (your signed approval, a spending cap, a test of the sandbox, an entry in the log). One test proves that for every way in.
 
-## Day to day
+## Try it
 
-In your repo, run `parallax ui`, type the task, and answer the one card that comes back. The steps, the keys, the terminal commands, merging, Stop, cleanup and spending: [docs/using.md](docs/using.md).
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/ui-runs/final-ui/ready-dark.png">
-  <img src="docs/ui-runs/final-ui/ready.png" alt="A Ready card: the stage strip with the last agent's portrait in its tile, the bottom line, one question with Accept, Accept and merge, Reject and Drop, what wasn't looked at, and the evidence in plain sentences with quiet ledger links, beside the list of tasks" width="1280">
-</picture>
-
-**Ready** means the listed checks passed: the plan's tests ran on the exact reviewed tree, the card says for each outcome in the intent which test that ran covers it or that none does, and Second Eye found nothing blocking. It does not mean the code is bug-free. **Needs you** means one decision only you can make; the card says whose call it is and why a person has to make it. Anything that sends work back, drops it or accepts a risk asks for a one-line reason, and Focus redrafts from it.
-
-## Status and known limits
-
-The latest release is [v0.2.3](https://github.com/mpwilso/parallax/releases/tag/v0.2.3). One task it did on itself, from the typed request to the accepted commit: [docs/example.md](docs/example.md). Three real runs through the UI with every state and cost: [docs/ui-runs/](docs/ui-runs/README.md). How it got here: [docs/history.md](docs/history.md). What it protects and what it can't: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
-
-- **Second Eye reads the diff and can't run code.** It judges the outcome where the diff shows it, and says what it couldn't see. Reticle's tests do run: each is kept only if it fails on the code before the change, so it's seen failing before the fix. Against 23 mechanically broken versions of real fixes, Reticle or Second Eye caught 20, with 2 false alarms on the 11 real fixes ([docs/evals.md](docs/evals.md)). Those are seeded edits, not the mistakes Maker actually makes.
-- **Linux or WSL2.** It needs Claude Code's sandbox (bubblewrap); that sandbox doesn't run on native Windows. macOS is untested: what it would take is in [docs/macos.md](docs/macos.md).
-- **It needs Claude Code**, logged in, and the Claude Agent SDK. Costs are Claude Code's estimates at list prices; on a subscription your real limit is the plan's usage limits, which Parallax can't see.
-- **A cap can overshoot by one turn.** Every agent gets what's left of the cap as its own limit, but the SDK checks it between turns.
-- **Field's browser server is pinned** to `@playwright/mcp` 0.0.70: later versions need Unix sockets the sandbox refuses.
-- **The three real-sandbox tests need a machine that allows unprivileged user namespaces**; elsewhere they skip and say why.
-- **One person, one machine.** No splitting work into several tasks yet (planned).
-- **Evals:** in run 8e3074, 10 of 11 real fixes from open-source projects passed the maintainers' hidden tests, each Ready with one decision: [docs/evals.md](docs/evals.md).
-- **A requirements gap gets past every checker.** When Focus guesses wrong about what was wanted, every check passes the guess, because each one judges the work against that intent (humanize-174 in the evals).
-
-## How it was built
-
-I designed Parallax and directed its build; Claude Code wrote most of the code under that direction. I reviewed every milestone, and the design notes and real run logs in [docs/](docs/) show the process.
-
-## What's next
-
-- Several parallel tasks from one request.
-- A knowledge layer that gives agents project context and past decisions to draw on.
-
-## Setup
-
-Linux, or Windows through WSL2. On Windows, make the distro first: [docs/wsl.md](docs/wsl.md), then continue here inside it. macOS is untested.
+Linux, or Windows through WSL2 ([docs/wsl.md](docs/wsl.md) makes the distro); macOS is untested. You need root for `apt`, Node 22 and a logged-in Claude Code. What each step installs, the AppArmor `sysctl` behind step 1, and installing from a clone: [Setup](docs/using.md#setup).
 
 1. The tools, as root. Apt's Node is too old for the sandbox runtime, so Node comes from NodeSource:
    ```bash
    apt update && apt install -y git bubblewrap socat ripgrep python3 curl ca-certificates
    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt install -y nodejs
    npm install -g @anthropic-ai/sandbox-runtime
+   sysctl -w kernel.apparmor_restrict_unprivileged_userns=0   # Ubuntu 24.04 and later; keep it in /etc/sysctl.d/99-parallax.conf
    ```
-   On Ubuntu 24.04 and later, allow the user namespaces the sandbox needs (CI does the same): `sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`, and put that line in `/etc/sysctl.d/99-parallax.conf` so it survives a reboot.
 2. As your user, uv and Claude Code, then log in:
    ```bash
    curl -LsSf https://astral.sh/uv/install.sh | sh
    curl -fsSL https://claude.ai/install.sh | bash
    source ~/.local/bin/env && claude
    ```
-3. Parallax itself, from GitHub (the `parallax` on PyPI is an unrelated SSH tool):
+3. Parallax itself, from GitHub (the `parallax` on PyPI is an unrelated SSH tool). The latest release is [v0.2.3](https://github.com/mpwilso/parallax/releases/tag/v0.2.3):
    ```bash
    uv tool install "parallax[claude] @ git+https://github.com/mpwilso/parallax@v0.2.3"
    ```
-   To work on Parallax or run its evals, clone it and install that instead: `git clone https://github.com/mpwilso/parallax ~/code/parallax`, then `uv tool install --editable "$HOME/code/parallax[claude]"`.
-4. Check the machine:
-   ```bash
-   parallax doctor
-   ```
+4. `parallax doctor` checks the machine:
    ```
    platform      linux on wsl2                      ok
    sandbox       bubblewrap, socat, srt             ok
@@ -125,9 +65,30 @@ Linux, or Windows through WSL2. On Windows, make the distro first: [docs/wsl.md]
    repo          not in a git repo: run doctor in your repo to check it too
    ready.
    ```
-   `build tools` covers every program a build runs: git, uv, and whatever your `[build] setup` calls. Parallax also looks in `~/.local/bin`, where the uv installer puts it, so a shell without uv on its PATH still builds. Anything still missing is printed by `parallax ui` when it starts and shown at the top of the page, with the fix, before any task runs. Run in your repo, `repo` checks it has a commit and a branch checked out: every task starts from your latest commit, and Accept and merge lands on the branch you're on. In a Parallax project, `test runner` checks that the python your tests run with has pytest when there's no `[build] setup`; with one, make sure setup installs it.
-5. In a git repo you want agents to work on: `parallax init`, then `parallax ui`. If the repo's tests need dependencies, set `[build] setup` in `parallax.policy.toml` to the command that makes a venv at `$PARALLAX_VENV`; `init` shows the command and asks first when the repo's example policy already has one.
+5. In a git repo you want agents to work on: `parallax init`, then `parallax ui`. Type the task and answer the one card that comes back. Ready means the listed checks passed, not that the code is bug-free. The keys, the terminal commands, merging, Stop, spending, removal and the tests: [docs/using.md](docs/using.md).
 
-**Stop and remove.** `Ctrl+C` in the terminal running `parallax ui` stops the page; `parallax stop` ends every running task now and records it; `parallax stop <task>` ends just that one. To remove Parallax: `uv tool uninstall parallax`, then delete `~/.local/share/parallax` (worktrees, task folders, Field's tools) and `~/.config/parallax` (the approval key and UI links). A repo keeps only `parallax.policy.toml`, `REVIEW.md`, its ledger in `.parallax/` and the `docs/tasks/` it accepted; delete those to leave no trace.
+## What was measured
 
-The tests never call a model. `scripts/test.sh` runs ruff and the whole suite exactly as CI does, with the browser tests; `scripts/test.sh browser` fetches the pinned Chromium once. Chromium also needs three system libraries, libnss3, libnspr4 and libasound2t64: `sudo apt-get install -y libnss3 libnspr4 libasound2t64`. Without them the browser tests skip, and say why. `scripts/demo.py` re-records the demo above.
+- **Evals:** the 11 real fixes in the status line ran in one eval run, each reaching Ready with one decision, $9.68 in all; the one miss, humanize-174, is a requirements gap, below ([run 8e3074](docs/evals.md#results)).
+- **Seeded breaks:** against 23 mechanically broken versions of those fixes, Reticle or Second Eye caught 20, with 2 false alarms on the 11 real fixes ([docs/evals.md](docs/evals.md#the-checkers-together)). Those are seeded edits, not the mistakes Maker actually makes.
+- **Real runs through the UI:** three tasks on this repo, one or two decisions each, $0.92 to $4.44; $27.71 spent across every attempt, the ones that found bugs included ([docs/ui-runs/](docs/ui-runs/README.md)).
+
+## Limits
+
+- **Second Eye reads the diff and can't run code.** It judges the outcome where the diff shows it, and says what it couldn't see. Reticle's tests do run: a test that passes on the code before the change is dropped, so every kept test was seen failing before the fix.
+- **A requirements gap gets past every checker.** When Focus guesses wrong about what was wanted, every check passes the guess, because each one judges the work against that intent (humanize-174 in the evals).
+- **One person, one machine.** Several tasks from one request, and a knowledge layer that gives agents project context and past decisions, are planned, not built.
+
+The full list: [docs/using.md](docs/using.md#limits). What it protects and what it can't: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
+
+## How it was built
+
+I designed Parallax and directed its build; Claude Code wrote most of the code under that direction. I reviewed every milestone, and the design notes and real run logs in [docs/](docs/) show the process. How it got here, milestone by milestone: [docs/history.md](docs/history.md). One early task it did on itself, before the hands-free redesign: [docs/example.md](docs/example.md).
+
+## The other tools
+
+This is one of six tools. Three run in order: [Loupe](https://github.com/mpwilso/loupe) writes the story, Parallax builds it in a sandbox and keeps the record, and [ISR](https://github.com/mpwilso/isr) tells the person accepting it what is left to check. Three stand alone: [Polarizer](https://github.com/mpwilso/polarizer) holds an agent's risky tool calls until a person approves them, [Mordecai](https://github.com/mpwilso/mordecai) judges whether a Claude skill helps, and [Max Q](https://github.com/mpwilso/Project-Max-Q) ranks job postings against a profile. Each runs on its own. The three were run in order once, on one change: [ISR's run log](https://github.com/mpwilso/isr/blob/master/docs/run-log.md).
+
+## License
+
+[MIT](LICENSE).

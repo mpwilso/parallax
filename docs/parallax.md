@@ -4,7 +4,7 @@ Agents do the work. You make the calls, at a few points that matter.
 
 ## The lifecycle
 
-Parallax follows the AI-native SDLC playbook (https://claude.com/blog/the-ai-native-sdlc-playbook): each stage writes a file the next stage reads, humans own the judgment gates, and agents verify their own work before a human sees it.
+Parallax follows the [AI-native SDLC playbook](https://claude.com/blog/the-ai-native-sdlc-playbook): each stage writes a file the next stage reads, humans own the judgment gates, and agents verify their own work before a human sees it.
 
 1. **Intake.** `parallax do "<plain words>"`, or the box in `parallax ui`, creates the task, its branch and worktree, and starts one background pilot for it.
 2. **Drafting.** Focus, the read-only drafter, writes `docs/tasks/<id>/intent.md` (problem, numbered outcomes, scope, constraints, size), a spec for large tasks, and `plan.md`, which ends with a `toml` block code reads: files, tests, size, domains, reads, binaries, symlinks, dependencies, estimate, cap, which outcome each test covers, and which outcomes are user flows.

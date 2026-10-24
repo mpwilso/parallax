@@ -46,4 +46,4 @@ Don't add a second -q to pytest: scripts/test.sh already passes one, and stacked
 
 ## Current state
 
-M7 to M14 are built, with the UI pass (the queue and the decision card), the UI tester, session cost records, the eval harness on the current pipeline, and the old Milestone 2 path cut. What's planned is in the README's "What's next"; docs/history.md has the milestones.
+M7 to M14 are built, with the UI pass (the queue and the decision card), the UI tester, session cost records, the eval harness on the current pipeline, and the old Milestone 2 path cut. What's planned is in the README's "Limits" and in docs/using.md; docs/history.md has the milestones.

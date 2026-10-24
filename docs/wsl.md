@@ -1,6 +1,6 @@
 # Parallax on Windows, through WSL2
 
-Claude Code's sandbox runs on Linux, macOS and WSL2, not on native Windows, so on Windows Parallax lives in a WSL2 distro made just for it. Once the distro exists, the Linux steps in the [README](../README.md#setup) apply inside it. Windows drives and interop end up off, so the distro reaches nothing on the Windows side.
+Claude Code's sandbox runs on Linux, macOS and WSL2, not on native Windows, so on Windows Parallax lives in a WSL2 distro made just for it. Once the distro exists, the Linux steps in the [README](../README.md#try-it) apply inside it. Windows drives and interop end up off, so the distro reaches nothing on the Windows side.
 
 ## Make the distro
 
