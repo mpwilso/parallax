@@ -80,7 +80,7 @@ def test_the_logo_is_the_p_twice_offset():
     assert svg.count("<rect ") == 2 * filled and 'viewBox="0 0 14 16"' in svg
     assert 'class="layer l1" fill="#a47cf0" opacity="1.0"' in svg and 'class="layer l2" fill="#5ef2ff" opacity="0.85"' in svg
     assert '<rect x="2" y="3"' in svg and '<rect x="4" y="1"' in svg  # the first pixel of each layer, at its offset
-    assert "parallax" in brand.logo_svg(word=True) and "monospace" in brand.logo_svg(word=True)
+    assert "PARALLAX</text>" in brand.logo_svg(word=True) and "sans-serif" in brand.logo_svg(word=True)
     moving = brand.logo_svg(animated=True)
     assert "@keyframes drift1" in moving and "@keyframes drift2" in moving and "prefers-reduced-motion" in moving
     assert "steps(2)" in moving and "animation" not in brand.logo_svg() and "animation" not in brand.logo_svg(word=True)
@@ -147,15 +147,21 @@ def test_stages_follow_the_ledger():
     assert not re.search(r"drafter|checker|tester", " ".join(a["name"] for a in brand.AGENTS.values()), re.I)
 
 
-def test_the_lockup_is_the_animated_mark_with_the_uis_wordmark():
+def test_the_lockup_is_the_animated_mark_with_the_series_wordmark():
+    """The word is set as the other five tools set theirs (a system sans, weight 800, letter-spacing 3 and a
+    fixed textLength per 100 of height, here scaled to the P's 16-unit grid); the UI's header keeps its
+    monospace word on purpose."""
     svg = brand.lockup_svg()
     assert brand.logo_body() in svg and brand.DRIFT in svg  # the P and its drift, exactly as mark-animated.svg
     assert "@media (prefers-reduced-motion: reduce){.l1,.l2{animation:none}}" in svg
-    assert 'font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-weight:600' in svg  # app.css --mono, .word
+    assert 'font-family:ui-sans-serif,system-ui,"Segoe UI",Helvetica,Arial,sans-serif;font-weight:800;letter-spacing:0.48px' in svg
+    assert 'font-size="7.36" textLength="44.8" lengthAdjust="spacing">PARALLAX</text>' in svg
+    assert svg.count('shape-rendering="crispEdges"') == 1 and '<g shape-rendering="crispEdges">' + brand.logo_body() in svg  # pixels crisp, word anti-aliased
     assert "fill:#1c1c1a" in svg and "fill:#ecebe6" in brand.lockup_svg("dark")  # app.css --ink, one per file
     assert 'aria-label="Parallax"' in svg
     for name in ("mark.svg", "mark-animated.svg", "logo.svg"):
-        assert "parallax</text>" not in (ROOT / "docs" / "brand" / name).read_text() or name == "logo.svg"
+        assert "PARALLAX</text>" not in (ROOT / "docs" / "brand" / name).read_text() or name == "logo.svg"
+    assert ".top .word { font-family: var(--mono)" in (ROOT / "parallax" / "web" / "app.css").read_text(encoding="utf-8")
 
 
 def test_the_party_takes_turns_and_only_one_agent_moves_at_a_time():

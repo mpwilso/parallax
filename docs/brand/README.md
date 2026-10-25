@@ -10,11 +10,11 @@ A pixel P drawn twice, offset: a violet layer and a cyan one, the parallax. In t
 |---|---|---|
 | [mark.svg](mark.svg) | The P alone, still. | The UI's favicon, served as `/favicon.svg` from the same rendering. |
 | [mark-animated.svg](mark-animated.svg) | The P with its drift. | The UI's header logo, inlined from `/brand.json`. |
-| [logo.svg](logo.svg) | The P with the word "parallax" beside it, still. | Nothing in the repo today; kept for use outside it. |
+| [logo.svg](logo.svg) | The P with the word PARALLAX beside it, still. | Nothing in the repo today; kept for use outside it. |
 
 ## The lockup
 
-The animated P and the word, sized from the text. An image can't see the page's theme, so the README picks the file with a `<picture>`: [lockup-animated-dark.svg](lockup-animated-dark.svg) on dark pages, [lockup-animated-light.svg](lockup-animated-light.svg) on light ones. It is the README's heading.
+The animated P and the word PARALLAX, set like the other five tools' lockups: a system sans at weight 800 with wide tracking, stretched to a fixed length, so the six read as one set. The UI's header keeps its lowercase monospace word, and so does the social preview below. An image can't see the page's theme, so the README picks the file with a `<picture>`: [lockup-animated-dark.svg](lockup-animated-dark.svg) on dark pages, [lockup-animated-light.svg](lockup-animated-light.svg) on light ones. It is the README's heading.
 
 ## The agents
 

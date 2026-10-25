@@ -176,16 +176,19 @@ DRIFT = ('<style>.l1,.l2{animation:7s steps(2) infinite}.l1{animation-name:drift
 
 
 def logo_svg(word: bool = False, size: int = 32, animated: bool = False) -> str:
-    """The pixel P; with word, the name beside it in the monospace font. animated: the two layers drift
-    one pixel further apart and back every few seconds, in two steps, by CSS inside the file; still
-    under prefers-reduced-motion. For the README header only; logo.svg and mark.svg stay static."""
-    w = LOGO_W + (4 + 48 if word else 0)
+    """The pixel P; with word, the name beside it in the series' wordmark face (see lockup_svg). animated:
+    the two layers drift one pixel further apart and back every few seconds, in two steps, by CSS inside
+    the file; still under prefers-reduced-motion. For the README header only; logo.svg and mark.svg stay
+    static. Pixels are crisp; a word, when there is one, is left anti-aliased."""
+    w = LOGO_W + (WORD_GAP + WORD_LENGTH + 1 if word else 0)
+    crisp = "" if word else ' shape-rendering="crispEdges"'
     parts = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {LOGO_H}" height="{size}" '
-             f'width="{round(size * w / LOGO_H)}" shape-rendering="crispEdges" role="img" aria-label="parallax">',
-             DRIFT if animated else "", logo_body()]
+             f'width="{round(size * w / LOGO_H)}"{crisp} role="img" aria-label="parallax">',
+             DRIFT if animated else "", '<g shape-rendering="crispEdges">' if word else "", logo_body(), "</g>" if word else ""]
     if word:
-        parts.append(f'<text x="{LOGO_W + 4}" y="12.2" font-family="ui-monospace, Menlo, Consolas, monospace" '
-                     'font-size="10.5" fill="#7c81a1">parallax</text>')
+        parts.append(f'<text x="{LOGO_W + WORD_GAP}" y="{WORD_BASELINE}" font-family=\'{WORD_FONT}\' font-weight="{WORD_WEIGHT}" '
+                     f'letter-spacing="{WORD_TRACKING}" font-size="{WORD_SIZE}" textLength="{WORD_LENGTH}" lengthAdjust="spacing" '
+                     'fill="#7c81a1">PARALLAX</text>')
     parts.append("</svg>")
     return "".join(parts)
 
@@ -315,27 +318,34 @@ def flow_svg() -> str:
     return "".join(parts).replace("{H}", str(H))
 
 
-# the lockup: the animated P with the word beside it, in the UI's own wordmark font and color ----------------
+# the lockup: the animated P with the word beside it, set like the other five tools' lockups -----------------
+# the other five lockups are 100 units tall: a system sans at weight 800, font-size 46, letter-spacing 3, the word
+# stretched to a fixed length (280 for eight letters) with textLength; the P's grid is 16 tall, so each value is scaled by 0.16
 
-WORD_FONT = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"  # app.css --mono, the header's .word
-WORD_INK = {"light": "#1c1c1a", "dark": "#ecebe6"}  # app.css --ink in each scheme, which .word inherits
-WORD_EM = 0.66  # a monospace advance is about 0.6em; the lockup test measures the real thing
+WORD_FONT = 'ui-sans-serif,system-ui,"Segoe UI",Helvetica,Arial,sans-serif'  # the face the other lockups use
+WORD_WEIGHT = 800
+WORD_SIZE = 7.36  # 46 of 100
+WORD_TRACKING = 0.48  # letter-spacing 3 of 100
+WORD_LENGTH = 44.8  # textLength 280 of 100, for the eight letters
+WORD_BASELINE = 10.7  # a baseline at 67 of 100 puts the capitals' middle level with the P's
+WORD_GAP = 3  # from the P's grid to the word
+WORD_INK = {"light": "#1c1c1a", "dark": "#ecebe6"}  # app.css --ink in each scheme, the ink the other lockups use too
 
 
 def lockup_svg(scheme: str = "light") -> str:
-    """The animated P (as mark-animated.svg) and "parallax" beside it, centred on the P, sized from the text.
-    One fixed wordmark color per file, the UI's ink for that scheme; the README picks the file with a <picture>."""
-    size = 10.5
-    word_w = WORD_EM * size * len("parallax")
-    gap = 5
-    w = LOGO_W + gap + word_w + 2
+    """The animated P (as mark-animated.svg) and PARALLAX beside it, in the series' wordmark face, so the six
+    lockups read as one set; the UI's header keeps its lowercase monospace word. One fixed wordmark color per
+    file, the UI's ink for that scheme; the README picks the file with a <picture>. The pixels stay crisp and
+    the word is anti-aliased, so crispEdges sits on the P's group, not the file."""
+    w = LOGO_W + WORD_GAP + WORD_LENGTH + 1
     height = 72
     return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w:.1f} {LOGO_H}" height="{height}" '
-            f'width="{round(height * w / LOGO_H)}" shape-rendering="crispEdges" role="img" aria-label="Parallax">'
+            f'width="{round(height * w / LOGO_H)}" role="img" aria-label="Parallax">'
             + DRIFT
-            + f'<style>.word{{font-family:{WORD_FONT};font-weight:600;letter-spacing:0.01em;fill:{WORD_INK[scheme]}}}</style>'
-            + logo_body()
-            + f'<text class="word" x="{LOGO_W + gap}" y="{LOGO_H / 2}" dominant-baseline="central" font-size="{size}">parallax</text>'
+            + f'<style>.word{{font-family:{WORD_FONT};font-weight:{WORD_WEIGHT};letter-spacing:{WORD_TRACKING}px;fill:{WORD_INK[scheme]}}}</style>'
+            + '<g shape-rendering="crispEdges">' + logo_body() + "</g>"
+            + f'<text class="word" x="{LOGO_W + WORD_GAP}" y="{WORD_BASELINE}" font-size="{WORD_SIZE}" '
+            f'textLength="{WORD_LENGTH}" lengthAdjust="spacing">PARALLAX</text>'
             "</svg>")
 
 

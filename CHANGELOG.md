@@ -4,6 +4,7 @@ What changed in each release. The full notes for each are on the [releases page]
 
 ## Unreleased
 
+- The README's lockup and logo.svg set the word PARALLAX the way the other five tools set theirs: a system sans at weight 800 with wide tracking, stretched to a fixed length, so the six lockups read as one set. The pixel P is unchanged and stays crisp; the UI's header keeps its lowercase monospace word.
 - Eval results record the scratch repo relative to the evals home, not as an absolute path, so a result file names no machine's home directory. The 41 recorded results were rewritten the same way; `evals.scratch_path` resolves old and new.
 
 Fixed:
