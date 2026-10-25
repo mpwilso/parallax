@@ -14,7 +14,7 @@ A pixel P drawn twice, offset: a violet layer and a cyan one, the parallax. In t
 
 ## The lockup
 
-The animated P and the word PARALLAX, set like the other five tools' lockups: a system sans at weight 800 with wide tracking, stretched to a fixed length, so the six read as one set. The UI's header keeps its lowercase monospace word, and so does the social preview below. An image can't see the page's theme, so the README picks the file with a `<picture>`: [lockup-animated-dark.svg](lockup-animated-dark.svg) on dark pages, [lockup-animated-light.svg](lockup-animated-light.svg) on light ones. It is the README's heading.
+The animated P and the word PARALLAX, set like the other five tools' lockups: a system sans at weight 800 with wide tracking, stretched to a fixed length, so the six read as one set. The UI's header keeps its lowercase monospace word. An image can't see the page's theme, so the README picks the file with a `<picture>`: [lockup-animated-dark.svg](lockup-animated-dark.svg) on dark pages, [lockup-animated-light.svg](lockup-animated-light.svg) on light ones. It is the README's heading.
 
 ## The agents
 
@@ -35,4 +35,4 @@ Focus, Reticle, Maker, Second Eye and Field, one pixel portrait each on its tile
 
 ## The social preview
 
-[social.html](social.html) is the source: 1280 by 640, the P, the word and the tagline on the UI's tile color. [social.png](social.png) is its render, uploaded by hand as the GitHub repository's social preview. There is no script for the render. The PNG still shows a second line under the tagline that the source no longer has; the next render drops it.
+[social.html](social.html) is the source: 1280 by 640, the P, the word PARALLAX in the lockup's face and the tagline on the UI's tile color. [social.png](social.png) is its render, uploaded by hand as the GitHub repository's social preview. There is no script for the render; the current PNG was made on 2026-10-25 with a headless Chromium on Linux, where DejaVu Sans Bold stood in for the system sans.
