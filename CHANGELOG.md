@@ -2,7 +2,7 @@
 
 What changed in each release. The full notes for each are on the [releases page](https://github.com/mpwilso/parallax/releases).
 
-## Unreleased
+## 0.3.0 (2026-11-05)
 
 - The knowledge layer: Focus and Maker are told what this repo's past tasks settled, compiled by code from the ledger (`parallax/knowledge.py`): the last ten finished tasks, newest first, each with its title, its asked outcomes, what you sent back and why, risks you accepted, and what you dropped. It is given as data beside the task's own material, which outranks it. Second Eye and Reticle never see it, and a repo with no finished tasks gets nothing. Five tests.
 - The README's lockup and logo.svg set the word PARALLAX the way the other five tools set theirs: a system sans at weight 800 with wide tracking, stretched to a fixed length, so the six lockups read as one set. The pixel P is unchanged and stays crisp; the UI's header keeps its lowercase monospace word.
