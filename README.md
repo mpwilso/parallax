@@ -77,7 +77,7 @@ Linux, or Windows through WSL2 ([docs/wsl.md](docs/wsl.md) makes the distro); ma
 
 - **Second Eye reads the diff and can't run code.** It judges the outcome where the diff shows it, and says what it couldn't see. Reticle's tests do run: a test that passes on the code before the change is dropped, so every kept test was seen failing before the fix.
 - **A requirements gap gets past every checker.** When Focus guesses wrong about what was wanted, every check passes the guess, because each one judges the work against that intent (humanize-174 in the evals).
-- **One person, one machine.** Several tasks from one request, and a knowledge layer that gives agents project context and past decisions, are planned, not built.
+- **One person, one machine.** Several tasks from one request are planned, not built. Focus and Maker are told what this repo's past tasks settled (titles, outcomes, your reasons), from the ledger; Second Eye and Reticle are not.
 
 The full list: [docs/using.md](docs/using.md#limits). What it protects and what it can't: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 

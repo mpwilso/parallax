@@ -72,6 +72,9 @@ def goal(project: Project, task_id: str) -> str:
         path = lifecycle.doc_path(project, task_id, doc)
         if path.exists():
             parts.append(f"The approved {doc}:\n{path.read_text(encoding='utf-8')}")
+    from .knowledge import material as settled
+    if known := settled(project, exclude=task_id):  # what past tasks on this repo settled, as data
+        parts.append(known)
     return "\n\n".join(parts)
 
 

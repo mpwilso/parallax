@@ -21,6 +21,7 @@ How Parallax got here, milestone by milestone. The design notes behind each step
 - **M13:** the one decision: every stop is one question with options and a recommendation written by code; reject at Ready redrafts from your reason.
 - **M14:** the UI as the main surface; then a UX pass (a queue, cards built for the decision) and the UI tester, a blind agent that uses the app in a real browser.
 - **Evals (2026-09-30):** the harness returns on the current pipeline: `parallax eval` runs cases through `do`'s pipeline under a hard budget, and `parallax stats` says when the evals are older than a prompt, a model, CLAUDE.md, REVIEW.md or the policy.
+- **The knowledge layer (2026-11-05):** Focus and Maker get what the repo's past tasks settled, compiled by code from the ledger: the last ten finished tasks, their asked outcomes, what you sent back and why, risks you accepted, and what you dropped. Second Eye and Reticle stay blind to it.
 - **Next:** M15, the light conductor (splitting work into tasks, scheduling), and more stats. Eval results so far: [evals.md](evals.md).
 
 ## The first design (Milestones 1 to 6)

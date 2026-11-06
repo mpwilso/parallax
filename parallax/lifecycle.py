@@ -193,6 +193,9 @@ def _material(project: Project, task_id: str, doc: str, feedback: str, problems:
         parts.append(f"The intent:\n{_read(project, task_id, 'intent')}")
     if doc == "plan" and doc_path(project, task_id, "spec").exists():
         parts.append(f"The spec:\n{_read(project, task_id, 'spec')}")
+    from .knowledge import material as settled
+    if known := settled(project, exclude=task_id):  # what past tasks on this repo settled, as data
+        parts.append(known)
     if doc == "plan":
         parts.append(f"Drafting this task has cost an estimated ${costs.spent(project, task_id):.2f} so far. "
                      "It counts against the cap.")

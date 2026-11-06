@@ -326,3 +326,4 @@ On by default since 2026-09-30 (`[reticle] enabled = true`), testing only what y
 #### Later: a knowledge layer
 
 - Project context and past decisions for the agents to draw on: what the repo is, what was decided before and why (from the ledger and `docs/tasks/`), so drafters and makers don't relearn it on every task. Read-only for agents, like everything else they're given.
+- Built on 2026-11-05 as `parallax/knowledge.py`: the ledger's finished tasks, with each intent's title and asked outcomes and your recorded reasons, given to Focus and Maker as data. What the repo is stays with the repo itself, which Focus already reads.

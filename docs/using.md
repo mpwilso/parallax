@@ -54,6 +54,10 @@ Every running card has Stop: while Focus drafts, Reticle writes tests, Maker bui
 
 Parallax removes the task's worktree and deletes its branch, once your next command sees the accepted commit in your branch. The card stays readable: it's built from the ledger and the commits in your repo. Dropping a task keeps its work as a patch in the task's data folder (`~/.local/share/parallax/tasks/`), then removes its worktree and branch.
 
+## What agents know of past tasks
+
+Focus drafts, and Maker builds, with a block code writes from the ledger: this repo's last ten finished tasks, newest first, each with its title, its asked outcomes, what you sent back and why, risks you accepted, and what you dropped. It is given as data beside the task's own material, and the task's intent and plan win over it. Second Eye and Reticle never see it: both judge the work against the intent alone. A repo with no finished tasks gets no block.
+
 ## Where drafts live
 
 A task's drafts (intent, plan, Reticle's tests, Field's flows) live in that data folder too, never in your checkout. Accept still writes `docs/tasks/<task>/` (intent, plan and record) into the task's commit.
@@ -106,6 +110,7 @@ The tests never call a model. `scripts/test.sh` runs ruff and the whole suite ex
 - **It needs Claude Code**, logged in, and the Claude Agent SDK. Costs are Claude Code's estimates at list prices; on a subscription your real limit is the plan's usage limits, which Parallax can't see.
 - **A cap can overshoot by one turn.** Every agent gets what's left of the cap as its own limit, but the SDK checks it between turns.
 - **Field's browser server is pinned** to `@playwright/mcp` 0.0.70: later versions need Unix sockets the sandbox refuses.
-- **One person, one machine.** No splitting work into several tasks yet; several tasks from one request, and a knowledge layer that gives agents project context and past decisions to draw on, are planned.
+- **One person, one machine.** No splitting work into several tasks yet; several tasks from one request are planned.
+- **What agents know of the past is what the ledger holds.** Focus and Maker get a block compiled by code from this repo's last ten finished tasks: each one's title, its asked outcomes, what you sent back and why, risks you accepted, and what you dropped. Nothing a person wrote outside a task reaches them, and a task's own intent and plan outrank the block.
 
 What Parallax protects and what it can't: [THREAT_MODEL.md](THREAT_MODEL.md).
