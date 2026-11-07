@@ -14,7 +14,7 @@ A pixel P drawn twice, offset: a violet layer and a cyan one, the parallax. In t
 
 ## The lockup
 
-The animated P and the word PARALLAX, set like the other five tools' lockups: a system sans at weight 800 with wide tracking, stretched to a fixed length, so the six read as one set. The UI's header keeps its lowercase monospace word. An image can't see the page's theme, so the README picks the file with a `<picture>`: [lockup-animated-dark.svg](lockup-animated-dark.svg) on dark pages, [lockup-animated-light.svg](lockup-animated-light.svg) on light ones. It is the README's heading.
+The animated P and the word PARALLAX, in a system sans at weight 800 with wide tracking, stretched to a fixed length. Only Polarizer, ISR and Mordecai set their lockups that way. Loupe's and Max Q's lockups are drawn differently: Loupe's word is Unbounded SemiBold as outlines, and Max Q's capitals are drawn as paths. An earlier version of this page said all six were set alike; the 0.3.1 changelog corrected that. The UI's header keeps its lowercase monospace word. An image can't see the page's theme, so the README picks the file with a `<picture>`: [lockup-animated-dark.svg](lockup-animated-dark.svg) on dark pages, [lockup-animated-light.svg](lockup-animated-light.svg) on light ones. It is the README's heading.
 
 ## The agents
 
