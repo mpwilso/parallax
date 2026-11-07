@@ -7,17 +7,27 @@ what you dropped. Read-only, like everything else they're given. Second Eye neve
 (invariant 3: its brief is exactly the outcome, the constraints, REVIEW.md and the diff), and
 neither does Reticle: both judge the work against the intent alone.
 
+Only text a person approved or wrote goes in (invariant 10: a goal may be pasted issue text).
+An accepted task's title and asked outcomes come from the intent in its accepted commit, the
+file you approved, never from a draft made since. A dropped task gives its id, its date and your
+reason, never its goal or its drafts. Every decision line is your own reason. A past task whose
+intent can't be read is left out, so one bad file never stops a build.
+
 A repo with no finished tasks gets nothing: no section, no padding (invariant 8).
 """
 from __future__ import annotations
 
-from . import lifecycle, lint
+import re
+
+from . import lint
 from .core import Project
 from .git import run as git_run
 
 HEADING = "What past tasks on this repo settled (data, from the ledger)"
 TASKS = 10       # the latest finished tasks, newest first
-REASON = 200     # characters of one reason, one line
+REASON = 200     # characters of one field or reason, one line
+OUTCOMES = 5     # asked outcomes per task
+COMMIT = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 DECIDED = ("task.redraft", "gate.rejected", "risk.accepted", "decision.resolved", "task.accepted", "task.rejected")
 
 
@@ -31,13 +41,14 @@ def entries_by_task(entries: list[dict]) -> dict[str, list[dict]]:
 
 
 def finished(entries: list[dict]) -> list[tuple[str, str, dict]]:
-    """(task, how it ended, the ending entry) for every accepted or dropped task, newest first."""
+    """(task, how it ended, the ending entry) for every accepted or dropped task, newest ending first.
+    A task that ended more than once counts as its latest ending, in that ending's place."""
     ends: dict[str, tuple[str, dict]] = {}
     for e in entries:
-        if e["kind"] == "task.accepted":
-            ends[e["data"]["task"]] = ("accepted", e)
-        elif e["kind"] == "task.rejected":
-            ends[e["data"]["task"]] = ("dropped", e)
+        how = {"task.accepted": "accepted", "task.rejected": "dropped"}.get(e["kind"])
+        if how and (tid := e["data"].get("task")):
+            ends.pop(tid, None)
+            ends[tid] = (how, e)
     return [(tid, how, e) for tid, (how, e) in reversed(list(ends.items()))]
 
 
@@ -46,13 +57,24 @@ def one_line(text: str) -> str:
     return text if len(text) <= REASON else text[:REASON - 3].rstrip() + "..."
 
 
-def intent_text(project: Project, task_id: str, end: dict) -> str:
-    """The task's intent: its draft or the copy accept kept, else from the accepted commit."""
-    text = lifecycle._read(project, task_id, "intent")
-    if text or end["kind"] != "task.accepted":
-        return text
-    done = git_run(project.git_at(task_id), "show", f"{end['data']['commit']}:docs/tasks/{task_id}/intent.md")
-    return done.stdout if done.returncode == 0 else ""
+def approved_intent(project: Project, task_id: str, commit: str, task: dict) -> str | None:
+    """The intent you approved: docs/tasks/<id>/intent.md in the task's accepted commit, never a
+    draft made since. "" for a task with no intent, with no git call. None when it can't be read
+    (no such commit or file, bytes that aren't UTF-8, git failing), and the task is left out."""
+    if not task.get("intent"):
+        return ""
+    if not COMMIT.fullmatch(commit):
+        return None
+    try:  # every accepted commit is in the root's object store, which the worktrees share
+        done = git_run(project.root, "show", f"{commit}:docs/tasks/{task_id}/intent.md", text=False)
+        return done.stdout.decode("utf-8") if done.returncode == 0 else None
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def _cache(project: Project) -> dict[tuple[str, str], str]:
+    """Intents read so far, by (task, accepted commit): a commit's file never changes."""
+    return vars(project).setdefault("_approved_intents", {})
 
 
 def outcomes(intent: str) -> list[str]:
@@ -91,19 +113,28 @@ def summary(project: Project, exclude: str = "") -> list[str]:
     """One short block per finished task, newest first, up to TASKS of them."""
     entries = project.ledger.entries()
     by_task = entries_by_task(entries)
+    cache, tasks = _cache(project), None
     blocks = []
     for tid, how, end in finished(entries):
         if tid == exclude:
             continue
         if len(blocks) == TASKS:
             break
-        intent = intent_text(project, tid, end)
-        fields = lint.intent_fields(intent)
-        title = fields.get("title") or one_line(project.task(tid)["goal"]) or tid
-        lines = [f"- {tid}, {how} {end['ts'][:10]}: {title}" + (f" ({fields['kind']})" if fields.get("kind") else "")]
-        asked = outcomes(intent)
-        if asked:
-            lines.append("  outcomes: " + "; ".join(one_line(o) for o in asked[:5]))
+        when = f"- {tid}, {how} {end['ts'][:10]}"
+        if how == "dropped":  # nobody approved its goal or its drafts: only your reason
+            blocks.append(f"{when}\n  you dropped it: {one_line(end['reason']) or 'no reason recorded'}")
+            continue
+        key = (tid, str(end["data"].get("commit", "")))
+        if key not in cache:
+            tasks = project.tasks() if tasks is None else tasks  # derived once, and only for a task not read yet
+            if (text := approved_intent(project, tid, key[1], tasks.get(tid, {}))) is None:
+                continue
+            cache[key] = text
+        fields = lint.intent_fields(cache[key])
+        title, kind = one_line(fields.get("title", "")), one_line(fields.get("kind", ""))
+        lines = [when + (f": {title}" if title else "") + (f" ({kind})" if kind else "")]
+        if asked := outcomes(cache[key]):
+            lines.append("  outcomes: " + "; ".join(one_line(o) for o in asked[:OUTCOMES]))
         lines += [f"  {d}" for d in decisions(by_task.get(tid, []))]
         blocks.append("\n".join(lines))
     return blocks

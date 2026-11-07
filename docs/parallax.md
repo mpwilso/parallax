@@ -15,7 +15,7 @@ Parallax follows the [AI-native SDLC playbook](https://claude.com/blog/the-ai-na
 
 What we follow from the playbook: files as the hand-off between stages, agents verifying before review, humans on the judgment calls, one record per change. What we skip: the maintain stage and autonomous triggers. Nothing starts without you.
 
-Drafters get no shell, only Read, Glob and Grep inside the task's worktree, and each call is capped by `[budget] drafting_usd` in the policy file. Focus and Maker also get what this repo's past tasks settled, compiled by code from the ledger (the last ten finished tasks: title, asked outcomes, your reasons), as data the task's own files outrank; Second Eye and Reticle never see it (`parallax/knowledge.py`). Only Parallax writes the drafts, in the task's data folder outside your checkout; accept commits them to `docs/tasks/<task>/`.
+Drafters get no shell, only Read, Glob and Grep inside the task's worktree, and each call is capped by `[budget] drafting_usd` in the policy file. Focus and Maker also get what this repo's past tasks settled, compiled by code from the ledger (the last ten finished tasks: an accepted task's title and asked outcomes, from the intent in its accepted commit, and your reasons; a dropped task gives your reason alone), as data the task's own files outrank; Second Eye and Reticle never see it (`parallax/knowledge.py`). Only Parallax writes the drafts, in the task's data folder outside your checkout; accept commits them to `docs/tasks/<task>/`.
 
 ## The output shape
 
