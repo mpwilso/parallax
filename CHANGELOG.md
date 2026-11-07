@@ -2,7 +2,7 @@
 
 What changed in each release. The full notes for each are on the [releases page](https://github.com/mpwilso/parallax/releases).
 
-## Unreleased
+## 0.5.0 (2026-11-07)
 
 - M16's stats: `parallax stats` adds, from the ledger only, each task's rework cycles, how long it waited on you and how long it worked without you, and under the table, over finished tasks: the first-pass rate (Ready on its own with no rework cycle and no send-back), the median and most rework cycles with how many tasks hit the rework cap, and the median and longest wait with the median working time. A split request's row adds its parts' first pass, rework cycles, and its wait counted once across parts. Each measure, and what it doesn't count, is in `docs/using.md`. The rework-cap disagreement now records `rework_cap`; older entries are read from their reason. `status.derive` is now a fold of `status.step`, which stats uses to follow a task's state entry by entry (`parallax/measures.py`). Eleven tests in `tests/test_stats.py`, each on a constructed ledger with a hand-moved clock.
 
