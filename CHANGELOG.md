@@ -2,10 +2,29 @@
 
 What changed in each release. The full notes for each are on the [releases page](https://github.com/mpwilso/parallax/releases).
 
+## Unreleased
+
+Fixed:
+- The knowledge layer gave later Makers text nobody approved. A dropped task contributed its drafted title and outcomes, or the goal as typed, which may be pasted issue text (invariant 10); it now gives its id, its date and your reason, nothing else. An accepted task's title and asked outcomes came from the current draft when there was one, so a redraft after the accept replaced the intent you approved; they now come from `docs/tasks/<id>/intent.md` in the accepted commit, nothing else.
+- A past task's title went in at any length (one of 1,036 characters did). Every field is now one line of at most 200 characters.
+- A task that ended twice kept its first ending's place, so the block wasn't newest first and the ten-task cap could drop the newest. A task now sits where its latest ending is.
+- One past task whose intent couldn't be read (bytes that aren't UTF-8, a git failure) raised, before the Maker's own error handling, and stopped every later build in the repo. That task is now left out.
+- Each call derived every task's status twice per finished task (20 passes for 10 tasks) and ran `git show` for each. It now derives once, skips git for a task with no intent, and keeps each accepted commit's intent for the life of the project object: 10 finished tasks cost one derive and at most 10 git calls, then none.
+- CI: the workflow's comment said master's runs always finish. They didn't: a merge pushed while a run was going replaced the pending run of the merge before it (run 42151952768, at 6a0ef22, was cancelled before it started). Each push to master now has a concurrency group of its own, keyed by its commit, so none is cancelled or replaced.
+
+Changed:
+- The `claude` extra is bounded to the tested series, `claude-agent-sdk>=0.2.179,<0.3`; it had no bound and there is no lockfile. CI installs the extra, imports the adapter and checks that every SDK name it uses exists (`scripts/sdk_names.py`), with no model call.
+
+Docs:
+- `docs/THREAT_MODEL.md`'s memory row (ASI06) said no state carries across tasks besides the ledger; it now says what the knowledge block holds, who wrote each part, that Second Eye and Reticle never see it, and the risk left.
+- `docs/security-review.md` called the test-writing verifier planned; it is Reticle, on by default since 2026-09-30.
+- The 0.3.0 entry below said all six tools' lockups share one typeface. Loupe's and Max Q's don't; the entry is corrected in place, here and in the v0.3.0 release notes.
+- The README's status line says all 11 eval cases reached Ready and 10 passed the maintainers' tests, so one Ready was wrong, with the eval's date and models; `docs/evals.md` names the models and says the cases may be in their training data. The headline run is dated and said to predate Reticle. The knowledge layer moved from Limits to What it does, leaving its limit behind. Terms are defined where they first appear, run and case ids are out of the prose, the CI badge is centered, and the README says who it's for. `docs/history.md` no longer calls the 2026-09-28 run the latest.
+
 ## 0.3.0 (2026-11-05)
 
 - The knowledge layer: Focus and Maker are told what this repo's past tasks settled, compiled by code from the ledger (`parallax/knowledge.py`): the last ten finished tasks, newest first, each with its title, its asked outcomes, what you sent back and why, risks you accepted, and what you dropped. It is given as data beside the task's own material, which outranks it. Second Eye and Reticle never see it, and a repo with no finished tasks gets nothing. Five tests.
-- The README's lockup and logo.svg set the word PARALLAX the way the other five tools set theirs: a system sans at weight 800 with wide tracking, stretched to a fixed length, so the six lockups read as one set. The pixel P is unchanged and stays crisp; the UI's header keeps its lowercase monospace word.
+- The README's lockup and logo.svg set the word PARALLAX in a system sans at weight 800 with wide tracking, stretched to a fixed length, as Polarizer, ISR and Mordecai set theirs. (Corrected after release: this said all six tools' lockups share that type. Loupe's word is Unbounded SemiBold, as outlines, and Max Q's capitals are drawn as paths.) The pixel P is unchanged and stays crisp; the UI's header keeps its lowercase monospace word.
 - Eval results record the scratch repo relative to the evals home, not as an absolute path, so a result file names no machine's home directory. The 41 recorded results were rewritten the same way; `evals.scratch_path` resolves old and new.
 
 Fixed:

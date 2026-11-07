@@ -37,7 +37,7 @@ agents are bounded by the sandbox and the plan. The old path was cut on 2026-09-
 
 The first design was measured against already-merged open-source fixes: Parallax got the issue
 text only, and was scored by the tests the humans added in their pull request, which it never saw.
-Latest run (2026-09-28, 11 cases from 6 projects, $12.12 in all): **10 of 11 fixes resolved**; the
+Its last run (2026-09-28, 11 cases from 6 projects, $12.12 in all): **10 of 11 fixes resolved**; the
 blind checker was right 8 times, missed 1 bad fix and raised 1 false alarm. Reports:
 [67faab](../evals/results/2026-09-28-67faab.md), [73982e](../evals/results/2026-09-28-73982e.md).
 These committed results came from an earlier harness that has since been removed, with the

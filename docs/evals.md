@@ -78,7 +78,7 @@ Each case is a bug that was fixed and merged in a small open-source Python proje
 
 ### Results
 
-Run [8e3074](../evals/results/2026-10-01-8e3074/summary.md) (2026-10-01): all 11 cases in one run, on one commit (ba09b02), with Reticle on, as it is by default. Raw results are in [evals/results/](../evals/results/).
+Run [8e3074](../evals/results/2026-10-01-8e3074/summary.md) (2026-10-01): all 11 cases in one run, on one commit (ba09b02), with Reticle on, as it is by default. The models, as the run recorded them: Focus, Second Eye and Reticle on `claude-sonnet-5-5`, Maker on `claude-opus-5`. Raw results are in [evals/results/](../evals/results/).
 
 | Case | Hidden tests | Second Eye | Reticle | Cost | Time to Ready | Touches |
 |---|---|---|---|---|---|---|
@@ -136,6 +136,7 @@ The last four cases first ran in 41250f and stopped at caps of $0.67 to $0.80, w
 - **Its false-alarm rate on Maker's fixes.** None in 11 judgments, in either full run, is too few to say it's rare. On the maintainers' real fixes, seeded, it went from 6 of 11 to 1 of 11 as its rule changed, stayed at 1 of 11 in e1f0a0, was 3 of 11 in 9a3432 on intents drafted again, and 2 of 11 in c98ad5 with the cite-or-note rule (above).
 - **Variance.** Each seeded run is one run. Second Eye's catches on the same versions moved between runs (boltons-319's undone hunk was missed in f5ff69 and caught in cbcd0e; pathspec-77's was caught in cbcd0e and missed in e1f0a0; boltons-337's at dictutils.py:194 was caught in 9a3432 and missed in e1f0a0 and c98ad5), so a difference of one or two isn't a trend.
 - **Anything beyond small, pure-Python repos,** or any variance: each case ran once.
+- **That the fixes were new to the models.** Every case is a fix merged in public on a small, well-known library, so the fix, its tests or the talk around it may be in the models' training data. A model that remembers a fix would do better here than on work nobody has published.
 - **An independent test of the cap floor.** Its $2.00 default came from Maker's costs on these same cases, so the rerun succeeding is expected.
 - **One consistent version, before.** The previous results span three commits of Parallax. 8e3074 and 9a3432 are each one run on one commit (ba09b02).
 
