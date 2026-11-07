@@ -15,7 +15,7 @@ parallax = "parallax.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest"]
-claude = ["claude-agent-sdk"]
+claude = ["claude-agent-sdk>=0.2.179,<0.3"]  # the series the adapter is tested on; CI checks its names (scripts/sdk_names.py)
 
 [tool.setuptools]
 packages = ["parallax", "parallax.agents"]

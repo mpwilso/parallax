@@ -29,7 +29,8 @@ def test_ci_runs_the_suite_again_from_a_second_clone_at_a_path_with_a_space():
 def test_ci_runs_once_per_push_and_again_only_for_a_fork_pull_request():
     """Every branch push runs (the merge waits on the branch run and on master's). A pull request from
     this repo already ran on its push, so only one from a fork runs again; a newer push cancels an
-    older run of the same branch, except on master."""
+    older run of the same branch. Each master push has a group of its own, keyed by its commit, so no
+    master run is cancelled or replaced by the next merge's (run 42151952768 was, at 6a0ef22)."""
     text = (WORKFLOWS / "tests.yml").read_text()
     assert re.search(r"^on:\n  push:\n    branches: \['\*\*'\]\n  pull_request:\n", text, re.M)
     jobs = text.split("\njobs:\n", 1)[1]
@@ -37,8 +38,21 @@ def test_ci_runs_once_per_push_and_again_only_for_a_fork_pull_request():
     fork_only = ("    if: github.event_name != 'pull_request' || "
                  "github.event.pull_request.head.repo.full_name != github.repository\n")
     assert job_count >= 1 and jobs.count(fork_only) == job_count
-    assert ("concurrency:\n  group: ${{ github.workflow }}-${{ github.ref }}\n"
-            "  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}\n") in text
+    assert ("concurrency:\n  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.sha "
+            "|| github.ref }}\n  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}\n") in text
+
+
+def test_ci_installs_the_pinned_agent_sdk_and_checks_every_name_the_adapter_uses():
+    """The claude extra is bounded to the tested series, and CI imports the adapter with it installed and
+    checks each SDK name it uses, without a model call. A name the adapter starts using must be listed."""
+    root = WORKFLOWS.parent.parent
+    pyproject = (root / "pyproject.toml").read_text()
+    assert re.search(r'^claude = \["claude-agent-sdk>=0\.2\.\d+,<0\.3"\]', pyproject, re.M)
+    text = (WORKFLOWS / "tests.yml").read_text()
+    assert 'uv run --no-project --python 3.12 --with-editable ".[claude]" python scripts/sdk_names.py\n' in text
+    script = (root / "scripts" / "sdk_names.py").read_text()
+    used = set(re.findall(r"\bsdk\.([A-Z]\w+)", (root / "parallax" / "agents" / "claude.py").read_text()))
+    assert used and all(f'"{name}"' in script for name in used), used
 
 
 def test_dependabot_proposes_action_updates_a_week_after_release():

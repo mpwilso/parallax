@@ -8,9 +8,12 @@ on:
 permissions:
   contents: read
 
-# a newer push to a branch cancels its older run; master's runs always finish
+# a newer push to a branch cancels its older run. Each push to master gets a group of its own, keyed
+# by its commit, so no master run is cancelled or replaced. With one group for master, a merge pushed
+# while a run was going replaced the pending run of the merge before it: run 42151952768, at 6a0ef22,
+# was cancelled before it started when 2d23dce's run queued
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.sha || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
@@ -41,6 +44,9 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           # pinned to one release, like the actions above, so a new publish can't change this run on its own
           npm install -g @anthropic-ai/sandbox-runtime@0.0.79
+      - name: The agent SDK, from the claude extra's pinned range, has every name the adapter uses. No model call.
+        if: matrix.where == 'the checkout'
+        run: uv run --no-project --python 3.12 --with-editable ".[claude]" python scripts/sdk_names.py
       - name: Chromium for the browser tests, the version scripts/test.sh pins
         run: scripts/test.sh browser
       - name: Lint and the full suite, browser tests included, as scripts/test.sh runs them. No test calls a model.
