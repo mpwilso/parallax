@@ -3,8 +3,10 @@ setup and [merge] test_command. A cloned repo can ship a policy file, so neither
 seen them. The first time a task would run one, and again whenever either command changes, the task
 stops with one decision: the card shows both commands, and trust runs them. Your answer is recorded
 once for the repo (policy.trusted, with the commands and their hash), so a policy whose commands you
-approved runs without asking, in every task. The rest of the policy file isn't commands and doesn't
-run as you, so changing it (the budget mode, say) asks nothing.
+approved runs without asking, in every task. Tasks already stopped on the same question (a split
+request's parts, say) are answered by that one decision: each goes on, and it costs you one touch. The
+rest of the policy file isn't commands and doesn't run as you, so changing it (the budget mode, say)
+asks nothing.
 """
 from __future__ import annotations
 
@@ -62,3 +64,19 @@ def approve(project: Project, reason: str, item: dict | None = None) -> dict:
     cmds = {k: str(item["data"].get(k) or "") for k in SETTINGS} if item else commands(project.policy)
     extra = {"task": item["data"].get("task"), "decision": item["id"]} if item else {}
     return project.ledger.append(KIND, "human", reason, commands_sha=sha(cmds), **cmds, **extra)
+
+
+def answer_the_rest(project: Project, item: dict, answer: dict) -> list[str]:
+    """Your trust on one card (answer, its decision.resolved entry), carried to every other open card
+    that asked about exactly the same commands: each is resolved by code, citing your decision, so it
+    isn't a touch of yours. Returns their tasks. A card about other commands still waits for you."""
+    want, asked_by = item["data"].get("commands_sha"), item["data"].get("task")
+    said = f"answered by your trust on task {asked_by} (decision {answer['id']}): the same commands"
+    out = []
+    for e in project.inbox():
+        if want and e["kind"] == "stuck.raised" and e["data"].get("commands_sha") == want:
+            project.resolve(e["id"], True, said, actor="parallax", by=answer["id"])
+            tid = e["data"].get("task")
+            if tid and tid != asked_by and tid not in out:
+                out.append(tid)
+    return out

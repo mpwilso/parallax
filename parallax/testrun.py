@@ -12,6 +12,7 @@ which is not the maker's to fix, so it goes to you instead of back to the maker.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shlex
 import shutil
@@ -146,7 +147,11 @@ def run(worktree: Path, base: str, reviewed: str, plan: dict, home: Path, venv: 
     tests = list(plan["tests"])
     cmd = command.format(junit=shlex.quote(str(junit)), tests=" ".join(shlex.quote(t) for t in tests))
 
-    targets = sandbox.protected_targets(copy)
+    # only the protected paths the reviewed tree has: for one it lacks, the sandbox binds a placeholder
+    # at its name to stop it being made, an unreadable file the repo's own tests then found (an absent
+    # mission.md failed tests/test_docs.py in task f291a5). Maker's sandbox still denies every one, and
+    # nothing here reads the copy back: the results come from check-tmp, and the copy is deleted
+    targets = [t for t in sandbox.protected_targets(copy) if os.path.lexists(t)]
     sandbox.prepare_mount_points(targets)
     reads = [str(Path(r).expanduser()) for r in plan["outside_reads"]]
     rules = sandbox.rules(copy, targets, git_dir=None, venv=venv, reads=reads, domains=plan["domains"])

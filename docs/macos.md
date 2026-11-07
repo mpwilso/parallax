@@ -5,7 +5,7 @@ Parallax runs on Linux and WSL2. It's untested on macOS. This page is a feasibil
 ## What already works on macOS, on paper
 
 - **The sandbox runtime supports it.** `srt` uses `sandbox-exec` with a generated Seatbelt profile on macOS, and needs no bubblewrap, socat or ripgrep there. Claude Code's own sandbox, which runs Maker's Bash, does the same.
-- **Parallax already expects it in places.** `parallax doctor` reports `platform macos ok` and asks only for `srt` (`check_platform`, `check_sandbox` in `parallax/doctor.py`). `tools.needed` asks for bwrap and socat on Linux only. `build.is_alive` falls back to `kill(0)` where there's no `/proc`. The memory cap runs the command uncapped where there's no `/proc`.
+- **Parallax already expects it in places.** `parallax doctor` reports `platform macos ok` and asks only for `srt` (`check_platform`, `check_sandbox` in `parallax/doctor.py`). `tools.needed` asks for bwrap and socat on Linux only. `build._alive` falls back to `kill(0)` where there's no `/proc`. The memory cap runs the command uncapped where there's no `/proc`.
 - **The rules are the same file.** `sandbox.Rules.srt()` and `claude_settings()` write one set of allow and deny lists that both platforms read.
 
 ## What would have to change

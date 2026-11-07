@@ -188,8 +188,9 @@ class Project:
         resolved = {e["data"]["decision"] for e in entries if e["kind"] == "decision.resolved"}
         return [e for e in entries if e["kind"] in INBOX_KINDS and e["id"] not in resolved]
 
-    def resolve(self, decision_id: str, approve: bool, reason: str, actor: str = "human") -> dict:
-        """For a disagreement, approve sides with the maker and reject sides with the checker."""
+    def resolve(self, decision_id: str, approve: bool, reason: str, actor: str = "human", **extra) -> dict:
+        """For a disagreement, approve sides with the maker and reject sides with the checker. extra goes
+        into the entry, such as the decision a resolution carries out (by)."""
         refuse_inside_task(self.root)
         if not reason.strip():
             raise ParallaxError("a decision needs a reason")
@@ -201,5 +202,5 @@ class Project:
         return self.ledger.append(
             "decision.resolved", actor, reason,
             decision=decision_id, task=req["data"].get("task"), about=req["kind"], **context,
-            outcome="approved" if approve else "rejected",
+            outcome="approved" if approve else "rejected", **extra,
         )

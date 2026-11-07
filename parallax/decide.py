@@ -369,13 +369,40 @@ def _apply(project: Project, task_id: str, name: str, reason: str, spawn: Callab
             return f"accepted the risk on {task_id}. it's Ready: parallax accept {task_id} commits it."
     elif name == "trust":  # the commands the card showed, recorded once for the repo; then the task goes on
         trust.approve(project, said, dec.item)
-        project.resolve(dec.item["id"], True, said)
+        others = trust.answer_the_rest(project, dec.item, project.resolve(dec.item["id"], True, said))
+        if others:  # the other tasks that stopped on the same question go on too
+            return _and_the_rest(project, others, lambda: _go_on(project, task_id, name, spawn, preflight_runner),
+                                 spawn, preflight_runner)
     elif name == "by hand":  # the merge stays yours: the task goes back to accepted, and the card gives the command
         project.resolve(dec.item["id"], False, said)
         project.ledger.append("merge.stopped", "human", said, task=task_id)
         return f"left the merge of {task_id} to you. its card shows the command."
     elif dec.item:  # retry, plan
         project.resolve(dec.item["id"], True, said)
+    return _go_on(project, task_id, name, spawn, preflight_runner)
+
+
+def _and_the_rest(project: Project, others: list[str], first: Callable[[], str], spawn: Callable | None,
+                  preflight_runner) -> str:
+    """Your task goes on, then each other task your trust answered, as if you'd answered its own card.
+    One that can't go on is back in the inbox with its own reason, and the rest still go on."""
+    try:
+        said = first()
+    finally:
+        for tid in others:
+            try:
+                _go_on(project, tid, "trust", spawn, preflight_runner)
+            except ParallaxError:  # recorded on its own card by _go_on, or as merge.stopped
+                pass
+            except Exception as err:  # never quietly: it comes to you like any stop
+                if not _was_merging(project, tid):  # a merge records its own stop
+                    project.ledger.append("stuck.raised", "parallax", lint.one_sentence(
+                        f"Parallax hit an error and stopped the task: {type(err).__name__}: {err}"), task=tid, error=True)
+    return f"{said} {', '.join(others)} asked the same: {'it goes' if len(others) == 1 else 'they go'} on too."
+
+
+def _go_on(project: Project, task_id: str, name: str, spawn: Callable | None, preflight_runner) -> str:
+    """After an answer that lets the task continue: the merge it stopped in, or drafting, the build or the check."""
     if name in ("resume", "trust") and _was_merging(project, task_id):  # stopped during Accept and merge: run it again
         from .accept import merge_now
         return merge_now(project, task_id)
