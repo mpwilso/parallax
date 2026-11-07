@@ -76,6 +76,15 @@ Each case is a bug that was fixed and merged in a small open-source Python proje
 - **Second Eye against the truth:** on each change it judged, a pass on a good fix is right, a pass on a bad fix is a miss, a fail on a bad fix is a catch, and a fail on a good fix is a false alarm.
 - **Cost** (estimated dollars at list prices), **time to Ready**, and **touches**: each decision the task raised, plus the final accept or reject.
 
+### The rerun that wasn't started (2026-11-07)
+
+A rerun of all 11 cases was approved on 2026-11-07, for about $12, to measure the pipeline as it is now: Reticle tuned, the knowledge layer, and M15. It wasn't started, because every case would stop at the trust question before Maker ran.
+
+- **Why.** Since policy trust (2026-10-23), `[build] setup` runs as you only after you've trusted the policy's commands, and that answer is recorded in each repo's own ledger. Each case's scratch clone gets a new ledger and a policy with the case's own setup command, so no case is trusted. A check with no model, on each case's scratch policy made exactly as `parallax eval` makes it, found all 11 untrusted. This repo's own trust, recorded on 2026-11-07, covers this repo's commands only.
+- **What a run would have done.** Each case would draft with Focus, launch under the rule, then stop at Decision needed on the trust question when the build set up its venv. Nothing answers a decision in an eval, so each case would end there, paid for and with nothing built. The run was not started, so nothing was spent and no result was written.
+- **`parallax eval check` still passes**: it makes each case's venv itself, not through a task, so it never meets the question. On merged master (db7c795) on 2026-11-07 it found all 11 sound, and `parallax doctor` passed.
+- **What it needs** is a decision of yours: whether `parallax eval`, which you start with the cases' setup commands from `evals/cases.toml`, should record your trust for those commands in each scratch repo, or ask once for the run. Until then 8e3074 below stays the latest full run.
+
 ### Results
 
 Run [8e3074](../evals/results/2026-10-01-8e3074/summary.md) (2026-10-01): all 11 cases in one run, on one commit (ba09b02), with Reticle on, as it is by default. The models, as the run recorded them: Focus, Second Eye and Reticle on `claude-sonnet-5-5`, Maker on `claude-opus-5`. Raw results are in [evals/results/](../evals/results/).
