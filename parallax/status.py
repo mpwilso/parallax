@@ -2,66 +2,71 @@
 from __future__ import annotations
 
 
-
 def derive(entries: list[dict]) -> dict[str, dict]:
     out: dict[str, dict] = {}
     for e in entries:
-        kind, d = e["kind"], e["data"]
-        if kind == "task.created":
-            out[d["task"]] = {"goal": e["reason"], "status": "open", "plan": False, **d, "last": e["ts"]}
-            continue
-        t = out.get(d.get("task"))
-        if t is None:
-            continue
-        t["last"] = e["ts"]
-        if d.get("cost_usd"):
-            t["cost_usd"] = t.get("cost_usd", 0.0) + d["cost_usd"]
-        if kind == "task.closed":
-            t["status"] = d["outcome"]
-        elif kind in ("build.started", "maker.started"):
-            t["status"] = "drafting" if d.get("mode") == "pilot" else "running"
-        elif kind == "pilot.started":
-            t["status"] = "drafting"
-        elif kind == "review.requested":
-            t["status"] = "needs you"
-        elif kind == "launch.held":
-            t["status"] = "planned"  # a part whose plan fits, launching with its request's other parts (conductor.py)
-        elif kind == "task.redraft":
-            t["status"] = "drafting"
-        elif kind in ("build.finished", "check.finished"):
-            t["status"] = d["status"]
-        elif kind == "check.started":
-            t["status"] = "checking"
-        elif kind == "rework.started":
-            t["status"] = "reworking"
-        elif kind in ("task.rejected", "gate.rejected"):
-            t["status"] = "rejected"  # out of the inbox; parallax task list still shows it
-        elif kind in ("draft.recorded", "gate.approved") and t["status"] == "rejected":
-            t["status"] = "open"  # an old gate rejected, then redrafted by hand (before M13)
-        elif kind == "task.accepted":
-            t["status"] = "merging" if d.get("merging") else "accepted"  # Accept and merge: merging from the click
-        elif kind == "merge.started":
-            t["status"] = "merging"
-        elif kind == "merge.stopped":
-            t["status"] = "accepted"  # the tests failed or it conflicted: nothing moved, the merge is yours
-        elif kind == "merge.confirmed":
-            t["status"] = "merged"
-        elif kind == "task.stopped":
-            t["status"] = "stopped"
-        elif kind == "maker.finished" and d["status"] != "done" and t["status"] == "running":
-            t["status"] = "maker failed"
-        elif kind == "disagreement.raised":
-            t["status"] = "disputed"
-        elif kind == "stuck.raised":
-            t["status"] = "stuck"
-        elif kind == "decision.resolved":
-            about, approved = d.get("about"), d["outcome"] == "approved"
-            if about == "disagreement.raised":
-                won = {"plan": "plan approved", "scope": "risk accepted", "conflict": "risk accepted"}.get(d.get("stage"), "ready")
-                t["status"] = won if approved else "needs work"
-            elif about == "stuck.raised":
-                t["status"] = "open" if approved else "closed"
+        step(out, e)
     return out
+
+
+def step(out: dict[str, dict], e: dict) -> None:
+    """One entry's change to the tasks' states: derive, an entry at a time (stats follows a task's
+    state through its ledger with it)."""
+    kind, d = e["kind"], e["data"]
+    if kind == "task.created":
+        out[d["task"]] = {"goal": e["reason"], "status": "open", "plan": False, **d, "last": e["ts"]}
+        return
+    t = out.get(d.get("task"))
+    if t is None:
+        return
+    t["last"] = e["ts"]
+    if d.get("cost_usd"):
+        t["cost_usd"] = t.get("cost_usd", 0.0) + d["cost_usd"]
+    if kind == "task.closed":
+        t["status"] = d["outcome"]
+    elif kind in ("build.started", "maker.started"):
+        t["status"] = "drafting" if d.get("mode") == "pilot" else "running"
+    elif kind == "pilot.started":
+        t["status"] = "drafting"
+    elif kind == "review.requested":
+        t["status"] = "needs you"
+    elif kind == "launch.held":
+        t["status"] = "planned"  # a part whose plan fits, launching with its request's other parts (conductor.py)
+    elif kind == "task.redraft":
+        t["status"] = "drafting"
+    elif kind in ("build.finished", "check.finished"):
+        t["status"] = d["status"]
+    elif kind == "check.started":
+        t["status"] = "checking"
+    elif kind == "rework.started":
+        t["status"] = "reworking"
+    elif kind in ("task.rejected", "gate.rejected"):
+        t["status"] = "rejected"  # out of the inbox; parallax task list still shows it
+    elif kind in ("draft.recorded", "gate.approved") and t["status"] == "rejected":
+        t["status"] = "open"  # an old gate rejected, then redrafted by hand (before M13)
+    elif kind == "task.accepted":
+        t["status"] = "merging" if d.get("merging") else "accepted"  # Accept and merge: merging from the click
+    elif kind == "merge.started":
+        t["status"] = "merging"
+    elif kind == "merge.stopped":
+        t["status"] = "accepted"  # the tests failed or it conflicted: nothing moved, the merge is yours
+    elif kind == "merge.confirmed":
+        t["status"] = "merged"
+    elif kind == "task.stopped":
+        t["status"] = "stopped"
+    elif kind == "maker.finished" and d["status"] != "done" and t["status"] == "running":
+        t["status"] = "maker failed"
+    elif kind == "disagreement.raised":
+        t["status"] = "disputed"
+    elif kind == "stuck.raised":
+        t["status"] = "stuck"
+    elif kind == "decision.resolved":
+        about, approved = d.get("about"), d["outcome"] == "approved"
+        if about == "disagreement.raised":
+            won = {"plan": "plan approved", "scope": "risk accepted", "conflict": "risk accepted"}.get(d.get("stage"), "ready")
+            t["status"] = won if approved else "needs work"
+        elif about == "stuck.raised":
+            t["status"] = "open" if approved else "closed"
 
 
 BOARD = ("drafting", "building", "checking", "merging", "ready", "needs you", "done")

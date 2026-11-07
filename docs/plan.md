@@ -284,6 +284,7 @@ Kept (a): the drafters' default is Sonnet 5.5, `[draft] model` in the policy. (b
 
 - Cases in the SWE-bench format, run through `do`'s pipeline; the test-writer in the eval only; the report shows catches, misses and false alarms with and without it, per checker model; about 10 new cases you pick. Stats add first-pass rate, rework cycles and wait time. The old path (`task new`, `run`, the policy's `[actions]`, exact rules, "ask") is cut.
 - **You confirm it:** `parallax eval check` says all cases are sound; `parallax stats` shows touches per task averaging about 1.
+- Stats built on 2026-11-07, from the ledger only: first pass (Ready on its own with no rework cycle and no send-back, out of finished tasks), rework cycles per task (median, most, and the tasks that hit the cap), and the time each task waited on you, from a Decision needed or Ready to your next decision, with the time it worked without you; per split request too. Definitions in docs/using.md.
 
 #### Evals (2026-09-30): the harness on the current pipeline
 

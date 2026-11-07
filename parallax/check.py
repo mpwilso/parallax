@@ -304,7 +304,8 @@ def run_check(project: Project, task_id: str, checker_for: CheckerFor, maker_for
         cycles = rework_cycles(project, task_id)
         if cycles >= cap:
             summary = "; ".join(line.splitlines()[0] for line in fix)
-            return _to_you(project, task_id, "check", f"the check still fails after {cap} rework cycles: {summary}")
+            return _to_you(project, task_id, "check", f"the check still fails after {cap} rework cycles: {summary}",
+                           rework_cap=cap)  # stats counts the tasks that hit it
         p = build.prepare(project, task_id, setup=False, launching=False)
         if p.left <= 0:
             return costs.stop_at_cap(project, task_id, p.cap)

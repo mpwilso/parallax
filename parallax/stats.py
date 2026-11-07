@@ -5,10 +5,11 @@ every approve, reject, decision, accept, cap raise or stop you made, every comma
 fix it up, and every drafted file you edited by hand (its hash changed between the draft and its
 approval). The target is one touch per task: the final accept or reject.
 A request Focus split into parts (conductor.py) gets a line too: its parts' touches and cost, summed.
+M16 adds first pass, rework cycles and the time each task waited on you (measures.py).
 """
 from __future__ import annotations
 
-from . import status
+from . import measures, status
 from .core import Project
 
 TOUCH_KINDS = {"gate.approved", "gate.rejected", "task.rejected", "task.accepted", "decision.resolved",
@@ -44,17 +45,21 @@ def partial(project: Project) -> dict[str, list[dict]]:
     return out
 
 
-def per_request(project: Project, counts: dict[str, int], tasks: dict[str, dict]) -> list[str]:
-    """A request split into parts: its touches and cost, the sum of its parts'. Nothing when none was split."""
+def per_request(project: Project, counts: dict[str, int], tasks: dict[str, dict],
+                found: dict[str, measures.Measure]) -> list[str]:
+    """A request split into parts: its touches and cost, the sum of its parts', its first pass and
+    rework cycles, and its waits once every part is finished. Nothing when none was split."""
     from .conductor import groups
     split = groups(project)
     if not split:
         return []
-    out = [f"{'request':<8}{'parts':>8}{'touches':>8}{'cost':>9}"]
+    out = [f"{'request':<8}{'parts':>8}{'touches':>8}{'cost':>9}{'first':>8}{'rework':>8}{'waited':>8}{'worked':>8}"]
     for g in split:
         made = [p["task"] for p in g["parts"] if p["task"] in tasks]
         cost = sum(tasks[t].get("cost_usd") or 0 for t in made)
-        out.append(f"{g['request']:<8}{len(g['parts']):>8}{sum(counts.get(t, 0) for t in made):>8}{'$' + format(cost, '.2f'):>9}")
+        first, reworks, waited, worked = measures.request_line([p["task"] for p in g["parts"]], found)
+        out.append(f"{g['request']:<8}{len(g['parts']):>8}{sum(counts.get(t, 0) for t in made):>8}"
+                   f"{'$' + format(cost, '.2f'):>9}{first:>8}{reworks:>8}{waited:>8}{worked:>8}")
     return out
 
 
@@ -70,11 +75,15 @@ def _tasks(project: Project) -> list[str]:
         return ["no tasks yet."]
     tasks = project.tasks()
     early = partial(project)
-    lines = [f"{'task':<8}{'touches':>8}{'cost':>9}  status"]
+    found = measures.measure(project.ledger.entries())
+    lines = [f"{'task':<8}{'touches':>8}{'cost':>9}{'rework':>8}{'waited':>8}{'worked':>8}  status"]
     for tid, n in counts.items():
         mark = f"  ({len(early[tid])} partial)" if early.get(tid) else ""
-        lines.append(f"{tid:<8}{n:>8}{'$' + format(tasks[tid].get('cost_usd') or 0, '.2f'):>9}  {tasks[tid]['status']}{mark}")
-    lines += per_request(project, counts, tasks)
+        m = found[tid]  # an open task's waits aren't over: they show once it's finished
+        waited, worked = (measures.span(m.waited), measures.span(m.worked)) if m.finished else ("-", "-")
+        lines.append(f"{tid:<8}{n:>8}{'$' + format(tasks[tid].get('cost_usd') or 0, '.2f'):>9}{m.reworks:>8}"
+                     f"{waited:>8}{worked:>8}  {tasks[tid]['status']}{mark}")
+    lines += per_request(project, counts, tasks, found)
     ended =[e for es in early.values() for e in es]
     if ended:
         unknown = sum(1 for e in ended if e["data"].get("source") == "unknown")
@@ -87,5 +96,5 @@ def _tasks(project: Project) -> list[str]:
     average = sum(done.values()) / len(done)
     lines.append(f"average {average:.1f} touches per finished task ({len(done)} finished), target {TARGET}. "
                  f"{sum(n > TARGET for n in done.values())} took more.")
-    return lines
+    return lines + measures.summary({tid: found[tid] for tid in done})
 

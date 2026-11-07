@@ -142,6 +142,7 @@ def test_disagreement_goes_to_inbox_and_needs_a_reason(repo, approve, status):
     assert [e["data"]["cycle"] for e in proj.ledger.entries() if e["kind"] == "rework.started"] == [1, 2, 3]
     [item] = proj.inbox()
     assert item["kind"] == "disagreement.raised" and "after 3 rework cycles" in item["reason"]
+    assert item["data"]["rework_cap"] == 3  # what stats counts as hitting the cap
     assert "misspelled" in item["reason"]
 
     with pytest.raises(ParallaxError):

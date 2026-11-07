@@ -254,11 +254,11 @@ def test_stats_counts_one_touch_for_a_hands_free_task(proj, monkeypatch, capsys)
     monkeypatch.chdir(proj.root)
     main(["stats"])
     out = capsys.readouterr().out.splitlines()
-    assert out[0].split() == ["task", "touches", "cost", "status"]
-    assert out[-1] == "average 2.5 touches per finished task (2 finished), target 1. 1 took more."
+    assert out[0].split() == ["task", "touches", "cost", "rework", "waited", "worked", "status"]
+    assert out[-4] == "average 2.5 touches per finished task (2 finished), target 1. 1 took more."
     pilot.intake(proj, "still going")  # an unfinished task stays out of the average
     main(["stats"])
-    assert capsys.readouterr().out.splitlines()[-1].startswith("average 2.5 touches per finished task (2 finished)")
+    assert capsys.readouterr().out.splitlines()[-4].startswith("average 2.5 touches per finished task (2 finished)")
 
 
 def test_diff_shows_the_reviewed_change(proj, monkeypatch, capsys):

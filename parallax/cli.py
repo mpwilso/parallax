@@ -25,7 +25,7 @@ start here:
   parallax show <task>                  its card: everything you need to decide
   parallax accept <task>                commit what was reviewed. merging is yours
   parallax reject <task> --reason "..." send it back with your reason
-  parallax stats                        how many touches each task took. the target is 1
+  parallax stats                        touches, first pass, rework and waits per task. the target is 1 touch
   parallax ui                           the same, in your browser
 
 setup: parallax doctor, init. power use: diff, stop, approve, preflight, build, recheck, lint, log, verify, eval.
@@ -58,7 +58,7 @@ def main(argv: list[str] | None = None) -> int:
     dw.add_argument("--wait", action="store_true", help="stay and show where it is until it needs you")
     df = sub.add_parser("diff", help="the change a task made: the reviewed tree against its base")
     df.add_argument("task")
-    sub.add_parser("stats", help="human touches per task, from the ledger")
+    sub.add_parser("stats", help="touches, first pass, rework cycles and waits per task, from the ledger")
     ev = sub.add_parser("eval", help="run real merged fixes through the do pipeline, scored by hidden tests")
     ev.add_argument("cases", nargs="*", help="case ids, all by default. `parallax eval check` checks the cases instead, with no model")
     ev.add_argument("--budget", type=float, help="the most the whole run may spend, in estimated dollars. needed for a run")

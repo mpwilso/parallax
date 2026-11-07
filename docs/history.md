@@ -23,7 +23,7 @@ How Parallax got here, milestone by milestone. The design notes behind each step
 - **Evals (2026-09-30):** the harness returns on the current pipeline: `parallax eval` runs cases through `do`'s pipeline under a hard budget, and `parallax stats` says when the evals are older than a prompt, a model, CLAUDE.md, REVIEW.md or the policy.
 - **The knowledge layer (2026-11-05):** Focus and Maker get what the repo's past tasks settled, compiled by code from the ledger: the last ten finished tasks, their asked outcomes, what you sent back and why, risks you accepted, and what you dropped. Second Eye and Reticle stay blind to it.
 - **M15 (2026-11-06):** the light conductor. Focus may split a request into parts, checked by code; each part is a task of its own, up to two at a time, parts that touch the same files in turn on the earlier one's accepted commit, and one question only when their caps together pass `auto_launch_usd`. Its live run split and launched two parts together, then stopped at a question that was the owner's: [conductor-runs.md](conductor-runs.md).
-- **Next:** M16, evals and stats: first-pass rate, rework cycles and wait time. Eval results so far: [evals.md](evals.md).
+- **M16 (2026-11-07):** stats. `parallax stats` adds, from the ledger only, the first-pass rate, rework cycles per task with the tasks that hit the cap, and how long each task waited on you and worked without you, per task and per split request ([using.md](using.md#stats)). Eval results so far: [evals.md](evals.md).
 
 ## The first design (Milestones 1 to 6)
 

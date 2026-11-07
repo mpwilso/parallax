@@ -214,8 +214,8 @@ def test_two_parts_that_dont_overlap_build_side_by_side_and_come_back_as_two_rea
     assert (counts[lead], counts[second]) == (1, 1)
     cost = proj.task(lead)["cost_usd"] + proj.task(second)["cost_usd"]
     report = stats.report(proj)
-    assert f"{'request':<8}{'parts':>8}{'touches':>8}{'cost':>9}" in report
-    assert f"{lead:<8}{2:>8}{2:>8}{'$' + format(cost, '.2f'):>9}" in report
+    assert f"{'request':<8}{'parts':>8}{'touches':>8}{'cost':>9}{'first':>8}{'rework':>8}{'waited':>8}{'worked':>8}" in report
+    assert any(line.startswith(f"{lead:<8}{2:>8}{2:>8}{'$' + format(cost, '.2f'):>9}{'2/2':>8}{0:>8}") for line in report)
 
 
 def test_no_more_than_max_parallel_parts_work_at_once(repo, started):
