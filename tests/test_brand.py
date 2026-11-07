@@ -148,7 +148,7 @@ def test_stages_follow_the_ledger():
 
 
 def test_the_lockup_is_the_animated_mark_with_the_series_wordmark():
-    """The word is set as the other five tools set theirs (a system sans, weight 800, letter-spacing 3 and a
+    """The word is set as Polarizer, ISR and Mordecai set theirs (a system sans, weight 800, letter-spacing 3 and a
     fixed textLength per 100 of height, here scaled to the P's 16-unit grid); the UI's header keeps its
     monospace word on purpose."""
     svg = brand.lockup_svg()
