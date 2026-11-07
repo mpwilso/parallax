@@ -91,6 +91,29 @@ def test_a_decision_card_carries_its_options(proj):
     assert [o["name"] for o in a["options"]] == ["raise", "send back", "drop"]
 
 
+def test_the_board_groups_a_split_requests_parts_under_it(server):
+    """Each part keeps its own row and state; the request lists every part, one not made yet saying what it waits on."""
+    from test_conductor import CONDUCTOR, IN_TURN, Focus, run_pilot
+    app, proj = server
+    (proj.root / "parallax.policy.toml").write_text(CONDUCTOR)
+    proj.reload_policy()
+    lead = pilot.intake(proj, "fix the README typo, then add a README section")["task"]
+    assert run_pilot(proj, lead, Focus(IN_TURN)) == "ready"
+    status, b, _ = call(app, "GET", "/api/board")
+    assert status == 200
+    [g] = b["requests"]
+    assert g["request"] == lead and g["words"] == "fix the README typo, then add a README section"
+    assert [(p["n"], p["task"], p["state"]) for p in g["parts"]] == [(1, lead, "ready"), (2, None, "waiting")]
+    assert g["parts"][1]["goal"] == "add a README section" and g["parts"][1]["line"] == f"Part 2, waiting on task {lead}."
+    [row] = b["waiting"]
+    assert row["task"] == lead and row["request"] == {"id": lead, "part": 1, "of": 2}
+    card = views.card(proj, lead)
+    assert card["docs"][0] == "split" and views.document(proj, lead, "split").startswith("Bottom line:")
+    alone = ready_task(proj, "the README install steps are wrong for WSL")  # one part: a task of its own, not grouped
+    [row] = [r for r in views.board(proj)["waiting"] if r["task"] == alone]
+    assert "request" not in row and [g["request"] for g in views.board(proj)["requests"]] == [lead]
+
+
 # the server: only the person at the page can act ------------------------------------------------------
 
 def test_only_the_page_holder_can_use_the_api(server):

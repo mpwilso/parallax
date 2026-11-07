@@ -54,3 +54,7 @@ budget_usd = 0.25              # what questions about one task may spend in all,
 
 [merge]
 test_command = ""              # Accept and merge runs this on the exact commit it would land, first; empty: no run
+
+[conductor]
+max_parts = 4                  # the most tasks Focus may split one request into; without this table, every request is one task
+max_parallel = 2               # the most parts of one request that work at once; parts whose scopes overlap run in turn

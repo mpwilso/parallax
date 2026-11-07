@@ -123,9 +123,12 @@ def accept(project: Project, task_id: str, reason: str = "", merging: bool = Fal
 
     target = _git_run(project.root, "symbolic-ref", "--short", "-q", "HEAD").stdout.strip()
     ff = _git(project.root, "rev-parse", "HEAD") == base
-    return project.ledger.append("task.accepted", "human", reason, task=task_id, commit=commit, tree=committed_tree,
-                                 reviewed=reviewed, branch=branch, target=target, ff=ff, signed=bool(key),
-                                 ledger_head=head, docs_moved_to=str(kept), **({"merging": True} if merging else {}))
+    e = project.ledger.append("task.accepted", "human", reason, task=task_id, commit=commit, tree=committed_tree,
+                              reviewed=reviewed, branch=branch, target=target, ff=ff, signed=bool(key),
+                              ledger_head=head, docs_moved_to=str(kept), **({"merging": True} if merging else {}))
+    from .conductor import advance
+    advance(project)  # a part that waited on this one starts now, on this commit
+    return e
 
 
 TEST_TIMEOUT = 3600  # seconds the project's tests may take before the merge gives up on them

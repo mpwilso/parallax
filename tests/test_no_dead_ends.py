@@ -153,6 +153,8 @@ STOPS = [  # (ledger kind, data, reason): one per kind of stop the card, the inb
     ("disagreement.raised", {"stage": "conflict", "missing": ["tests/test_x.py"]}, "the plan's test file is missing"),
     ("disagreement.raised", {"stage": "flows"}, "Field's test x still fails after a rework. Either the test or the app is wrong"),
     ("stuck.raised", {}, "drafting still failed after 2 redrafts: the plan lists setup.py"),
+    ("stuck.raised", {"split": True}, "the split still failed after 2 redrafts: part 2's scope names CLAUDE.md, which is protected"),
+    ("stuck.raised", {"waiting_on": "abc123"}, "part 2 was to follow task abc123, which ended without being accepted"),
     ("stuck.raised", {}, "the same call was refused 3 times: shell.run curl"),
     ("stuck.raised", {"error": True}, line("bwrap-0.9.0-chroot-eperm.stderr")),
     ("stuck.raised", {"preflight": ["bash layer", "network", "environment"], "sandbox": line("bwrap-0.9.0-disable-userns.stderr")},

@@ -10,7 +10,8 @@ One detached pilot process per task, started with the scrubbed environment:
    no boundary (no domains, no outside_reads), with review_plans off. The approval is signed and
    names the rule. Anything else waits for you.
 3. Preflight, the build, and the check run as before, rework included.
-The task ends at Ready, or at one Decision needed.
+The task ends at Ready, or at one Decision needed. With [conductor] in the policy, Focus may first split
+the request into parts, each a task of its own through this same path (conductor.py).
 """
 from __future__ import annotations
 
@@ -29,7 +30,7 @@ MAX_REDRAFTS = 2
 def intake(project: Project, work: str, spawn: Callable | None = None) -> dict:
     """Create the task and start its pilot. Returns at once."""
     refuse_inside_task(project.root)
-    t = project.new_task(work, intent=True)
+    t = project.new_task(work, intent=True, lead=project.policy.conductor["max_parts"] > 1)  # Focus may split it
     _spawn_pilot(project, t["task"], spawn)
     return project.task(t["task"])
 
@@ -78,8 +79,10 @@ def draft_until_fit(project: Project, task_id: str, drafter_for) -> str:
             lifecycle.approve(project, task_id, rule="large task: its intent is approved by code, its plan waits for you")
             return draft_until_fit(project, task_id, drafter_for)
         plan = _room_for_rework(project, task_id, lifecycle.plan_data(project, task_id))
+        from .conductor import scope_problems
         fit = planfit.problems(lifecycle._read(project, task_id, "intent"), plan,
                                costs.spent(project, task_id), budgets.policy(project, task_id), _reserve(project, plan))
+        fit += scope_problems(project, task_id, plan)  # a part of a split request stays inside its part
         if not fit:
             return "fit"
         problems = {"plan": fit}
@@ -212,15 +215,27 @@ def go(project: Project, task_id: str, maker_for, checker_for, test_runner=None,
 def run(project: Project, task_id: str, drafter_for, maker_for, checker_for, *,
         test_runner=None, preflight_runner=None) -> str:
     project.ledger.append("pilot.started", "parallax", "", task=task_id)
+    from . import conductor
+    if lifecycle.state(project, task_id).gate is None:  # a part the conductor launched: its plan is approved
+        return go(project, task_id, maker_for, checker_for, test_runner, preflight_runner)
+    if conductor.wants_split(project, task_id):
+        if conductor.draft_split(project, task_id, drafter_for) != "fit":
+            return "stuck"
+        conductor.advance(project)  # the other parts start drafting now, as far as max_parallel allows
     if draft_until_fit(project, task_id, drafter_for) != "fit":
         return "stuck"
     auto, why = launch_rule(project, task_id)
     answer = None if auto or "auto_launch_usd" not in why else _launch_answered(project, task_id)
+    part = conductor.part_of(project, task_id) is not None
     if answer:  # you chose "allow and launch" for exactly this plan: your approval, recorded as yours
         lifecycle.approve(project, task_id, answer=answer)
-    elif not auto:
+    elif not auto and not (part and "auto_launch_usd" in why):
         project.ledger.append("review.requested", "parallax", why, task=task_id)
         return "needs you"
+    elif part:  # a part launches with its request: under the rule, or after one question for all of them
+        held = conductor.hold(project, task_id, why)
+        if held != "go":
+            return "needs you" if held == "ask" else "held"
     else:
         lifecycle.approve(project, task_id, rule=why)
     return go(project, task_id, maker_for, checker_for, test_runner, preflight_runner)

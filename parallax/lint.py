@@ -21,7 +21,7 @@ TYPES = ("Decision needed", "Recommendation", "FYI")
 HEADER = ("Type", "Bottom line", "Not looked at", "Next")
 LIFECYCLE_HEADER = ("Bottom line", "Not looked at")
 SECTIONS = ("Decisions", "Changed since last time", "Found", "Recommended", "Details")
-LIFECYCLE_DOCS = ("intent", "spec", "plan")
+LIFECYCLE_DOCS = ("intent", "spec", "plan", "split")  # split: how one request divides into tasks (M15)
 KINDS = ("bug", "feature", "docs", "chore")
 SIZES = ("small", "large")
 INTENT_SECTIONS = ("Problem", "Outcome", "Constraints")
@@ -307,7 +307,48 @@ def lint_lifecycle(text: str, doc: str) -> list[Problem]:
             problems.append((line, why))
         else:
             problems += [(line, p) for p in check_plan_data(data)]
+    elif doc == "split":
+        problems += _split_shape(text, lines)
     return sorted(problems)
+
+
+SPLIT_KEY = re.compile(r"(?i)\b(goal|scope)\s*:")
+
+
+def split_parts(text: str) -> list[dict]:
+    """The split's numbered parts, from its '## Parts' section: {n, goal, scope} each. A missing line
+    is None; an empty scope is []. Whether they hold is split.py's to say."""
+    lines = text.splitlines()
+    out: list[dict] = []
+    for _, line in _section_lines(lines, _sections(lines, 0), "Parts") or []:
+        clean = _clean(line)
+        if OUTCOME_ITEM.match(clean):
+            out.append({"n": int(OUTCOME_ITEM.match(clean).group(1)), "goal": None, "scope": None})
+            clean = re.sub(r"^\s*\d+[.)]\s+", "", clean)
+        elif not out:
+            continue
+        bits = SPLIT_KEY.split(clean)  # [before, key, value, key, value, ...]
+        for key, value in zip(bits[1::2], bits[2::2]):
+            value = value.strip().strip(";|,").strip()
+            if key.lower() == "goal":
+                out[-1]["goal"] = value
+            else:
+                out[-1]["scope"] = [p.strip().strip("`") for p in value.split(",") if p.strip().strip("`")]
+    return out
+
+
+def _split_shape(text: str, lines: list[str]) -> list[Problem]:
+    if "Parts" not in [s for s, _ in _sections(lines, 0)]:
+        return [(1, "split needs a '## Parts' section: a numbered list, each part a 'goal:' line and a 'scope:' line")]
+    parts = split_parts(text)
+    if not parts:
+        return [(1, "split's '## Parts' needs a numbered list: 1. goal: ..., then scope: ... on the next line")]
+    out = []
+    if [p["n"] for p in parts] != list(range(1, len(parts) + 1)):
+        out.append((1, f"split's parts must be numbered 1 to {len(parts)}, in order"))
+    for p in parts:
+        out += [(1, f"part {p['n']} needs a '{key}:' line") for key in ("goal", "scope") if p[key] is None]
+    return out
 
 
 def lifecycle_doc(path: Path) -> str | None:

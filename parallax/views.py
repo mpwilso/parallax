@@ -17,7 +17,7 @@ SECTIONS = ("Decisions", "Changed since last time", "Found", "Recommended", "Det
 
 
 RISK = {"guard": 0, "policy": 0, "scope": 1, "conflict": 1, "stuck": 2, "tool": 2, "checker": 2, "tests": 2, "rework": 3, "cap": 3,
-        "drafting": 3, "budget": 3, "loop": 3, "stopped": 4, "launch": 4, "review": 4}  # what needs you most comes first; Ready comes last
+        "drafting": 3, "budget": 3, "loop": 3, "split": 3, "waiting": 3, "stopped": 4, "launch": 4, "review": 4}  # what needs you most comes first; Ready comes last
 
 
 BROKEN = "couldn't display this task"
@@ -100,6 +100,9 @@ def board(project: Project) -> dict:
             try:
                 entries = status.attempt(project.ledger.entries(), i["task"])
                 what, why, _ = live.doing(entries)
+                if i["status"] == "planned":  # a part of a split request, waiting to launch with the others
+                    from .conductor import held_line
+                    what, why = held_line(project, i["task"]).rstrip("."), ""
                 if s == "merging":
                     from . import merging
                     what, why = (merging.info(project, i["task"]) or {}).get("text", "Merging"), ""
@@ -119,8 +122,27 @@ def board(project: Project) -> dict:
         except Exception:  # recorded, never hidden
             broken.append(broken_row(item["task"], item, log_broken(project, item["task"], "its done row")))
     waiting = broken + waiting  # a task that can't be shown is one to look at: first, and never silent
+    requests = _or_log(project, lambda: _requests(project, waiting + working + done), [], None, "the split requests")
     return {"columns": columns, "waiting": waiting, "working": working, "done": done, "count": len(waiting),
+            "requests": requests,
             "overview": _or_log(project, lambda: progress.overview(project), [], None, "the overview")}
+
+
+def _requests(project: Project, rows: list[dict]) -> list[dict]:
+    """Each split request that isn't finished, its parts in order, each with its own state; and on each
+    part's row, which request and part it is, so the page groups the parts under their request. A part
+    not made yet is in the request's list only, saying what it waits on."""
+    from .conductor import groups
+    out = groups(project, unfinished=True)
+    where = {p["task"]: (g, p) for g in groups(project) for p in g["parts"] if p["task"]}
+    for row in rows:
+        if row.get("task") in where:
+            g, p = where[row["task"]]
+            row["request"] = {"id": g["request"], "part": p["n"], "of": len(g["parts"])}
+    for g in out:
+        for p in g["parts"]:
+            p["line"] = progress.sentence(f"Part {p['n']}, {p['waiting']}") if not p["task"] else ""
+    return out
 
 
 def _or_log(project: Project, build, fallback, task_id: str | None, where: str):
@@ -261,7 +283,15 @@ def _card(project: Project, task_id: str) -> dict:
             if state != "done" else progress.OUTCOMES.get(t["status"], t["status"].capitalize()),
             "has_change": any(e["kind"] == "check.staged" for e in entries) or t["status"] in ("accepted", "merged"),
             "shots": shots(project, task_id),
-            "docs": [d for d in ("intent", "spec", "plan", "record") if lifecycle.found_doc(project, task_id, d)]}
+            "docs": _docs(project, task_id)}
+
+
+def _docs(project: Project, task_id: str) -> list[str]:
+    """The task's documents; the split too, on the task a split request started as."""
+    from .conductor import part_of
+    names = [d for d in ("intent", "spec", "plan", "record") if lifecycle.found_doc(project, task_id, d)]
+    split = lifecycle.found_doc(project, task_id, "split") and part_of(project, task_id)
+    return (["split"] if split else []) + names
 
 
 def _overlaps(project: Project, task_id: str) -> list[str]:
@@ -331,7 +361,7 @@ def document(project: Project, task_id: str, name: str) -> str:
     if name == "diff":
         from .tree import reviewed_diff
         text = reviewed_diff(project, task_id)
-    elif name in ("intent", "spec", "plan", "record"):
+    elif name in ("intent", "spec", "plan", "record", "split"):
         path = lifecycle.found_doc(project, task_id, name)
         text = path.read_text(encoding="utf-8") if path else ""
     else:

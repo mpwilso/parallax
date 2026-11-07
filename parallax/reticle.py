@@ -315,7 +315,8 @@ def write(project: Project, task_id: str, p, writer=None, runner=None) -> str:
     tree.export(p.worktree, p.task["base"], base)
     installs.place(p.venv, base)
     intent = lifecycle._read(project, task_id, "intent")
-    typed = project.task(task_id)["goal"]  # the person's request as typed; in an eval, the issue
+    from .conductor import typed as as_typed
+    typed = as_typed(project, task_id)  # the person's request as typed (a split one's, whole); in an eval, the issue
     if not asked(intent):
         project.ledger.append("reticle.failed", "parallax", "the intent marks no outcome as asked, so Reticle had nothing to test",
                               task=task_id)

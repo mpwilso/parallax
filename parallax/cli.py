@@ -151,18 +151,23 @@ def _run(args) -> int:
 
     if args.cmd == "task":
         if args.tcmd == "list":
+            from .conductor import groups
             tasks = proj.tasks()
             if not tasks:
                 print("no tasks")
-            for tid, t in tasks.items():
-                try:
-                    cost = f"  ${t['cost_usd']:.2f} est" if t.get("cost_usd") else ""
-                    st = lifecycle.status_line(proj, tid) if t.get("intent") else t["status"]
-                    print(f"{tid}  [{st}]{cost}  {_line(t['goal'], 100)}")
-                except Exception:  # one task that can't be shown never hides the rest
-                    from .views import BROKEN, log_broken
-                    e = log_broken(proj, tid, "its line")
-                    print(f"{tid}  {BROKEN}" + (f" (ledger {e['id']})" if e else ""))
+            split = {p["task"]: g for g in groups(proj) for p in g["parts"] if p["task"]}  # parts sit under their request
+            for tid in tasks:
+                g = split.get(tid)
+                if g and tid != g["request"]:
+                    continue
+                if g:
+                    print(f"request {g['request']}, {len(g['parts'])} parts: {_line(g['words'], 90)}")
+                for part in g["parts"] if g else [{"task": tid}]:
+                    pad = "  " if g else ""
+                    if not part["task"]:
+                        print(f"{pad}part {part['n']}  [{part['waiting']}]  {_line(part['goal'], 100)}")
+                        continue
+                    _task_line(proj, part["task"], tasks[part["task"]], pad)
         elif args.tcmd == "diff":
             print(proj.diff(args.task) or "no changes")
         return 0
@@ -275,10 +280,22 @@ def _run(args) -> int:
 
     if args.cmd == "inbox":
         from . import inbox
+        from .conductor import groups
         items, busy, merges = inbox.items(proj), inbox.working(proj), inbox.to_merge(proj)
         if not items:
             print("nothing waits on you.")
+        open_ = groups(proj, unfinished=True)  # a split request's parts under it, each with its own state
+        for g in open_:
+            print(f"request {g['request']}, {len(g['parts'])} parts: {_line(g['words'], 90)}")
+            for part in g["parts"]:
+                if part["task"]:
+                    print(f"  {part['task']}  {part['state']:<10}{_line(inbox.title(proj, part['task']), 88)}")
+                else:
+                    print(f"  part {part['n']}  {part['waiting']}: {_line(part['goal'], 80)}")
+        grouped = {p["task"] for g in open_ for p in g["parts"]}
         for it in items:
+            if it["task"] in grouped:
+                continue
             print(f"{it['task']}  {it['state']:<10}{_line(it['title'], 90)}")
             for o in it.get("overlaps") or []:  # never blocks: a heads-up, naming the other task
                 print(f"        {o}")
@@ -346,6 +363,18 @@ def _eval(proj: Project, args) -> int:
                         reticle=True if args.reticle else None)
     print(f"results in {out.relative_to(proj.root)}. the summary is summary.md there.")
     return 0
+
+
+def _task_line(proj: Project, tid: str, t: dict, pad: str = "") -> None:
+    """One task in parallax task list. A task that can't be shown never hides the rest."""
+    try:
+        cost = f"  ${t['cost_usd']:.2f} est" if t.get("cost_usd") else ""
+        st = lifecycle.status_line(proj, tid) if t.get("intent") else t["status"]
+        print(f"{pad}{tid}  [{st}]{cost}  {_line(t['goal'], 100)}")
+    except Exception:
+        from .views import BROKEN, log_broken
+        e = log_broken(proj, tid, "its line")
+        print(f"{pad}{tid}  {BROKEN}" + (f" (ledger {e['id']})" if e else ""))
 
 
 def _line(text: str, width: int = 160) -> str:

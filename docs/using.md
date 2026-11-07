@@ -50,6 +50,14 @@ If merging your base branch in hits a conflict, nothing moves, and the card give
 
 Every running card has Stop: while Focus drafts, Reticle writes tests, Maker builds, the checks and Field run, and during the pre-merge test run. It asks once, then that task's agents and processes end within a few seconds, recorded as your action with what it had spent. A stopped task waits on you: resume it from where it stopped (finished stages aren't done again), send it back with a reason, or drop it. Stopping during the pre-merge test run never moves your base branch.
 
+## Several tasks from one request
+
+Type two unrelated fixes in one go, and Focus may split them: before the intent, it writes `split.md`, the parts of the request, each a goal and the files it may touch. Most requests stay one part, and then nothing changes. Code checks the split (every part has a goal and files, none touches a protected path, at most `[conductor] max_parts`, 4 by default); one that doesn't hold goes back to Focus twice, then comes to you as one card: do it as one task, redraft the split from your reason, or drop it.
+
+Each part is a task of its own, with its own card, cap and checks. In the list, a request's parts sit together under it, each with its own state, and `parallax inbox` and `parallax task list` group them the same way. Up to `[conductor] max_parallel` parts (2 by default) work at once. Parts that touch the same files run in turn: the later one waits, shown as "waiting on" the earlier task, until you accept that one, and is built on its accepted commit. If you drop the earlier one instead, the later one comes to you: build it on the base branch as it is, or drop it.
+
+Each Ready part is accepted on its own. The parts launch without you when their caps together are at most `auto_launch_usd`; when they're over, one card asks once for all of them, and your launch starts them all. `parallax stats` adds a line per split request: its parts, their touches and cost. A policy without the `[conductor]` table keeps every request one task, as before.
+
 ## After the merge
 
 Parallax removes the task's worktree and deletes its branch, once your next command sees the accepted commit in your branch. The card stays readable: it's built from the ledger and the commits in your repo. Dropping a task keeps its work as a patch in the task's data folder (`~/.local/share/parallax/tasks/`), then removes its worktree and branch.
@@ -110,7 +118,8 @@ The tests never call a model. `scripts/test.sh` runs ruff and the whole suite ex
 - **It needs Claude Code**, logged in, and the Claude Agent SDK. Costs are Claude Code's estimates at list prices; on a subscription your real limit is the plan's usage limits, which Parallax can't see.
 - **A cap can overshoot by one turn.** Every agent gets what's left of the cap as its own limit, but the SDK checks it between turns.
 - **Field's browser server is pinned** to `@playwright/mcp` 0.0.70: later versions need Unix sockets the sandbox refuses.
-- **One person, one machine.** No splitting work into several tasks yet; several tasks from one request are planned.
+- **One person, one machine.** Parallax runs here, for you: there is no shared server or team inbox.
+- **A split is judged by its scopes.** Code runs parts side by side only when their scopes can't touch the same file, and it errs toward running them in turn. It can't tell whether two parts that touch different files still depend on each other; Focus is told to split only work that stands apart.
 - **What agents know of the past is what the ledger holds.** Focus and Maker get a block compiled by code from this repo's last ten finished tasks: the titles and asked outcomes of the intents you approved, and your own reasons. Nothing a person wrote outside a task reaches them, and a task's own intent and plan outrank the block.
 
 What Parallax protects and what it can't: [THREAT_MODEL.md](THREAT_MODEL.md).

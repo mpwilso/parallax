@@ -69,6 +69,15 @@ class FakeChecker:
         return self.reviews[min(len(self.briefs), len(self.reviews)) - 1]
 
 
+ONE_PART = """Bottom line: One task: the request is one change.
+Not looked at: nothing
+
+## Parts
+1. goal: the whole request
+   scope: README.md, tests/**
+"""
+
+
 class FakeDrafter:
     """Returns canned file text per doc ("intent", "spec", "plan"), read from the request's first line.
     A doc's text may be a list: successive drafts, the last one repeating.
@@ -94,6 +103,8 @@ class FakeDrafter:
             self.results.append((path, permission_fn("fs.read", path, [])))
         if doc in self.fail:
             return AgentResult("error", "stopped at the budget cap ($2.0)", self.cost)
+        if doc == "split" and "split" not in self.docs:  # with the conductor on and no split given: one part, free
+            return AgentResult("done", ONE_PART, 0.0)
         text = self.docs[doc]
         if isinstance(text, list):  # successive drafts: the first, then each redraft; the last repeats
             text = text.pop(0) if len(text) > 1 else text[0]

@@ -281,6 +281,9 @@ def report(project: Project, task_id: str) -> str:
     status = t["status"]
     dec = decide.decision(project, task_id)
     if st.gate is not None and dec is None:
+        if status == "planned":  # a part of a split request, waiting to launch with the others
+            from .conductor import held_line
+            return lint.report("FYI", lint.one_sentence(held_line(project, task_id)), "nothing", "nothing waits on you here.")
         if status == "drafting":
             return lint.report("FYI", f"Task {task_id} is drafting.", "nothing", "nothing waits on you; parallax stop ends it.")
         return lifecycle.report(project, task_id)

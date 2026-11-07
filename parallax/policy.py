@@ -24,6 +24,8 @@ DEFAULT_UI_TESTER = {
 DEFAULT_RETICLE = {"enabled": True, "model": "", "max_usd": 0.5}  # on since the seeded eval (docs/evals.md)
 DEFAULT_ASK = {"model": "", "budget_usd": 0.25}  # the Ask box: per task, apart from its cap
 DEFAULT_MERGE = {"test_command": ""}  # Accept and merge: the project's own tests, run before the base branch moves
+DEFAULT_CONDUCTOR = {"max_parts": 4, "max_parallel": 2}  # with the [conductor] table: how a request may split (conductor.py)
+ONE_PART = {"max_parts": 1, "max_parallel": 2}  # without it: every request is one task, as before M15
 DEFAULT_CHECK = {
     "model": "claude-sonnet-5-5",  # a different Claude model from the maker's; the eval measures it
     "diff_cap": 400,               # changed lines a blind review can take reliably
@@ -89,6 +91,10 @@ budget_usd = 0.25              # what questions about one task may spend in all,
 
 [merge]
 test_command = ""              # Accept and merge runs this on the exact commit it would land, first; empty: no run
+
+[conductor]
+max_parts = 4                  # the most tasks Focus may split one request into; without this table, every request is one task
+max_parallel = 2               # the most parts of one request that work at once; parts whose scopes overlap run in turn
 """
 
 
@@ -115,11 +121,24 @@ def _ui_tester(cfg: dict) -> dict:
     return out
 
 
+def _conductor(cfg: dict | None) -> dict:
+    """[conductor]: absent, every request is one task (ONE_PART); present, its settings over the defaults."""
+    if cfg is None:
+        return dict(ONE_PART)
+    if set(cfg) - set(DEFAULT_CONDUCTOR):
+        raise ValueError(f"unknown [conductor] settings: {sorted(set(cfg) - set(DEFAULT_CONDUCTOR))}")
+    out = {**DEFAULT_CONDUCTOR, **cfg}
+    for key in DEFAULT_CONDUCTOR:
+        if not isinstance(out[key], int) or isinstance(out[key], bool) or out[key] < 1:
+            raise ValueError(f"[conductor] {key} must be a whole number of 1 or more")
+    return out
+
+
 class Policy:
     def __init__(self, limits: dict[str, int] | None = None, budget: dict[str, float] | None = None,
                  build: dict[str, str] | None = None, check: dict | None = None, launch: dict | None = None,
                  ui_tester: dict | None = None, draft: dict | None = None, reticle: dict | None = None,
-                 ask: dict | None = None, merge: dict | None = None):
+                 ask: dict | None = None, merge: dict | None = None, conductor: dict | None = None):
         limits = dict(limits or {})
         unknown = set(limits) - set(DEFAULT_LIMITS)
         if unknown:
@@ -203,8 +222,9 @@ class Policy:
         self.merge = {**DEFAULT_MERGE, **merge}
         if not isinstance(self.merge["test_command"], str):
             raise ValueError("[merge] test_command must be a shell command, or empty for none")
+        self.conductor = _conductor(conductor)
 
-    TABLES = ("limits", "budget", "build", "check", "launch", "ui_tester", "draft", "reticle", "ask", "merge")
+    TABLES = ("limits", "budget", "build", "check", "launch", "ui_tester", "draft", "reticle", "ask", "merge", "conductor")
 
     @classmethod
     def from_dict(cls, data: dict) -> "Policy":
@@ -218,7 +238,7 @@ class Policy:
         unknown = sorted(set(data) - set(cls.TABLES))
         if unknown:
             raise ValueError(f"unknown policy tables: {unknown}")
-        return cls(**{t: data.get(t, {}) for t in cls.TABLES})
+        return cls(**{t: data.get(t, None if t == "conductor" else {}) for t in cls.TABLES})  # no [conductor]: one part
 
     @classmethod
     def load(cls, path: Path) -> "Policy":

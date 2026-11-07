@@ -173,6 +173,10 @@ main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(18re
 .row.open { background: var(--accent-bg); border-color: var(--accent); }
 .row-top { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
 .row .title { font-weight: 550; overflow-wrap: anywhere; }
+#queue li.request > ol { margin: 0.125rem 0 0 0.5rem; padding-left: 0.5rem; border-left: 2px solid var(--line); }  /* a split request's parts */
+.request-head { margin: 0.25rem 0.5rem 0; font-size: 0.8125rem; color: var(--muted); overflow-wrap: anywhere; }
+.part { font-size: 0.75rem; color: var(--muted); }
+.part-waiting { display: flex; flex-direction: column; gap: 0.125rem; padding: 0.5rem 0.75rem; color: var(--muted); }
 .row .line { color: var(--muted); font-size: 0.875rem; }  /* a whole sentence, shortened by the server at a word */
 .done .row .title { font-weight: 400; }
 

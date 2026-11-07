@@ -70,6 +70,8 @@ WHY_HUMAN = {  # one short sentence per kind: why code stopped instead of decidi
     "loop": "running it again would buy the same result, so what to change is yours",
     "stopped": "you stopped it, so only you can say how it goes on",
     "policy": "the policy file's commands run as you, outside the sandbox, and only you can say they're yours to run",
+    "split": "Focus couldn't split the request into parts that hold, and only you can say how the work divides",
+    "waiting": "the task this part was to follow ended without an accept, and only you can say whether this part stands alone",
 }
 
 
@@ -134,6 +136,13 @@ def decision(project: Project, task_id: str) -> Decision | None:
         cited = {"why": why, "asked": asked[-1]["id"] if asked else ""}
         plan = lifecycle.plan_data(project, task_id) or {}
         cap = costs.budget(project, task_id, plan)[0] if plan else 0.0
+        parts = (asked[-1]["data"].get("parts") or []) if asked else []
+        if "auto_launch_usd" in why and len(parts) > 1:  # a split request's parts, over your launch limit together
+            total = float(asked[-1]["data"].get("total_usd") or 0)
+            return Decision("launch", f"Launch this request's {len(parts)} parts, with caps of ${total:.2f} in all?",
+                            [Option("launch", f"starts the builds of all {len(parts)} parts now"),
+                             Option("drop", "ends this part; the request's other parts are weighed again without it", True)],
+                            "launch", "the builds", extra=cited)
         if "auto_launch_usd" in why:
             return Decision("launch", f"Launch it, with a cap of ${cap:.2f}?",
                             [Option("launch", "starts the build now"), DROP], "launch", "the build",
@@ -205,6 +214,17 @@ def decision(project: Project, task_id: str) -> Decision | None:
     if stage == "guard":
         return Decision("guard", "The change touched a protected file: redraft it?", [REJECT, DROP],
                         "reject", "Ready", item)
+    if d.get("split"):  # Focus's split didn't hold after its redrafts (conductor.py)
+        return Decision("split", "Focus couldn't split the request into parts that hold: do it as one task, or redraft the split?",
+                        [Option("one task", "goes on as one task: the whole request, with no split", label="Do it as one task"),
+                         Option("reject", "Focus drafts the split again from your reason", True), DROP],
+                        "one task", "the whole request", item)
+    if d.get("waiting_on"):  # the part this one was to follow ended without an accept
+        return Decision("waiting", f"Task {d['waiting_on']}, which this part was to follow, ended without an accept: "
+                                   "build this part on the base branch as it is, or drop it?",
+                        [Option("rebase", "builds this part on the base branch as it is now, without that task's change",
+                                label="Build it on the base branch"), DROP],
+                        "rebase", "this part", item)
     if d.get("over_limit"):  # a budget you named, over the limit: one question, no redraft (786e71)
         named, cap = budgets.money(d["named"]), budgets.money(d["limit"])
         extra = {"named": d["named"], "limit": d["limit"]}
@@ -287,7 +307,16 @@ def lines(dec: Decision) -> list[str]:
 
 def apply(project: Project, task_id: str, name: str, reason: str = "", spawn: Callable | None = None,
           preflight_runner=None) -> str:
-    """Carry out your answer. Returns one lowercase line saying what happens now."""
+    """Carry out your answer. Returns one lowercase line saying what happens now. A split request moves
+    on after it: your launch starts the parts it named, and a drop lets the parts after it go on."""
+    from .conductor import advance
+    try:
+        return _apply(project, task_id, name, reason, spawn, preflight_runner)
+    finally:
+        advance(project, spawn)
+
+
+def _apply(project: Project, task_id: str, name: str, reason: str, spawn: Callable | None, preflight_runner) -> str:
     dec = decision(project, task_id)
     if dec is None:
         raise ParallaxError(f"nothing about task {task_id} is waiting on you")
@@ -325,6 +354,10 @@ def apply(project: Project, task_id: str, name: str, reason: str = "", spawn: Ca
         project.resolve(dec.item["id"], True, said)
     elif name == "use limit":
         budgets.use_limit(project, task_id, dec.extra["limit"], said)
+        project.resolve(dec.item["id"], True, said)
+    elif name == "one task":  # the split didn't hold: the whole request goes on as this one task
+        from .conductor import one_task
+        one_task(project, task_id, said)
         project.resolve(dec.item["id"], True, said)
     elif name == "remove":
         from . import uitest

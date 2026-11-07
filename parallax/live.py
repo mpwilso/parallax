@@ -36,6 +36,10 @@ def doing(entries: list[dict]) -> tuple[str, str, str]:
             why = ""  # a new stage: the rework's finding no longer describes it
         if k in ("pilot.started", "task.redraft", "task.created"):
             what, since, drafted = "Focus writing the intent", e["ts"], set()
+        elif k in ("request.split", "draft.recorded") and d.get("doc", "split") == "split":
+            what, since = "Focus writing the intent", e["ts"]  # the split is drafted: the intent is next
+        elif k == "launch.held":
+            what, since = "waiting to launch with the request's other parts", e["ts"]
         elif k == "draft.recorded":
             drafted.add(d.get("doc", ""))
             what = "Focus writing the plan" if "plan" not in drafted else "checking the plan against the intent"

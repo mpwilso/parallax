@@ -2,6 +2,10 @@
 
 What changed in each release. The full notes for each are on the [releases page](https://github.com/mpwilso/parallax/releases).
 
+## Unreleased
+
+- M15, the light conductor: several tasks from one request (`parallax/conductor.py`, `parallax/split.py`). With `[conductor]` in the policy, Focus first drafts `split.md`, the request's parts, each a goal and a scope, in the same normalize, lint and redraft loop as the intent and plan; one part is always allowed. Code checks it: every part has a goal and a scope, no scope names a protected path, at most `max_parts` (4); a split that still fails after two redrafts comes to you as one decision (one task, redraft, or drop). Each part is a task of its own through the same pilot, linked in the ledger to its request (`request.split`, and the request's id on each part's `task.created`). Up to `max_parallel` (2) parts work at once; parts whose scopes overlap run in turn, the later one made on the earlier one's accepted commit, and if the earlier one is dropped the later one asks you (build it on the base branch, or drop it). The parts launch under the launch rule when their caps together fit `auto_launch_usd`, otherwise after one question for all of them. `parallax inbox`, `parallax task list` and the UI's list group a request's parts under it, and `parallax stats` adds a line per split request. A policy without the table keeps every request one task, and evals stay one task. Ten tests, a UI server test, and two new stops in the every-stop walk. The live run is in `docs/conductor-runs.md`: the split and the launch together worked with real agents; both parts then stopped at this repo's trust question for its policy commands, which is the owner's, so neither reached Ready.
+
 ## 0.3.1 (2026-11-06)
 
 Fixed:

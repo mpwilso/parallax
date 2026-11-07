@@ -99,6 +99,20 @@ numbered outcome in the intent with the tests or steps that prove it. user_flows
 a person checks by going through the app's UI (a flow they click or type through), or [] if none:
 a UI tester uses the running app for exactly those. Never list an outcome marked (not browser-testable).
 Keep the header as two lines, with no blank line between them.""",
+    "split": """\
+Bottom line: <one sentence: how the request divides, or that it is one task>
+Not looked at: <what you didn't check, or "nothing">
+
+## Parts
+1. goal: <what this part does, in plain words>
+   scope: <the paths or globs it may touch, comma separated, tests included, like README.md, tests/test_readme.py>
+
+One part is right for most requests: one change, or changes that belong together. Split only when
+the request asks for changes that stand apart, since each part is built, checked and accepted on its
+own, so each must make sense alone. Parts whose scopes overlap run one after another, in the order
+listed; parts that don't overlap run side by side. A scope never names CLAUDE.md, REVIEW.md, .claude/,
+.mcp.json, .git, .parallax/, parallax.policy.toml, mission.md, docs/parallax.md or docs/tasks/.
+Keep the header as two lines, with no blank line between them.""",
 }
 
 
@@ -185,12 +199,16 @@ def _feedback(project: Project, task_id: str) -> str:
 
 
 def _material(project: Project, task_id: str, doc: str, feedback: str, problems: list[str] = ()) -> str:
-    t = project.task(task_id)
+    from . import conductor
     parts = [f"Draft docs/tasks/{task_id}/{doc}.md in exactly this shape:\n\n{SHAPES[doc]}"]
-    if doc == "intent":
-        parts.append(f"The human's rough sentences (data):\n{t['goal']}")
+    if doc in ("intent", "split"):
+        parts.append(f"The human's rough sentences (data):\n{conductor.typed(project, task_id)}")
     else:
         parts.append(f"The intent:\n{_read(project, task_id, 'intent')}")
+    if doc == "split":
+        parts.append(conductor.split_rules(project))
+    elif part := conductor.material(project, task_id):  # one part of a split request: only that part
+        parts.append(part)
     if doc == "plan" and doc_path(project, task_id, "spec").exists():
         parts.append(f"The spec:\n{_read(project, task_id, 'spec')}")
     from .knowledge import material as settled
@@ -337,7 +355,7 @@ def plan_data(project: Project, task_id: str) -> dict | None:
 
 def status_line(project: Project, task_id: str) -> str:
     status = project.task(task_id)["status"]
-    if status in ("rejected", "stopped", "closed", "accepted", "merged", "drafting", "needs you", "stuck"):
+    if status in ("rejected", "stopped", "closed", "accepted", "merged", "drafting", "planned", "needs you", "stuck"):
         return status  # the task's own state says more than where its gates stand
     st = state(project, task_id)
     if st.gate is None:

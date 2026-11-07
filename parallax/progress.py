@@ -16,8 +16,8 @@ STAGES = (("focus", "Focus"), ("reticle", "Reticle"), ("maker", "Maker"), ("chec
 WORKING = ("drafting", "building", "checking", "merging")
 # a decision's kind -> the stage that stopped. cap, error and stuck stop whichever stage was running
 STOPPED_AT = {"drafting": "focus", "budget": "focus", "turns": "maker", "guard": "maker", "scope": "check", "conflict": "check",
-              "flows": "check", "rework": "check", "checker": "check", "tests": "check", "loop": "check"}
-FAILED_KINDS = {"cap", "rework", "checker", "tests", "turns", "error", "stuck", "drafting", "loop"}  # the work failed: chip Failed
+              "flows": "check", "rework": "check", "checker": "check", "tests": "check", "loop": "check", "split": "focus"}
+FAILED_KINDS = {"cap", "rework", "checker", "tests", "turns", "error", "stuck", "drafting", "loop", "split"}  # the work failed: chip Failed
 SUMMARY = 110  # characters a row's sentence gets before it's shortened, at a word
 
 
@@ -53,14 +53,15 @@ def strip(project: Project, task_id: str, dec=None) -> list[dict]:
     working = {"focus": "focus", "reticle": "reticle", "maker": "maker", "second_eye": "check", "field": "check"}.get(agent or "")
     if board in WORKING and not working and what.startswith(("running", "checking", "preparing the build")):
         working = "check" if what.startswith(("running", "checking")) else None
-    if board == "drafting":  # drafting and redrafting are Focus's, whatever the live line says (fb461d)
+    planned = t["status"] == "planned"  # a part whose plan fits, waiting to launch with its request: Focus is done
+    if board == "drafting" and not planned:  # drafting and redrafting are Focus's, whatever the live line says (fb461d)
         working = "focus"
     failed = None
-    if dec is not None and dec.item is not None:
+    if dec is not None and dec.item is not None and dec.kind != "waiting":  # a part on hold: nothing failed
         failed = STOPPED_AT.get(dec.kind) or _running(kinds)
     last_check = next((e for e in reversed(entries) if e["kind"] == "check.finished"), None)
     done = {
-        "focus": "gate.approved" in kinds or (dec is not None and dec.kind in ("review", "launch")),
+        "focus": "gate.approved" in kinds or planned or (dec is not None and dec.kind in ("review", "launch")),
         "reticle": "reticle.recorded" in kinds,
         "maker": any(e["kind"] == "build.finished" and e["data"].get("status") == "built" for e in entries),
         "check": bool(last_check and last_check["data"].get("status") == "ready"),

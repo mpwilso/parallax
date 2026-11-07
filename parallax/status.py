@@ -24,6 +24,8 @@ def derive(entries: list[dict]) -> dict[str, dict]:
             t["status"] = "drafting"
         elif kind == "review.requested":
             t["status"] = "needs you"
+        elif kind == "launch.held":
+            t["status"] = "planned"  # a part whose plan fits, launching with its request's other parts (conductor.py)
         elif kind == "task.redraft":
             t["status"] = "drafting"
         elif kind in ("build.finished", "check.finished"):
@@ -64,7 +66,7 @@ def derive(entries: list[dict]) -> dict[str, dict]:
 
 BOARD = ("drafting", "building", "checking", "merging", "ready", "needs you", "done")
 _TO_BOARD = {
-    "drafting": "drafting", "running": "building", "reworking": "building", "built": "checking",
+    "drafting": "drafting", "planned": "drafting", "running": "building", "reworking": "building", "built": "checking",
     "checking": "checking", "merging": "merging", "ready": "ready", "accepted": "done", "merged": "done", "rejected": "done",
     "closed": "done",  # a stopped task waits on you: resume, send back or drop (stopping.py)
 }

@@ -119,6 +119,16 @@ def reticle_off_unless_turned_on(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def one_part_unless_turned_on(monkeypatch, reticle_off_unless_turned_on):
+    """The shipped policy has [conductor], so Focus may split a request, which is one more drafting
+    call. A test project starts without the table, every request one task as before M15, so tests of
+    other things don't depend on it; tests/test_conductor.py writes it into its own policy."""
+    text = _core.DEFAULT_POLICY.split("\n[conductor]\n", 1)[0].rstrip("\n") + "\n"
+    assert "max_parts" in SHIPPED["policy"] and "max_parts" not in text, "the default policy's [conductor] moved: update this fixture"
+    monkeypatch.setattr(_core, "DEFAULT_POLICY", text)
+
+
+@pytest.fixture(autouse=True)
 def no_real_merge_tests(monkeypatch):
     """Accept and merge runs the project's test command first. In a test that would be this very
     suite, so a test fakes accept.TEST_RUNNER, or fails loudly here."""

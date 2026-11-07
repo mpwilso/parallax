@@ -31,6 +31,7 @@ Status: a portfolio project, built to show how I design, test and judge an AI to
 - **Every question comes ready to answer:** the options, what each one does, whose call it is and why a person has to make it, and a recommendation written by code, not by a model.
 - **What an agent may reach is part of what you approve.** Network access, files outside its workspace and new dependencies are listed in the plan, and the sandbox is tested before every launch. A plan that asks for more never starts without you.
 - **Code decides what happens next, not a model.** The ledger is tamper-evident: entries are never edited or removed, and each is chained by hash to the one before, so a change shows. Every approval is signed with a key the agents can't read.
+- **Several tasks from one request.** Focus may split a request into parts, each a task with its own sandbox, cap and card, and code checks the split and runs parts that touch the same files one after another.
 - **Focus and Maker are told what past tasks settled.** They get a short record that code writes from the ledger: for each accepted task, what it set out to do, from the intent you approved, and for every task, the reasons you gave when you sent work back, accepted a risk or dropped it. Second Eye and Reticle never see it, so each change is judged against its own intent.
 
 ## Try it
@@ -78,7 +79,7 @@ Linux, or Windows through WSL2 ([docs/wsl.md](docs/wsl.md) makes the distro); ma
 
 - **Second Eye reads the diff and can't run code.** It judges the outcome where the diff shows it, and says what it couldn't see. Reticle's tests do run: a test that passes on the code before the change is dropped, so every kept test was seen failing before the fix.
 - **A requirements gap gets past every checker.** When Focus guesses wrong about what was wanted, every check passes the guess, because each one judges the work against that intent. That is the evals' one miss: the issue asked for hours to round to the nearest hour, and the maintainers' tests also checked other units.
-- **One person, one machine.** Several tasks from one request are planned, not built.
+- **One person, one machine.** There is no shared server or team inbox.
 - **What agents know of the past is short.** It stops at the last ten finished tasks, and holds nothing but approved text and your own reasons.
 
 The full list: [docs/using.md](docs/using.md#limits). What it protects and what it can't: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).

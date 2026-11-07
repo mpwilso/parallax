@@ -102,4 +102,6 @@ def dropped(project: Project, task_id: str, reason: str) -> dict:
     project.ledger.append("task.cleaned", "parallax",
                           "dropped: its work is kept as a patch" if kept else "dropped: there was no work to keep",
                           task=task_id, **kept, **({"drafts_moved_to": moved} if moved else {}), **_remove(project, task_id))
+    from .conductor import advance
+    advance(project)  # a part that waited on this one comes to you; the rest of its request goes on
     return e

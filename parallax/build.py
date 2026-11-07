@@ -301,6 +301,8 @@ def flag_stale_runs(project: Project, now: datetime | None = None, spawn: Callab
             continue
         project.ledger.append("stuck.raised", "parallax", why, task=tid)
         flagged.append(tid)
+    from .conductor import advance
+    advance(project, spawn)  # split requests move on here too, in place of a pulse
     return flagged
 
 
@@ -425,6 +427,8 @@ def run_mode(project: Project, task_id: str, mode: str, drafter_for, maker_for, 
         sessions.reconcile(project, task_id, finishing=True)  # a session this process started and never ended
         base.SESSIONS = None
         project.ledger.append("builder.finished", "parallax", "", task=task_id, status=status)
+        from .conductor import advance
+        advance(project)  # a part that finished frees a place, and may launch its request's others
     return status
 
 

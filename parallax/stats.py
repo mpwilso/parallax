@@ -4,6 +4,7 @@ A human touch is anything you had to do for a task besides describing it and mer
 every approve, reject, decision, accept, cap raise or stop you made, every command you ran to
 fix it up, and every drafted file you edited by hand (its hash changed between the draft and its
 approval). The target is one touch per task: the final accept or reject.
+A request Focus split into parts (conductor.py) gets a line too: its parts' touches and cost, summed.
 """
 from __future__ import annotations
 
@@ -43,6 +44,20 @@ def partial(project: Project) -> dict[str, list[dict]]:
     return out
 
 
+def per_request(project: Project, counts: dict[str, int], tasks: dict[str, dict]) -> list[str]:
+    """A request split into parts: its touches and cost, the sum of its parts'. Nothing when none was split."""
+    from .conductor import groups
+    split = groups(project)
+    if not split:
+        return []
+    out = [f"{'request':<8}{'parts':>8}{'touches':>8}{'cost':>9}"]
+    for g in split:
+        made = [p["task"] for p in g["parts"] if p["task"] in tasks]
+        cost = sum(tasks[t].get("cost_usd") or 0 for t in made)
+        out.append(f"{g['request']:<8}{len(g['parts']):>8}{sum(counts.get(t, 0) for t in made):>8}{'$' + format(cost, '.2f'):>9}")
+    return out
+
+
 def report(project: Project) -> list[str]:
     from .evals import staleness
     evals = staleness(project)
@@ -59,7 +74,8 @@ def _tasks(project: Project) -> list[str]:
     for tid, n in counts.items():
         mark = f"  ({len(early[tid])} partial)" if early.get(tid) else ""
         lines.append(f"{tid:<8}{n:>8}{'$' + format(tasks[tid].get('cost_usd') or 0, '.2f'):>9}  {tasks[tid]['status']}{mark}")
-    ended = [e for es in early.values() for e in es]
+    lines += per_request(project, counts, tasks)
+    ended =[e for es in early.values() for e in es]
     if ended:
         unknown = sum(1 for e in ended if e["data"].get("source") == "unknown")
         lines.append(f"{len(ended)} agent sessions ended early. their costs are counted as partial"

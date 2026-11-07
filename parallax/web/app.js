@@ -6,6 +6,7 @@ const KINDS = {
   ready: "Ready", scope: "Outside the plan", guard: "Protected file", conflict: "Intent vs plan",
   cap: "Cap reached", rework: "Kept failing", checker: "Second Eye failed", tests: "Tests couldn't run", turns: "Out of turns",
   error: "Error", stuck: "Stopped", flows: "UI test or app?", drafting: "Drafting failed", launch: "Over your launch limit", review: "Plan review",
+  split: "Split failed", waiting: "Part on hold",
 };
 const READY_OPTIONS = [
   { name: "accept", does: "commits the reviewed change to its branch; you merge it by hand" },
@@ -224,6 +225,7 @@ function row(t) {
       "aria-current": open ? "true" : null, onclick: () => openCard(t.task, true) },
       done ? null : tile("row:" + t.task, t.strip || []),
       el("span", { class: "row-body" },
+        t.request ? el("span", { class: "part" }, `Part ${t.request.part} of ${t.request.of}`) : null,
         el("span", { class: "row-top" }, el("span", { class: "title" }, t.title),
           done ? null : el("span", { class: "tag " + (t.secret ? "bad" : CHIP[t.chip] || "info"), title: kind || null }, t.secret ? "Secrets file" : t.chip)),
         done ? el("span", { class: "line" }, [t.outcome, t.date, `$${(t.cost_usd || 0).toFixed(2)}`,
@@ -232,6 +234,30 @@ function row(t) {
              (t.overlaps || []).length ? el("span", { class: "heads-up" }, `Overlaps task ${t.overlaps.join(", ")}`) : null,
              strip(t.task, t.strip, false),
              el("span", { class: "row-foot" }, spendBar(t.spend), t.started ? el("span", { class: "age" }, elapsed(t.started)) : null)])));
+}
+
+// A split request's parts sit together under it, each row with its own state. In Working, a part not
+// started yet is listed under its request too, saying what it waits on.
+function grouped(rows, working) {
+  const groups = {}, order = [];
+  const slot = (id) => groups[id] || (order.push({ id }), groups[id] = { rows: [], waiting: [] });
+  for (const t of rows) t.request ? slot(t.request.id).rows.push(t) : order.push({ t });
+  if (working) for (const g of state.board.requests || []) for (const p of g.parts) if (!p.task) slot(g.request).waiting.push(p);
+  return order.map(o => o.t ? row(o.t) : requestGroup(o.id, groups[o.id]));
+}
+
+function requestGroup(id, g) {
+  const r = (state.board.requests || []).find(x => x.request === id);
+  const n = r ? r.parts.length : g.rows.length;
+  return el("li", { class: "request" },
+    el("p", { class: "request-head" }, `Request in ${n} parts: ${r ? r.words : id}`),
+    el("ol", {}, [...g.rows.map(row), ...g.waiting.map(p => el("li", { class: "part-waiting" },
+      el("span", { class: "part" }, `Part ${p.n} of ${n}`), el("span", { class: "title" }, p.goal),
+      el("span", { class: "line" }, p.line)))]));
+}
+
+function waitingParts(b) {
+  return (b.requests || []).some(g => g.parts.some(p => !p.task));
 }
 
 function renderQueue() {
@@ -246,16 +272,16 @@ function renderQueue() {
   fill(document.getElementById("queue"), [
     el("section", { "aria-labelledby": "h-waiting" },
       el("h2", { id: "h-waiting" }, "Waiting on you"),
-      b.waiting.length ? el("ol", {}, b.waiting.map(row))
+      b.waiting.length ? el("ol", {}, grouped(b.waiting))
         : el("p", { class: "empty" }, nothing
           ? "Nothing yet. Type the work above and press Enter. Agents draft, build and check it without you, and it comes back here when it needs a decision."
           : "Nothing waits on you.")),
-    b.working.length ? el("section", { "aria-labelledby": "h-working" },
+    b.working.length || waitingParts(b) ? el("section", { "aria-labelledby": "h-working" },
       el("h2", { id: "h-working" }, "Working"),
-      el("ol", {}, b.working.map(row))) : null,
+      el("ol", {}, grouped(b.working, true))) : null,
     b.done.length ? el("details", { class: "done", open: b.done.some(t => t.task === state.open) || null },
       el("summary", {}, el("h2", {}, "Done")),
-      el("ol", {}, b.done.map(row))) : null]);
+      el("ol", {}, grouped(b.done))) : null]);
   restoreFocus(key);
   renderIdle();
 }

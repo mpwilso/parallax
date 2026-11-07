@@ -116,17 +116,26 @@ class Project:
         raise ParallaxError("not a parallax project here. run `parallax init` in your repo's folder")
 
     # tasks ---------------------------------------------------------------
-    def new_task(self, goal: str, actor: str = "human", *, plan: bool = False, intent: bool = False) -> dict:
-        """intent: the task follows the lifecycle (intent, plan, gates) instead of running from its goal."""
+    def new_task(self, goal: str, actor: str = "human", *, plan: bool = False, intent: bool = False,
+                 lead: bool = False, request: str | None = None, part: int | None = None, after: str | None = None,
+                 base: str | None = None) -> dict:
+        """intent: the task follows the lifecycle (intent, plan, gates) instead of running from its goal.
+
+        lead: the task a request starts as, which Focus may split (conductor.py): its id is the
+        request's. request, part, after: a later part of that request, and the task it follows. base:
+        the commit to start from, HEAD if not given (a part that follows another starts on its accept)."""
         refuse_inside_task(self.root)
         task_id = self._unused_task_id()
         branch = f"parallax/{task_id}-{_slug(goal)}"
         worktree = worktrees_home(self.root) / task_id
-        base = _git(self.root, "rev-parse", "HEAD")
+        base = base or _git(self.root, "rev-parse", "HEAD")
         _git(self.root, "worktree", "add", "-b", branch, str(worktree), base)
+        linked = {"request": task_id} if lead else {}
+        if request:
+            linked = {"request": request, "part": part, **({"after": after} if after else {})}
         self.ledger.append(
             "task.created", actor, goal,
-            task=task_id, branch=branch, worktree=str(worktree), base=base, plan=plan, intent=intent,
+            task=task_id, branch=branch, worktree=str(worktree), base=base, plan=plan, intent=intent, **linked,
         )
         return self.task(task_id)
 
