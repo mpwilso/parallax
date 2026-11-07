@@ -2,7 +2,7 @@
 
 What changed in each release. The full notes for each are on the [releases page](https://github.com/mpwilso/parallax/releases).
 
-## Unreleased
+## 0.3.1 (2026-11-06)
 
 Fixed:
 - The knowledge layer gave later Makers text nobody approved. A dropped task contributed its drafted title and outcomes, or the goal as typed, which may be pasted issue text (invariant 10); it now gives its id, its date and your reason, nothing else. An accepted task's title and asked outcomes came from the current draft when there was one, so a redraft after the accept replaced the intent you approved; they now come from `docs/tasks/<id>/intent.md` in the accepted commit, nothing else.
