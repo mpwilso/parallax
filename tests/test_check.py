@@ -1,3 +1,4 @@
+import json
 import shlex
 import subprocess
 from pathlib import Path
@@ -197,6 +198,70 @@ def test_the_tests_really_run_in_the_sandbox(repo):
     key = str(approvals.key_path())
     denied, _ = testrun.run(wt, s.base, s.tree, p.plan, p.home, None, env, f"cat {key} {{junit}} {{tests}}")
     assert denied.exit != 0
+
+
+def _staged_with(repo, files):
+    proj, tid, wt = approved(repo, base_files=files)
+    (wt / "README.md").write_text("ok\n")
+    p = build.prepare(proj, tid)
+    return wt, p, tree.stage(wt, proj.task(tid)["base"], p.home / "idx")
+
+
+def test_the_check_copy_denies_the_protected_paths_it_has_and_makes_none_up(repo):
+    """The sandbox stops a denied path that doesn't exist from being made by binding a placeholder at
+    its name. In the check's copy that placeholder was a file the repo doesn't have: an unreadable
+    mission.md, which a test reading every .md file failed on (task f291a5, 2026-11-07). The copy still
+    denies writes to every protected path it holds, and Maker's sandbox still denies all of them."""
+    wt, p, s = _staged_with(repo, {"CLAUDE.md": "rules\n"})
+    assert not (wt / "mission.md").exists() and str(wt / "mission.md") in p.rules.deny_write
+    seen = {}
+
+    def runner(cfg, cwd, cmd, env):
+        seen.update(json.loads(cfg.read_text())["filesystem"])
+        return 0, ""
+
+    testrun.run(wt, s.base, s.tree, p.plan, p.home, None, build.scrubbed_env(None), "true {junit} {tests}", runner)
+    copy = p.home / "check-copy"
+    assert str(copy / "CLAUDE.md") in seen["denyWrite"]
+    absent = {str(copy / t) for t in ("mission.md", ".mcp.json", "docs/parallax.md", "docs/tasks", ".git", ".claude")}
+    assert absent.isdisjoint(seen["denyWrite"])
+
+
+WALK = """import json, os
+seen = []
+for here, dirs, files in os.walk("."):
+    for name in files:
+        rel = os.path.join(here, name)[2:]
+        try:
+            open(rel, "rb").read()
+            seen.append(rel)
+        except OSError as err:
+            seen.append(rel + ": " + type(err).__name__)
+try:
+    open("CLAUDE.md", "a").write("x")
+    seen.append("CLAUDE.md: written")
+except OSError:
+    pass
+print(json.dumps(sorted(seen)))
+"""
+# the sandbox runtime's own always-denied names, stubbed in any folder it runs in (none is Markdown)
+SRT_OWN = {".gitconfig", ".gitmodules", ".bashrc", ".bash_profile", ".zshrc", ".zprofile", ".profile", ".ripgreprc",
+           ".mcp.json", ".vscode", ".idea", ".claude", ".git"}
+
+
+@pytest.mark.skipif(NO_SANDBOX is not None, reason=NO_SANDBOX or "")
+def test_in_the_real_sandbox_the_tests_see_the_reviewed_files_and_maker_still_cant_make_mission_md(repo):
+    wt, p, s = _staged_with(repo, {"CLAUDE.md": "rules\n", "walk.py": WALK})
+    env = build.scrubbed_env(None)
+    ran, _ = testrun.run(wt, s.base, s.tree, p.plan, p.home, None, env, "python3 walk.py {junit} {tests}")
+    assert ran.exit == 0, ran.output
+    seen, reviewed = json.loads(ran.output.strip().splitlines()[-1]), tree.files_in(wt, s.tree)
+    assert set(reviewed) <= set(seen) and "CLAUDE.md: written" not in seen  # all read, the protected one unwritten
+    made_up = {f.split(": ")[0] for f in seen} - set(reviewed)
+    assert made_up <= SRT_OWN, made_up - SRT_OWN  # was mission.md, docs, .parallax and the policy file too
+    code, out = testrun._srt(p.home / "srt.json", wt, "echo x > mission.md", env)  # Maker's own rules
+    made = wt / "mission.md"
+    assert code != 0 and (not made.exists() or made.stat().st_size == 0), out
 
 
 # the report -------------------------------------------------------------------------------------

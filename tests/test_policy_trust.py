@@ -2,10 +2,12 @@
 A cloned repo can ship them, so neither runs until you've seen them (parallax/trust.py): the first
 task to need one stops with a decision that shows both, trust records your answer once for the
 repo, and a changed command asks again."""
+import os
+
 import pytest
 
 from fakes import good_probe
-from parallax import budgets, build, decide, pilot, preflight, show, trust, views
+from parallax import budgets, build, decide, pilot, preflight, show, stats, trust, views
 from parallax.cli import main
 from parallax.core import POLICY_FILE, ParallaxError, Project
 from test_accept import Runner, _with_merge_tests, ready
@@ -116,3 +118,43 @@ def test_by_hand_leaves_the_merge_yours_with_a_reason(repo, monkeypatch):
     card = views.card(proj, tid)
     assert card["merge_note"] == "Accepted, but Accept and merge stopped: not a command I run. Run this in your repo's folder:"
     assert card["merge"] == f"git merge --ff-only {proj.task(tid)['branch']}"
+
+
+def test_one_trust_answers_every_card_that_asked_about_the_same_commands(repo, monkeypatch, capsys):
+    """A split request's parts each stopped on the same question (f291a5 and 64a75a, 2026-11-07). Your
+    trust on one card answers the others asking about exactly those commands: each task goes on, its
+    card is resolved by your decision, and it costs you one touch. A card about other commands waits."""
+    proj = with_setup(repo, monkeypatch, command="mkdir -p elsewhere")
+    monkeypatch.setattr(build, "_spawn", lambda argv, env, cwd, log: SPAWNED.append(argv) or os.getpid())  # alive
+    other = pilot.intake(proj, WANT)["task"]
+    assert pilot_run(proj, other) == "stuck"  # asked about a command that has since changed
+    (repo / POLICY_FILE).write_text(f"[build]\nsetup = '{SETUP}'\n")
+    proj.reload_policy()
+    one = pilot.intake(proj, WANT)["task"]
+    two = pilot.intake(proj, WANT)["task"]
+    assert pilot_run(proj, one) == "stuck" and pilot_run(proj, two) == "stuck"
+    asked = {tid: decide.decision(proj, tid).item for tid in (one, two, other)}
+    assert asked[one]["data"]["commands_sha"] == asked[two]["data"]["commands_sha"] != asked[other]["data"]["commands_sha"]
+    before = stats.touches(proj)
+    SPAWNED.clear()
+
+    said = decide.apply(proj, one, "trust")
+    assert said == f"building {one} without you. it comes back to the inbox. {two} asked the same: it goes on too."
+    assert [tid for tid in (one, two, other) if any(tid in " ".join(argv) for argv in SPAWNED)] == [one, two]
+    assert len(kinds(proj, trust.KIND)) == 1 and len(kinds(proj, "setup.ran")) == 2
+    resolved = {e["data"]["decision"]: e for e in kinds(proj, "decision.resolved")}
+    answer, carried = resolved[asked[one]["id"]], resolved[asked[two]["id"]]
+    assert answer["actor"] == "human" and carried["actor"] == "parallax" and carried["data"]["outcome"] == "approved"
+    assert carried["data"]["by"] == answer["id"] and answer["id"] in carried["reason"] and one in carried["reason"]
+    assert asked[other]["id"] not in resolved
+    after = stats.touches(proj)
+    assert (after[one], after[two], after[other]) == (before[one] + 1, before[two], before[other])
+
+    assert decide.decision(proj, other).item["id"] == asked[other]["id"]  # a different command still asks
+    waiting = [i["task"] for i in views.board(proj)["waiting"]]
+    assert other in waiting and one not in waiting and two not in waiting
+    monkeypatch.chdir(repo)
+    capsys.readouterr()
+    assert main(["inbox"]) == 0
+    listed = capsys.readouterr().out
+    assert other in listed and one not in listed and two not in listed
