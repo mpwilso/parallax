@@ -2,7 +2,7 @@
 
 What changed in each release. The full notes for each are on the [releases page](https://github.com/mpwilso/parallax/releases).
 
-## Unreleased
+## 0.7.0 (2026-11-08)
 
 - One trust question for a whole eval run. Each eval case is a scratch repo with a new ledger and its own `[build] setup`, so since policy trust (2026-10-23) every case stopped at the trust question with nothing to answer it, and the 2026-11-07 rerun wasn't started. `parallax eval` now asks once, at a terminal, before any case starts: the question lists every case's commands word for word, read back from the scratch policy it will write, with the run's budget. A yes is recorded as yours (`eval.trusted`) and signed with the approval key; as each case starts, code carries it into that case's scratch ledger for that case's commands only (`policy.trusted.run`) and ends it when the case's pipeline ends (`policy.trust.ended`), and it runs out on its own after the case's time limit. Nothing is trusted before or after, and a command not on the list still asks. A no takes a reason, is recorded (`eval.refused`), and runs no case. A pipe or a Claude Code shell can't answer, so nothing runs. `trust.trusted` now also honours a run's trust, through `trust.for_run`; every other trust is unchanged (`parallax/evaltrust.py`). Tests: `tests/test_eval_trust.py`, including the problem reproduced: without the run's trust, a case stops at the question with nothing built.
 
