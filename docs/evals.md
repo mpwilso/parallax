@@ -84,6 +84,17 @@ A rerun of all 11 cases was approved on 2026-11-07, for about $12, to measure th
 - **What a run would have done.** Each case would draft with Focus, launch under the rule, then stop at Decision needed on the trust question when the build set up its venv. Nothing answers a decision in an eval, so each case would end there, paid for and with nothing built. The run was not started, so nothing was spent and no result was written.
 - **`parallax eval check` still passes**: it makes each case's venv itself, not through a task, so it never meets the question. On merged master (db7c795) on 2026-11-07 it found all 11 sound, and `parallax doctor` passed.
 - **What it needs** is a decision of yours: whether `parallax eval`, which you start with the cases' setup commands from `evals/cases.toml`, should record your trust for those commands in each scratch repo, or ask once for the run. Until then 8e3074 below stays the latest full run.
+- **Decided: ask once for the run.** `parallax eval` now shows one trust question before any case starts (`parallax/evaltrust.py`), described in [the trust question](#the-trust-question) below.
+
+### The trust question
+
+Before the first case, `parallax eval` prints every case's commands that would run as you, word for word as each scratch policy holds them, with cases that share commands listed together, and the run's budget and per-case ceiling. You answer once, at the terminal:
+
+- **Yes** is recorded in this repo's ledger as yours (`eval.trusted`), signed with the approval key over the run, when its trust runs out, and each case's commands hash. Nothing is trusted yet. As each case starts, code carries your answer into that case's scratch ledger, for that case's commands only, and ends it there when the case's pipeline ends; it also runs out on its own after the case's time limit. So every case runs hands-free, and nothing stays trusted after the run. A command that isn't on the list, another case's or one that changed, still stops at the usual trust question.
+- **No** asks for a one-line reason, records it (`eval.refused`), and no case runs.
+- **Nobody to answer**, because input isn't a terminal or the shell is one Claude Code started (`CLAUDECODE` set): the question is printed, nothing is recorded, and no case runs. A model never answers it.
+
+No question is asked when no case has a command to run, or when the budget can't reach the first case.
 
 ### Results
 

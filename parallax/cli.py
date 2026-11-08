@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -383,8 +384,12 @@ def _eval(proj: Project, args) -> int:
         from . import seeded
         out = seeded.run(proj, evals.load_cases(proj.root, args.cases), args.budget)
     else:
-        out = evals.run(proj, evals.load_cases(proj.root, args.cases), args.budget, args.per_case,
-                        reticle=True if args.reticle else None)
+        import uuid
+
+        from . import evaltrust
+        cases, reticle, run_id = evals.load_cases(proj.root, args.cases), True if args.reticle else None, uuid.uuid4().hex[:6]
+        grant = evaltrust.ask(proj, cases, args.budget, args.per_case, reticle, run_id, _answer_trust)  # before any case
+        out = evals.run(proj, cases, args.budget, args.per_case, reticle=reticle, run_id=run_id, trust=grant)
     print(f"results in {out.relative_to(proj.root)}. the summary is summary.md there.")
     return 0
 
@@ -480,6 +485,24 @@ def _lint(path: Path, cwd: Path) -> int:
     if not problems:
         print("ok")
     return 1 if problems else 0
+
+
+def _answer_trust(question: str) -> tuple[bool, str] | None:
+    """The eval run's one trust question (evaltrust.py), answered by you at a terminal. A pipe, or a
+    shell Claude Code started (CLAUDECODE is set there), can't answer it, so a model never does."""
+    print(question, flush=True)
+    if not sys.stdin.isatty() or os.environ.get("CLAUDECODE"):
+        print("not asked: this needs you at an interactive terminal, not a pipe or an agent's shell.")
+        return None
+    try:
+        if input("trust them for this run? [y/N] ").strip().lower() in ("y", "yes"):
+            return True, ""
+        reason = ""
+        while not reason:
+            reason = input("why not? one line, for the record: ").strip()
+    except EOFError:
+        return None
+    return False, reason
 
 
 def _confirm_setup(command: str) -> bool:

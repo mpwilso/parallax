@@ -76,6 +76,10 @@ def _commit(repo: Path, files: dict[str, str], message: str) -> str:
 
 @pytest.fixture
 def upstream(tmp_path):
+    return make_upstream(tmp_path)
+
+
+def make_upstream(tmp_path):
     """(repo, base, fix): a real merged fix, in miniature."""
     repo = tmp_path / "upstream"
     subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)

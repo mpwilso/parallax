@@ -7,15 +7,25 @@ approved runs without asking, in every task. Tasks already stopped on the same q
 request's parts, say) are answered by that one decision: each goes on, and it costs you one touch. The
 rest of the policy file isn't commands and doesn't run as you, so changing it (the budget mode, say)
 asks nothing.
+
+An eval run (evaltrust.py) asks once for all its cases instead, since each case is a scratch repo with a
+new ledger. Your answer reaches each case's ledger as it starts (policy.trusted.run, carried by code,
+signed with the approval key) and counts only for that case's exact commands, until the case ends or
+the run's time runs out.
 """
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
+from datetime import datetime, timezone
 
+from . import approvals
 from .core import POLICY_FILE, ParallaxError, Project
 
 KIND = "policy.trusted"
+RUN_KIND = "policy.trusted.run"    # an eval run's one answer, in one case's scratch ledger (evaltrust.py)
+RUN_ENDED = "policy.trust.ended"   # that case ended: its run's trust no longer counts there
 SETTINGS = {"setup": "[build] setup", "test_command": "[merge] test_command"}
 
 
@@ -34,9 +44,37 @@ def listed(cmds: dict[str, str]) -> str:
 
 
 def trusted(project: Project) -> bool:
-    """You approved exactly this policy's commands, at some point in this repo."""
+    """You approved exactly this policy's commands, at some point in this repo, or for the eval run
+    this scratch repo is a case of, while that case runs."""
     want = sha(commands(project.policy))
-    return any(e["kind"] == KIND and e["data"].get("commands_sha") == want for e in project.ledger.entries())
+    entries = project.ledger.entries()
+    return any(e["kind"] == KIND and e["data"].get("commands_sha") == want for e in entries) or for_run(entries, want)
+
+
+def run_sig(key: bytes, run: str, until: str, cases: dict[str, str]) -> str:
+    """The signature on an eval run's trust: the run, when it runs out, and each case's commands hash."""
+    return approvals.sign(key, f"eval run {run}", f"trust until {until}", dict(cases))
+
+
+def for_run(entries: list[dict], want: str) -> bool:
+    """An eval run's trust for exactly these commands: signed with the approval key, its case not
+    ended, and not run out. Anything else (no key, a bad signature, another case's commands) is no."""
+    ended = {e["data"].get("grant") for e in entries if e["kind"] == RUN_ENDED}
+    live = [e for e in entries if e["kind"] == RUN_KIND and e["id"] not in ended and e["data"].get("commands_sha") == want]
+    key = approvals.key_or_none() if live else None
+    if key is None:  # nothing to check, or no key: fails closed
+        return False
+    now = datetime.now(timezone.utc)
+    for e in live:
+        d = e["data"]
+        try:
+            fresh = now < datetime.fromisoformat(d["until"]) and now < datetime.fromisoformat(d["run_until"])
+            signed = hmac.compare_digest(run_sig(key, d["run"], d["run_until"], d["cases"]), d["sig"])
+            if fresh and signed and d["cases"].get(d["case"]) == want:
+                return True
+        except (KeyError, TypeError, ValueError, AttributeError):
+            continue
+    return False
 
 
 class Untrusted(ParallaxError):

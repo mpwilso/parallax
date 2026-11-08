@@ -5,7 +5,9 @@ the fix can't be found. Its policy is yours, with the case's setup, the UI teste
 per-case ceiling as both the small-task cap and the launch rule. Its REVIEW.md is the general
 template `parallax init` gives any repo. The issue text goes to
 `pilot.intake` exactly as `parallax do` would take it, and the pilot runs to Ready or to one
-Decision needed. Nothing answers a decision; the case ends there.
+Decision needed. Nothing answers a decision; the case ends there. The cases' setup commands run as
+you, so the run asks you once, before any case starts, and trusts them for that run only
+(evaltrust.py).
 
 The hidden tests (the files the maintainers' fix added or changed) stay in the upstream cache,
 which no agent is given and the sandbox can't read. After the pipeline ends, Parallax puts them
@@ -317,7 +319,9 @@ def _reticle_score(mine: list[dict], verdicts: list[dict], final: str) -> dict:
 
 
 def run_case(case: Case, where: Path, ceiling: float, policy, pipeline: Pipeline, runner=None,
-             reticle: bool | None = None) -> dict:
+             reticle: bool | None = None, grant: dict | None = None) -> dict:
+    """grant: your eval.trusted answer for the run, carried into this case's ledger while its pipeline runs."""
+    from . import evaltrust
     started = time.monotonic()
     r: dict = {"case": case.id, "pr": case.pr, "issue": case.issue, "ceiling_usd": ceiling}
     try:
@@ -326,7 +330,12 @@ def run_case(case: Case, where: Path, ceiling: float, policy, pipeline: Pipeline
         clone_at(cache, case.base, repo)
         (repo / POLICY_FILE).write_text(eval_policy(policy, case, ceiling, reticle), encoding="utf-8")
         project = Project.init(repo, actor="parallax")  # REVIEW.md: the general template, as any repo gets
-        task_id = pipeline(project, case.goal.strip())
+        carried = evaltrust.carry(project, grant, case.id) if grant else None
+        try:
+            task_id = pipeline(project, case.goal.strip())
+        finally:
+            if carried:  # trusted only while it ran: scoring runs nothing as you
+                evaltrust.end(project, carried)
         r.update(score(project, task_id, case, cache, runner))
         r["scratch"] = str(repo.relative_to(home()))  # relative: the file names no machine's home
     except Exception as err:  # a crashed case is a result too, never skipped quietly
@@ -345,14 +354,23 @@ def say_now(text: str) -> None:
     print(text, flush=True)
 
 
+def ceiling(project: Project, per_case: float | None) -> float:
+    """Each case's ceiling: the one named, else your small_cap_usd."""
+    return float(per_case or project.policy.budget["small_cap_usd"])
+
+
 def run(project: Project, cases: list[Case], budget: float, per_case: float | None = None,
         pipeline: Pipeline = live_pipeline, runner=None, say: Callable[[str], None] | None = None,
-        run_id: str | None = None, reticle: bool | None = None) -> Path:
+        run_id: str | None = None, reticle: bool | None = None, trust: dict | None = None) -> Path:
     """Run cases in order under a hard total budget. Each case starts only if what's spent, plus its
-    ceiling and the margin, fits. Every case's result is written as it finishes. Returns the run's folder."""
+    ceiling and the margin, fits. Every case's result is written as it finishes. Returns the run's folder.
+    trust: your answer to the run's one trust question (evaltrust.ask), for run_id; None trusts nothing."""
+    from . import evaltrust
     say = say or say_now
     reticle = project.policy.reticle["enabled"] if reticle is None else reticle  # your policy's, unless told
-    per_case = float(per_case or project.policy.budget["small_cap_usd"])
+    per_case = ceiling(project, per_case)
+    if trust and trust["data"]["run"] != (run_id or ""):
+        raise ParallaxError("that trust answer is for another eval run")
     need = round(per_case * (1 + MARGIN), 2)
     run_id = run_id or uuid.uuid4().hex[:6]
     now = datetime.now(timezone.utc)
@@ -363,23 +381,28 @@ def run(project: Project, cases: list[Case], budget: float, per_case: float | No
                           capture_output=True, text=True).stdout.strip()
     header = {"run": run_id, "started": now.isoformat(timespec="seconds"), "parallax": head,
               "budget_usd": budget, "per_case_usd": per_case, "cases": [c.id for c in cases],
-              "fingerprint": fingerprint.current(project.root, project.policy), "reticle": reticle}
+              "fingerprint": fingerprint.current(project.root, project.policy), "reticle": reticle,
+              "trust": trust["id"] if trust else None}
     spent, done, stopped = 0.0, [], None
-    for n, case in enumerate(cases, 1):
-        if spent + need > budget:
-            stopped = {"case": case.id, "why": f"${spent:.2f} spent, and the next case needs up to ${need:.2f} "
-                                              f"(its ${per_case:.2f} ceiling plus {MARGIN:.0%}) of the ${budget:.2f} budget"}
-            say(f"stopped before {case.id}: {stopped['why']}.")
-            break
-        say(f"[{n}/{len(cases)}] {case.id}: running, ceiling ${per_case:.2f}")
-        r = run_case(case, scratch / case.id, per_case, project.policy, pipeline, runner, reticle)
-        spent = round(spent + (r.get("cost_usd") or 0), 4)
-        _write(out / f"{case.id}.json", r)
-        done.append(r)
-        say(f"[{n}/{len(cases)}] {case.id}: {r['end']}, hidden tests {r.get('hidden', 'not run')}, "
-            f"Second Eye {r.get('second_eye', 'did not run')}"
-            + (f", Reticle {r.get('reticle', 'did not run')}" if reticle else "")
-            + f", ${r.get('cost_usd') or 0:.2f} (total ${spent:.2f})")
+    try:
+        for n, case in enumerate(cases, 1):
+            if spent + need > budget:
+                stopped = {"case": case.id, "why": f"${spent:.2f} spent, and the next case needs up to ${need:.2f} "
+                                                  f"(its ${per_case:.2f} ceiling plus {MARGIN:.0%}) of the ${budget:.2f} budget"}
+                say(f"stopped before {case.id}: {stopped['why']}.")
+                break
+            say(f"[{n}/{len(cases)}] {case.id}: running, ceiling ${per_case:.2f}")
+            r = run_case(case, scratch / case.id, per_case, project.policy, pipeline, runner, reticle, trust)
+            spent = round(spent + (r.get("cost_usd") or 0), 4)
+            _write(out / f"{case.id}.json", r)
+            done.append(r)
+            say(f"[{n}/{len(cases)}] {case.id}: {r['end']}, hidden tests {r.get('hidden', 'not run')}, "
+                f"Second Eye {r.get('second_eye', 'did not run')}"
+                + (f", Reticle {r.get('reticle', 'did not run')}" if reticle else "")
+                + f", ${r.get('cost_usd') or 0:.2f} (total ${spent:.2f})")
+    finally:
+        if trust:
+            evaltrust.finish(project, trust, [r["case"] for r in done])
     header.update({"finished": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                    "spent_usd": spent, "done": [r["case"] for r in done], "stopped": stopped})
     _write(out / "run.json", header)
