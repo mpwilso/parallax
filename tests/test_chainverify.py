@@ -130,25 +130,37 @@ def test_a_folder_checks_the_head_you_name_and_a_missing_one_is_an_error(tmp_pat
     assert capsys.readouterr().out == "truncated: ledger ends at seq 0 but ledger.head records seq 5\n"
 
 
-def test_a_line_nested_past_pythons_recursion_limit_gets_a_verdict(tmp_path, capsys):
-    """The spec sets no depth limit, so a deep line inside the subset is judged by its rules like any
-    other, and one outside it names the place."""
-    depth = sys.getrecursionlimit() + 100
-    deep = 0
-    for _ in range(depth):
-        deep = {"a": deep}
+def nested(levels: int):
+    """A value whose arrays and objects nest this many levels: as an entry's data["x"], the entry's
+    deepest level is levels + 2 (the entry is level 1, its data level 2)."""
+    value = 0
+    for i in range(levels):
+        value = {"a": value} if i % 2 else [value]
+    return value
+
+
+@posix_only
+def test_a_line_may_nest_64_deep_and_no_deeper_in_either_version(tmp_path, capsys):
+    """LEDGER-SPEC.md's nesting limit: measured from the bytes before parsing, for v0 and v1 alike,
+    so even a line too deep for Python's parser gets a one-line verdict. Brackets in strings don't count."""
     chain = V1Ledger(tmp_path / "pz")
-    chain.add("note.deep", x=deep)
+    chain.add("note.deep", x=nested(62), s="[[[[{{{{" * 20)
     verdict, _ = chainverify.read(chain.path)
     assert (verdict.status, verdict.entries) == ("intact", 2)
-    bad = 1.5
-    for _ in range(5000):
-        bad = [bad]
-    chain.add("note.deep", x=bad)
+    chain.add("note.deep", x=nested(63))  # hashed and linked: depth is its only fault
     verdict, _ = chainverify.read(chain.path)
-    assert (verdict.status, verdict.check, verdict.line) == ("invalid", "structure", 3)
-    assert verdict.reason == "float at /data/x" + "/0" * 5000
-    assert main(["verify", str(tmp_path / "pz")]) == 1 and capsys.readouterr().out.startswith("invalid: line 3 (seq 2): float")
+    assert (verdict.status, verdict.check, verdict.line, verdict.seq) == ("invalid", "structure", 3, None)
+    assert verdict.text() == "invalid: line 3 (seq ?): nested more than 64 deep"
+    assert main(["verify", str(tmp_path / "pz")]) == 1 and capsys.readouterr().out == verdict.text() + "\n"
+    v0 = Ledger(tmp_path / "ledger.jsonl")
+    v0.append("note", "agent", "", x=nested(62))
+    assert chainverify.read(v0.path)[0].status == "intact"
+    v0.append("note", "agent", "", x=nested(63))
+    verdict, _ = chainverify.read(v0.path)
+    assert (verdict.status, verdict.check, verdict.line, verdict.reason) == ("invalid", "structure", 2, "nested more than 64 deep")
+    far = b"[" * 100_000 + b"]" * 100_000  # past what Python's json can parse at all
+    verdict = chainverify.verify_bytes((CONFORMANCE / "valid" / "minimal.jsonl").read_bytes() + far + b"\n")
+    assert (verdict.status, verdict.reason) == ("invalid", "nested more than 64 deep")
 
 
 def test_messages_name_the_rule_and_the_place():

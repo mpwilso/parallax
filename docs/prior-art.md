@@ -28,5 +28,5 @@ no code, names or UI copied, apart from one folder of test data, `conformance/`,
 - SWE-bench: https://www.swebench.com
 - The AI-native SDLC playbook: https://claude.com/blog/the-ai-native-sdlc-playbook
 - impeccable: https://github.com/pbakaus/impeccable
-- Polarizer: https://github.com/mpwilso/polarizer (LEDGER-SPEC.md and conformance/ at 700498a)
+- Polarizer: https://github.com/mpwilso/polarizer (LEDGER-SPEC.md and conformance/ at c8452a8)
 - Playwright: https://github.com/microsoft/playwright; Playwright MCP: https://github.com/microsoft/playwright-mcp

@@ -7,7 +7,8 @@
   entry naming the chain, and an optional `ledger.head` file beside it.
 
 Written here from that spec (docs/prior-art.md credits it), not from Polarizer's code. A ledger is all
-v0 or all v1, decided by its first line. The verdict is one status with the line, the seq and the
+v0 or all v1, decided by its first line. Every line, v0 or v1, nests its arrays and objects at most
+64 deep (the spec's limit since Polarizer 0.6.1), measured from its bytes before it's parsed. The verdict is one status with the line, the seq and the
 check that decided it, in the spec's order: problems in a line, in file order; then the head file;
 then a torn tail. conformance/ holds Polarizer's fixtures and their expected verdicts, and
 tests/test_conformance.py runs this over every one. Parallax's own `Ledger.verify()` is unchanged.
@@ -31,6 +32,8 @@ V1_KEYS = ("v", "seq", "ts", "kind", "data", "prev", "hash")  # the spec's table
 V1_TYPES = {"v": int, "seq": int, "ts": str, "kind": str, "data": dict, "prev": str, "hash": str}
 HEAD_KEYS = {"chain_id", "hash", "seq"}
 MAX_LINE = 16 * 1024  # bytes, the newline included (v1 only)
+MAX_DEPTH = 64  # arrays and objects in one line, v0 or v1; the entry itself is level 1
+JSON_STRING = re.compile(rb'"(?:[^"\\]|\\.)*"', re.S)  # a string with its escapes, whose brackets don't count
 MAX_INT = 2 ** 53 - 1
 HEX32 = re.compile(r"[0-9a-f]{32}")
 HEX64 = re.compile(r"[0-9a-f]{64}")
@@ -101,43 +104,41 @@ def _pointer(path: list) -> str:
     return "/" + "/".join(part(p) for p in path)
 
 
-def _children(where, value):
-    """A container's members, in document order, each with its place: (parent's place, key or index)."""
+def _outside_subset(value, path: list) -> str | None:
+    """The first value outside v1's subset, in document order, as the rule it breaks."""
     if isinstance(value, dict):
-        return (((where, k), v, True) for k, v in value.items())
-    return (((where, i), v, False) for i, v in enumerate(value))
-
-
-def _path(where) -> list:
-    parts = []
-    while where is not None:
-        where, part = where
-        parts.append(part)
-    return parts[::-1]
-
-
-def _outside_subset(value) -> str | None:
-    """The first value outside v1's subset, in document order, as the rule it breaks. Walked with a
-    stack of its own, so a line nested deeper than Python's recursion limit gets a verdict too: the
-    spec sets no depth limit, so such a line is judged by its rules like any other."""
-    stack = [iter([(None, value, False)])]
-    while stack:
-        item = next(stack[-1], None)
-        if item is None:
-            stack.pop()
-            continue
-        where, v, keyed = item
-        if keyed and not where[1].isascii():
-            return f"non-ASCII key at {_pointer(_path(where))}"
-        if isinstance(v, (dict, list)):
-            stack.append(_children(where, v))
-        elif isinstance(v, float):
-            return f"float at {_pointer(_path(where))}"
-        elif _int(v) and not -MAX_INT <= v <= MAX_INT:
-            return f"integer out of range at {_pointer(_path(where))}"
-        elif isinstance(v, str) and any(0xD800 <= ord(c) <= 0xDFFF for c in v):
-            return f"lone surrogate at {_pointer(_path(where))}"
+        for k, v in value.items():
+            if not k.isascii():
+                return f"non-ASCII key at {_pointer(path + [k])}"
+            found = _outside_subset(v, path + [k])
+            if found:
+                return found
+    elif isinstance(value, list):
+        for i, v in enumerate(value):
+            found = _outside_subset(v, path + [i])
+            if found:
+                return found
+    elif isinstance(value, float):
+        return f"float at {_pointer(path)}"
+    elif _int(value) and not -MAX_INT <= value <= MAX_INT:
+        return f"integer out of range at {_pointer(path)}"
+    elif isinstance(value, str) and any(0xD800 <= ord(c) <= 0xDFFF for c in value):
+        return f"lone surrogate at {_pointer(path)}"
     return None
+
+
+def nesting(raw: bytes) -> int:
+    """How deep a line's arrays and objects nest, from its bytes alone: [ and { outside strings
+    open a level, ] and } close one. Measured before parsing, since a parser can recurse too deep
+    to answer at all. On bytes that aren't JSON the number means nothing; the parse refuses them."""
+    depth = deepest = 0
+    for c in JSON_STRING.sub(b"", raw):
+        if c in b"[{":
+            depth += 1
+            deepest = max(deepest, depth)
+        elif c in b"]}":
+            depth -= 1
+    return deepest
 
 
 def _parse(raw: bytes):
@@ -166,6 +167,9 @@ class _Chain:
 
 def _line(chain: _Chain, n: int, raw: bytes) -> Verdict | None:
     """Check one complete line (without its newline). None: it passes, and the chain has grown."""
+    if nesting(raw) > MAX_DEPTH:  # first, before the parse, for either version
+        return Verdict("invalid", "structure", n, None, f"nested more than {MAX_DEPTH} deep", chain.version,
+                       len(chain.hashes), chain_id=chain.chain_id)
     entry, broken = _parse(raw)
     if n == 1 and entry is not None:
         chain.version = 1 if "v" in entry else 0
@@ -194,7 +198,7 @@ def _line(chain: _Chain, n: int, raw: bytes) -> Verdict | None:
             return bad("invalid", "structure", f'"{wrong}" has the wrong type')
         if entry["v"] != 1:
             return bad("invalid", "structure", "v is not 1")
-        outside = _outside_subset(entry)
+        outside = _outside_subset(entry, [])
         if outside:
             return bad("invalid", "structure", outside)
         if n == 1 and entry["kind"] != GENESIS:

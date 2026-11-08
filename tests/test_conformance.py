@@ -17,7 +17,7 @@ from parallax import chainverify
 
 ROOT = Path(__file__).resolve().parent.parent
 FOLDER = ROOT / "conformance"
-COPIED_FROM = "700498ad4ffe86470712250d2926683b5d2922a9"  # mpwilso/polarizer, master on 2026-11-07
+COPIED_FROM = "c8452a8589245b02b2145d77d9cd063121cc5aa6"  # mpwilso/polarizer, master on 2026-11-08 (UTC)
 FILES = {
     "conformance/anchors/checkpoint.key": "be4767cf51363cb8333392d4508c7bbd0a4718a4883f52a6463ddb4bd140e9ac",
     "conformance/anchors/other_chain.jsonl": "74558fdace9a91239efb44e9b62ab519b9da1348ae3dcd7e9a7ae8404288abed",
@@ -55,6 +55,7 @@ FILES = {
     "conformance/broken/lone_surrogate.jsonl": "2f48a4f3d8f18caece98acb1f6a890802a2bae1c2808ec82e3cc0813ffc9e91c",
     "conformance/broken/missing_key.jsonl": "72dbcd8b64105208da7519be28e8d9eb3b0563cb33cbc93ef8bddc37cd179a39",
     "conformance/broken/mix_v0_v1.jsonl": "71e084659ec97b201758d6edd9252079463420d7b91e0aff8b00ab5b17788e32",
+    "conformance/broken/nested_too_deep.jsonl": "3cc44052336c779d8a0ec9b7cc705a366dc0a9b5b23439390555019e36cdd379",
     "conformance/broken/non_ascii_key.jsonl": "98bb7f0a5b886734434c825cb14c735d57821e172bd868d8e78108099c599536",
     "conformance/broken/not_object.jsonl": "7b99da4e0f532bcb54a4da5ccccf3a32d91c042a70a71314219ec9dd8458f71b",
     "conformance/broken/oversize_line.jsonl": "291c8a72c7c5c2db70d3d1a0c6287ddeaa363bbf58aa903bf49642190c03edfa",
@@ -84,9 +85,9 @@ FILES = {
     "conformance/broken/v0_with_head.jsonl": "84300dadc110758841edbd1fd2b5708fdaa05486b1391e08f7cfe14fc03a73ca",
     "conformance/broken/v_not_1.jsonl": "5aa5a67f67cbe50929765ceda328ceaf066b6087648014a8b8ddaa81d5acfeab",
     "conformance/broken/wrong_type.jsonl": "9935f35e5e6bc37ae418709f72becd253bae1d83d1b4577766a2c66acba3fe1f",
-    "conformance/expected.json": "cea13771b923598958be99f6579d7bef24fb48f10f4faa319b5ad9b079529ea5",
-    "conformance/reference_anchor.py": "7d65148329862d7bf5ee3b93a9e1a2529d75eaf3a1e9851e57b351c460693a4a",
-    "conformance/reference_verify.py": "4b9049d8891a6141eda91ced36fb4a8f14a4e18d05003e463bb927f6c08f2616",
+    "conformance/expected.json": "23502334391994ac63a70f630671de9112eec5a54e2b0a89fdeacf57049b6069",
+    "conformance/reference_anchor.py": "cdd7ff2a28c9a4cf267ca3704f075e548adc1e5088ae1f8cfadf381550fb0c63",
+    "conformance/reference_verify.py": "034940954954ef7f1ac438d8335a6a5488f324574c41e9fb8cf375e313889d1d",
     "conformance/valid/drills.head": "5aac80e33503b063eba97119b74f10f0723b19f122fcab4d6de6a570e8d932a7",
     "conformance/valid/drills.jsonl": "a19c983c9ff050ed6c93442575ccf6263a58cbfea63c4057698a7ce43f14e024",
     "conformance/valid/head_at_last.head": "699e247209aa25d77298e99276e59f0169522731da9c157f79aeff4d2118175b",
@@ -95,6 +96,7 @@ FILES = {
     "conformance/valid/holds.jsonl": "381b530df7507b5e2c6d66033bf41e91137f6cb34895616b95716c8707df7e20",
     "conformance/valid/minimal.head": "5aac80e33503b063eba97119b74f10f0723b19f122fcab4d6de6a570e8d932a7",
     "conformance/valid/minimal.jsonl": "e430d1ff392eb97559c839253da8b74d3bbc83e634fbf528dffb83cc4d19dc07",
+    "conformance/valid/nested_at_limit.jsonl": "64edc314a7926fc3c127b192b156f8926f2b60699518088f9acf09ff84c7cb52",
     "conformance/valid/no_head.jsonl": "4ec634e87379cfc1005a1eb727f967ce26f4d6a4e9fc39c219d5a44784b8b1b7",
     "conformance/valid/pins.head": "8d2f6518294836b940f36a4ee6f7c2e458e33ad935932101c6912a3a34fc642a",
     "conformance/valid/pins.jsonl": "1dbd11761c5eac1bcef321420b1d1dff4886971c1b5901e90e1d6a0493148e3f",
