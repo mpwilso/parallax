@@ -2,7 +2,7 @@
 
 What changed in each release. The full notes for each are on the [releases page](https://github.com/mpwilso/parallax/releases).
 
-## Unreleased
+## 0.7.2 (2026-11-08)
 
 Fixed:
 - Task venvs are built on the system Python. Field-demo task 70d1f6's tests stopped with exit 127, `python: command not found`: its setup's `uv venv` took uv's own Python, so the venv's `bin/python` linked into `~/.local/share/uv/python`, under your home folder, which the tests' sandbox can't read (it lets in only the check copy, the venv, the tests' temp folder and Field's tools). Maker had worked around the same thing with `/usr/bin/python3`. `[build] setup` now runs with uv held to a system Python (`UV_PYTHON_PREFERENCE=only-system`, no downloads), so the same `uv venv "$PARALLAX_VENV"` makes the venv on `/usr/bin/python3`, and Parallax's own setup lines say `uv venv --python /usr/bin/python3`. What the sandbox may read is unchanged. Before a Python setup runs, a missing `/usr/bin/python3`, or one older than the project's `requires-python`, stops the task with what to install. After it, a venv whose Python the sandbox can't read is removed and the task stops saying so, never falling back to uv's Python. A finished venv like 70d1f6's is made again on the next run, so a retry picks up the new one. CI installs a uv-managed Python first, so the new test has one to avoid. Tests: `test_the_venvs_python_resolves_inside_what_the_tests_sandbox_can_read`, which failed before the fix in WSL with the venv on uv's Python 3.13, and `test_a_finished_venv_on_a_python_the_sandbox_cant_read_is_made_again`.
