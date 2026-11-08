@@ -51,9 +51,9 @@ Linux, or Windows through WSL2 ([docs/wsl.md](docs/wsl.md) makes the distro); ma
    curl -fsSL https://claude.ai/install.sh | bash
    source ~/.local/bin/env && claude
    ```
-3. Parallax itself, from GitHub (the `parallax` on PyPI is an unrelated SSH tool). The latest release is [v0.5.0](https://github.com/mpwilso/parallax/releases/tag/v0.5.0):
+3. Parallax itself, from GitHub (the `parallax` on PyPI is an unrelated SSH tool). The latest release is [v0.6.0](https://github.com/mpwilso/parallax/releases/tag/v0.6.0):
    ```bash
-   uv tool install "parallax[claude] @ git+https://github.com/mpwilso/parallax@v0.5.0"
+   uv tool install "parallax[claude] @ git+https://github.com/mpwilso/parallax@v0.6.0"
    ```
 4. `parallax doctor` checks the machine:
    ```

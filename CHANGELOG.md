@@ -2,7 +2,7 @@
 
 What changed in each release. The full notes for each are on the [releases page](https://github.com/mpwilso/parallax/releases).
 
-## Unreleased
+## 0.6.0 (2026-11-07)
 
 - Polarizer adoption, Parallax's half. `parallax verify <path>` checks any hash-chained ledger in either format: Parallax's own (v0) or Polarizer's portable chain (v1, Polarizer's docs/LEDGER-SPEC.md), as a file, a file with `--head`, or a Polarizer ledger folder. One line out, exit 1 for anything but intact, and it only reads. `parallax/chainverify.py` is written from the spec, not from Polarizer's code; `parallax verify` with no path and the way Parallax writes its ledger are unchanged.
 - `conformance/`, Polarizer's fixtures and expected verdicts, copied byte for byte from Polarizer at 700498a (`.gitattributes` keeps every checkout's bytes). `tests/test_conformance.py` runs the verifier over all 63 chain fixtures and matches every status, check, line and seq in `expected.json`, fails if any file differs from the hashes it lists, and skips the `anchors` section (Polarizer's signed checkpoints) by name.
