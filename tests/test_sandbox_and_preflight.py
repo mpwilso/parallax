@@ -472,6 +472,17 @@ def test_a_builder_that_died_leaving_work_is_flagged_right_away(proj):
     assert proj.task(tid)["status"] == "stuck" and not kinds(proj, "task.retried")
 
 
+def test_the_sandbox_never_reads_polarizers_field_ledger_wherever_xdg_puts_it(tmp_path, monkeypatch):
+    from parallax import fieldproxy
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "elsewhere"))
+    folder = fieldproxy.ledger_dir()
+    assert not folder.is_relative_to(Path.home())  # outside $HOME, so denying $HOME doesn't cover it
+    r = sandbox.rules(tmp_path / "wt", [], git_dir=None, venv=None, reads=[], domains=[])
+    assert str(folder) in r.srt()["filesystem"]["denyRead"]
+    assert str(folder) in r.claude_settings()["sandbox"]["filesystem"]["denyRead"]
+    assert sandbox.refused_reads([str(folder / "ledger.jsonl")]) == [str(folder / "ledger.jsonl")]
+
+
 @pytest.mark.parametrize("folder", [lambda: str(approvals.key_path().parent), lambda: "~/.claude"])
 def test_no_plan_can_read_the_approval_key_or_your_login(proj, folder):
     plan = docs()["plan"].replace("outside_reads = []", f'outside_reads = ["{folder()}/x"]')

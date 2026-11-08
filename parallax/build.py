@@ -142,7 +142,7 @@ def prepare(project: Project, task_id: str, setup: bool = True, launching: bool 
     refused = sandbox.refused_reads(reads)
     if refused:  # invariant 1: the plan can open the boundary, never the key or your login
         raise ParallaxError(f"the plan's outside_reads include {refused[0]}, which holds your approval key or "
-                            "Claude login. no plan can read it. reject the task with a reason")
+                            "Claude login, or Polarizer's ledger for Field. no plan can read it. reject the task with a reason")
     scope = Scope(reads=tuple(Path(p) for p in reads) + ((venv,) if venv else ()), domains=tuple(plan["domains"]))
     targets = sandbox.protected_targets(wt)
     sandbox.prepare_mount_points(targets)

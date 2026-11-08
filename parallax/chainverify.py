@@ -101,26 +101,42 @@ def _pointer(path: list) -> str:
     return "/" + "/".join(part(p) for p in path)
 
 
-def _outside_subset(value, path: list) -> str | None:
-    """The first value outside v1's subset, in document order, as the rule it breaks."""
+def _children(where, value):
+    """A container's members, in document order, each with its place: (parent's place, key or index)."""
     if isinstance(value, dict):
-        for k, v in value.items():
-            if not k.isascii():
-                return f"non-ASCII key at {_pointer(path + [k])}"
-            found = _outside_subset(v, path + [k])
-            if found:
-                return found
-    elif isinstance(value, list):
-        for i, v in enumerate(value):
-            found = _outside_subset(v, path + [i])
-            if found:
-                return found
-    elif isinstance(value, float):
-        return f"float at {_pointer(path)}"
-    elif _int(value) and not -MAX_INT <= value <= MAX_INT:
-        return f"integer out of range at {_pointer(path)}"
-    elif isinstance(value, str) and any(0xD800 <= ord(c) <= 0xDFFF for c in value):
-        return f"lone surrogate at {_pointer(path)}"
+        return (((where, k), v, True) for k, v in value.items())
+    return (((where, i), v, False) for i, v in enumerate(value))
+
+
+def _path(where) -> list:
+    parts = []
+    while where is not None:
+        where, part = where
+        parts.append(part)
+    return parts[::-1]
+
+
+def _outside_subset(value) -> str | None:
+    """The first value outside v1's subset, in document order, as the rule it breaks. Walked with a
+    stack of its own, so a line nested deeper than Python's recursion limit gets a verdict too: the
+    spec sets no depth limit, so such a line is judged by its rules like any other."""
+    stack = [iter([(None, value, False)])]
+    while stack:
+        item = next(stack[-1], None)
+        if item is None:
+            stack.pop()
+            continue
+        where, v, keyed = item
+        if keyed and not where[1].isascii():
+            return f"non-ASCII key at {_pointer(_path(where))}"
+        if isinstance(v, (dict, list)):
+            stack.append(_children(where, v))
+        elif isinstance(v, float):
+            return f"float at {_pointer(_path(where))}"
+        elif _int(v) and not -MAX_INT <= v <= MAX_INT:
+            return f"integer out of range at {_pointer(_path(where))}"
+        elif isinstance(v, str) and any(0xD800 <= ord(c) <= 0xDFFF for c in v):
+            return f"lone surrogate at {_pointer(_path(where))}"
     return None
 
 
@@ -178,7 +194,7 @@ def _line(chain: _Chain, n: int, raw: bytes) -> Verdict | None:
             return bad("invalid", "structure", f'"{wrong}" has the wrong type')
         if entry["v"] != 1:
             return bad("invalid", "structure", "v is not 1")
-        outside = _outside_subset(entry, [])
+        outside = _outside_subset(entry)
         if outside:
             return bad("invalid", "structure", outside)
         if n == 1 and entry["kind"] != GENESIS:
@@ -312,8 +328,9 @@ def entries(data: bytes) -> list[dict]:
 
 
 def target(path: Path, head: Path | None = None) -> tuple[Path, Path | None]:
-    """What `parallax verify PATH` checks: a folder is Polarizer's layout (ledger.jsonl, and
-    ledger.head when it's there); a file is checked alone, or with the head file named."""
+    """What `parallax verify PATH` checks: a folder is Polarizer's layout (ledger.jsonl, and the head
+    file named or else its own ledger.head when it's there); a file is checked alone, or with the
+    head file named. The caller refuses a named head that doesn't exist."""
     path = Path(path)
     if path.is_dir():
         return path / "ledger.jsonl", head or path / "ledger.head"

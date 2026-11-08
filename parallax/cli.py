@@ -109,7 +109,8 @@ def main(argv: list[str] | None = None) -> int:
     vf = sub.add_parser("verify", help="check the ledger hasn't been edited")
     vf.add_argument("ledger", nargs="?", help="another hash-chained ledger to check instead: a file, v0 (Parallax's) or v1 "
                     "(Polarizer's), or a Polarizer ledger folder. leave it out to check this repo's")
-    vf.add_argument("--head", help="with a ledger file: its ledger.head file, checked with it")
+    vf.add_argument("--head", help="a ledger.head file, checked with the ledger. a folder's own ledger.head is checked "
+                    "without it")
 
     args = p.parse_args(argv)
     sys.stdout.reconfigure(errors="replace")  # agent text can hold characters the console can't show
@@ -344,11 +345,12 @@ def _run(args) -> int:
 def _verify_file(path: Path, head: Path | None) -> int:
     """Any ledger in either format, outside a project too (parallax/chainverify.py). Reads only."""
     from . import chainverify
+    named = head
     ledger, head = chainverify.target(path, head)
     if not ledger.is_file():
         raise ParallaxError(f"no ledger at {ledger}")
-    if head is not None and not head.exists() and not path.is_dir():
-        raise ParallaxError(f"no head file at {head}")
+    if named is not None and not named.is_file():  # a head you name is checked, beside a file or a folder
+        raise ParallaxError(f"no head file at {named}")
     try:
         verdict, _ = chainverify.read(ledger, head)
     except OSError as err:

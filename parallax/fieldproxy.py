@@ -17,14 +17,18 @@ author's MCP proxy; it's called as a program, like srt and git, never imported.
   classed open-world (its answers are page text from the app, outside input), so no call of Field's
   is held by Polarizer's rules; the tools Field may not use stay unclassified and are refused before
   they reach Polarizer.
-- The stops: nothing is retried and `--no-holds` is never passed. When nothing of Field's is
-  approved yet, or a definition waits, Polarizer first lists the server's tools with its input
-  closed, and the task stops for you with the commands to approve them, before Field spends
-  anything. After a run, Parallax
-  verifies Polarizer's ledger (parallax/chainverify.py) and reads this run's session: a definition
-  waiting for approval or changed since, a held call, a refused call, or no call at all stops the task
-  for you, naming it. A held call waits in Polarizer for `polarizer allow` or `deny` until Polarizer's
-  own timeout, then is refused; either way the task stops for you afterwards.
+- The stops: nothing is retried and `--no-holds` is never passed. Before every run Parallax verifies
+  Polarizer's ledger: serve refuses to start on anything but an intact v1 ledger, a torn tail
+  included, so any other verdict stops the task then, before Field spends anything, with
+  `polarizer repair` for a torn tail (the one thing repair fixes) and a person for the rest. When
+  nothing of Field's is approved yet, a definition waits, or the latest serve couldn't serve one of
+  Field's tools, Polarizer first lists the server's tools with its input closed, and the task stops
+  for you with the exact commands, before Field spends anything. After a run, Parallax verifies the
+  ledger again (parallax/chainverify.py) and reads this run's session: a definition waiting for
+  approval or changed since, a tool serve couldn't serve in this run, a held call, a refused call, or
+  no call at all stops the task for you, naming it. A held call waits in Polarizer for `polarizer
+  allow` or `deny` until Polarizer's own timeout, then is refused; either way the task stops for you
+  afterwards.
 - The record: one `uitest.polarizer` ledger entry per run, naming Polarizer's ledger folder, its chain,
   this run's session and seqs, and its calls, so what Field touched can be found and checked later.
 """
@@ -37,7 +41,7 @@ import shutil
 import subprocess
 import tomllib
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import chainverify
@@ -108,6 +112,13 @@ def _toml(value) -> str:
 
 def config_text(server: dict, folder: Path, tools, run_id: str) -> str:
     """polarizer.toml for one run: the ledger folder, and the MCP server as its one upstream."""
+    for key, value in (server.get("env") or {}).items():
+        if "${" in str(value):  # PROXY-SPEC.md, the upstream's environment: there is no escape for it
+            raise RouteError(
+                f"Field can't run through Polarizer here: its browser server's {key} is {json.dumps(value)}, and Polarizer "
+                'reads "${" in an env value itself: a value that is exactly "${NAME}" is replaced from its own '
+                'environment, and any other value with "${" is refused. Its config has no escape for it. take "${" '
+                "out of that value (a folder's path or the [ui_tester] url), or turn polarizer off under [ui_tester]")
     lines = [f"# Written by Parallax for one Field run ({run_id}). Field's browser server is the one upstream.",
              f"ledger_dir = {_toml(str(folder))}", "",
              f"[upstream.{PREFIX}]",
@@ -172,9 +183,65 @@ class Session:
                 "pending": list(self.pending), "polarizer_version": self.version, "problem": self.problem}
 
 
-def _approve_steps(folder: Path) -> str:
-    return (f"read them with polarizer pending --ledger-dir {folder}, approve them with polarizer approve "
-            f"--ledger-dir {folder} --group <the group id it prints> (and any it flags, by name), then retry")
+def _few(names: list[str]) -> str:
+    return ", ".join(names[:5]) + (", ..." if len(names) > 5 else "")
+
+
+def _ledger_stop(verdict: chainverify.Verdict, folder: Path) -> str:
+    """Why serve won't start on this ledger, with the step that applies; "" when it will. Serve takes
+    an empty ledger (it writes the genesis) and an intact v1 one, and refuses every other verdict, a
+    torn tail included, and any v0 ledger (Polarizer's LEDGER-SPEC.md, Part 2)."""
+    if verdict.status == "empty" or (verdict.ok and verdict.version == 1):
+        return ""
+    if verdict.version == 0:
+        return (f"Polarizer's ledger for Field at {folder} is in Parallax's own format (v0), and Polarizer won't serve "
+                f"on a v0 ledger. Parallax never writes one there, so this needs a person: see parallax verify {folder}")
+    if verdict.status == "torn tail":
+        return (f"Polarizer's ledger for Field ends in a torn tail ({verdict.reason}), and Polarizer won't serve on it "
+                f"until it's repaired. run polarizer repair --ledger-dir {folder}, which moves the torn bytes to a file "
+                "beside the ledger, then retry")
+    return (f"Polarizer's ledger for Field doesn't verify: {verdict.text()}. Polarizer won't serve on it, and polarizer "
+            f"repair only fixes a torn tail, so this needs a person. see polarizer verify --ledger-dir {folder}")
+
+
+def _approve_steps(folder: Path, asks: dict) -> str:
+    """The exact commands for these tools (PIN-SPEC.md, section 7): a group covers only tools with no
+    decision and one definition waiting; every other tool is approved by name, with its hash."""
+    grouped = [t for t, s in sorted(asks.items()) if not s.decided and len(s.waiting) == 1]
+    named = [t for t in sorted(asks) if t not in grouped]
+    steps = [f"read them with polarizer pending --ledger-dir {folder}"]
+    if grouped:
+        steps.append(f"approve {'them' if not named else _few(grouped)} with polarizer approve --ledger-dir {folder} "
+                     "--group <the group id it prints> (and any it flags, by name)")
+    for t in named[:5]:
+        s = asks[t]
+        why = "it has a decision, so no group covers it" if s.decided else f"{len(s.waiting)} definitions wait for it"
+        pick = s.waiting[0] if len(s.waiting) == 1 else "<the hash you pick>"
+        steps.append(f"approve {t} by name ({why}): polarizer approve --ledger-dir {folder} {PREFIX} {t} {pick}")
+    if len(named) > 5:
+        steps.append(f"and the {len(named) - 5} more the same way")
+    return ", ".join(steps) + ", then retry"
+
+
+NEVER = ("cannot be hashed", "definition larger than")  # PIN-SPEC.md, section 2: approve refuses these for good
+
+
+def _unservable_step(folder: Path, tool: str, def_hash: str | None, problem: str) -> str:
+    """What a tool.unservable from this run means for you (PIN-SPEC.md, sections 3 and 5)."""
+    name = f"{PREFIX}__{tool}"
+    copy = folder / "defs" / f"{def_hash}.json"
+    if problem.startswith(NEVER):
+        return (f"{name} {problem}, so it can never be approved and Field can't use it through Polarizer. to run "
+                "Field, turn polarizer off under [ui_tester]")
+    if problem.startswith("more than 16 definitions"):
+        return (f"{name} has {problem}: approve one by name. read them with polarizer pending --ledger-dir {folder}, "
+                f"then polarizer approve --ledger-dir {folder} {PREFIX} {tool} <the hash you pick>, then retry")
+    if problem == "stored copy missing":
+        return f"{name}: {problem} ({copy}). serve writes it again when it next lists that definition, so retry"
+    if problem.startswith("stored copy could not be written"):
+        return f"{name}: {problem}. let Polarizer write to {folder / 'defs'}, then retry"
+    return (f"{name}: {problem} ({copy}). Polarizer keeps a bad copy until a person deletes it: look at it, delete "
+            "it, and retry, and serve writes it again when it next lists that definition")
 
 
 def read_session(r: Route, lock_wait: float = 10.0, listing: bool = False) -> Session:
@@ -190,9 +257,9 @@ def read_session(r: Route, lock_wait: float = 10.0, listing: bool = False) -> Se
         return Session(f"couldn't read Polarizer's ledger for Field: {err}")
     if verdict.status == "empty":
         return Session(f"Polarizer never started for Field: its ledger at {folder} is empty")
-    if not verdict.ok:
-        return Session(f"Polarizer's ledger for Field doesn't verify: {verdict.text()}. "
-                       f"run polarizer verify --ledger-dir {folder}", chain_id=verdict.chain_id)
+    problem = _ledger_stop(verdict, folder)
+    if problem:
+        return Session(problem, chain_id=verdict.chain_id)
     entries = chainverify.entries(data)
     starts = [e for e in entries if e["kind"] == "session.started" and e["data"].get("config_sha256") == r.sha]
     base = Session("", chain_id=verdict.chain_id, head=verdict.head)
@@ -212,16 +279,23 @@ def read_session(r: Route, lock_wait: float = 10.0, listing: bool = False) -> Se
     refused = [e for e in mine if e["kind"] == "call.refused"]
     held = [e for e in mine if e["kind"] == "hold.created"]
     base.refused, base.holds = len(refused), len(held)
-    state = decisions(entries, r.tools)
-    waiting = sorted(t for t, st in state.items() if st in ("new", "unservable"))
-    changed = sorted(t for t, st in state.items() if st == "changed")
-    base.pending = tuple(waiting + changed)
+    state = standings(entries, r.tools)
+    waiting = sorted(t for t, s in state.items() if s.state == "new")
+    changed = sorted(t for t, s in state.items() if s.state == "changed")
+    # what this run's serve couldn't serve: an older session's record may since have healed
+    stuck = {t: next(v for k, v in s.stuck.items() if k in ids) for t, s in sorted(state.items()) if ids & set(s.stuck)}
+    base.pending = tuple(waiting + changed + [t for t in stuck if t not in waiting + changed])
+    asks = {t: state[t] for t in waiting + changed}
     if changed:
-        base.problem = (f"Polarizer hid Field's browser tools that changed since you approved them ({', '.join(changed)}): "
-                        + _approve_steps(folder))
+        base.problem = (f"Polarizer hid Field's browser tools that changed since you approved them ({_few(changed)})"
+                        + (f", and is keeping {len(waiting)} more back until you approve them" if waiting else "")
+                        + ": " + _approve_steps(folder, asks))
     elif waiting:
         base.problem = (f"Polarizer is keeping {len(waiting)} of Field's browser tools back until you approve them "
-                        f"({', '.join(waiting[:5])}{', ...' if len(waiting) > 5 else ''}): " + _approve_steps(folder))
+                        f"({_few(waiting)}): " + _approve_steps(folder, asks))
+    elif stuck:
+        base.problem = (f"Polarizer couldn't serve {len(stuck)} of Field's browser tools in this run: "
+                        + "; ".join(_unservable_step(folder, t, h, why) for t, (h, why) in stuck.items()))
     elif held:
         tools = sorted({e["data"].get("tool", "") for e in held})
         base.problem = (f"Polarizer held {len(held)} of Field's browser calls for a person ({', '.join(tools)}). "
@@ -242,41 +316,87 @@ def read_session(r: Route, lock_wait: float = 10.0, listing: bool = False) -> Se
     return base
 
 
-def decisions(entries: list[dict], tools) -> dict[str, str]:
-    """Where each of Field's tools stands in Polarizer's ledger, from its latest decision and what serve
-    saw since (PIN-SPEC.md, section 3): approved, rejected, new (seen, no decision covers it), changed
-    (a new definition since the approval), or unservable. A tool serve never listed isn't here."""
-    state: dict[str, str] = {}
-    after = {"tool.approved": "approved", "tool.rejected": "rejected", "tool.seen": "new", "tool.drift": "changed",
-             "tool.unservable": "unservable"}
+@dataclass
+class Standing:
+    """One of Field's tools in Polarizer's pin state (PIN-SPEC.md, section 4), folded from the ledger."""
+    state: str  # approved, rejected, new, changed, or unservable (never hashed, so never seen or decided)
+    decided: bool  # it has an approval or a rejection, so no group can approve it
+    waiting: tuple[str, ...] = ()  # the definitions seen since its latest decision, in the order serve saw them
+    stuck: dict = field(default_factory=dict)  # session -> (def_hash, problem): what it couldn't serve, since then
+
+
+def standings(entries: list[dict], tools) -> dict[str, Standing]:
+    """Where each of Field's tools stands, from its latest decision and what serve recorded since. New
+    and changed last until a decision (changed is sticky). Unservable isn't: serve records it once per
+    process, and a stored copy that passes again serves with no new entry, so only the sessions asked
+    about say whether it still holds. A tool serve never listed isn't here."""
+    fold: dict[str, dict] = {}
     for e in entries:
-        d = e["data"]
-        if e["kind"] in after and d.get("upstream") == PREFIX and d.get("tool") in tools:
-            state[d["tool"]] = after[e["kind"]]
-    return state
+        d, kind = e["data"], e["kind"]
+        if not kind.startswith("tool.") or d.get("upstream") != PREFIX or d.get("tool") not in tools:
+            continue
+        t = fold.setdefault(d["tool"], {"decision": None, "drift": False, "seen": [], "stuck": {}})
+        if kind in ("tool.approved", "tool.rejected"):
+            t.update(decision=kind, drift=False, seen=[], stuck={})
+        elif kind in ("tool.seen", "tool.drift"):
+            t["drift"] = t["drift"] or kind == "tool.drift"
+            h = d.get("def_hash") if kind == "tool.seen" else d.get("live_hash")
+            if h not in t["seen"]:
+                t["seen"].append(h)
+        elif kind == "tool.unservable":
+            t["stuck"][d.get("session")] = (d.get("def_hash"), str(d.get("problem") or ""))
+    out = {}
+    for tool, t in fold.items():
+        if t["decision"] == "tool.approved":
+            state = "changed" if t["drift"] else "approved"
+        elif t["seen"]:
+            state = "new"
+        elif t["decision"]:
+            state = "rejected"
+        else:
+            state = "unservable"
+        out[tool] = Standing(state, t["decision"] is not None, tuple(t["seen"]), t["stuck"])
+    return out
 
 
-def needs_listing(r: Route) -> bool:
-    """Nothing of Field's approved yet, or something waiting: list first. Read with no lock, since a
-    wrong guess only decides whether the listing pass runs."""
-    path = r.ledger / "ledger.jsonl"
-    if not path.exists():
+def decisions(entries: list[dict], tools) -> dict[str, str]:
+    """Each tool's state alone."""
+    return {t: s.state for t, s in standings(entries, tools).items()}
+
+
+def needs_listing(entries: list[dict], tools) -> bool:
+    """List first when nothing of Field's is approved yet, something waits, or the latest serve couldn't
+    serve one of Field's tools: the listing pass's own session then says whether that still holds."""
+    state = standings(entries, tools)
+    if not any(s.state == "approved" for s in state.values()):
         return True
-    verdict, data = chainverify.read(path)
-    if verdict.status not in ("intact", "torn tail"):
-        return False  # read_session, after the run, says what's wrong with it
-    state = decisions(chainverify.entries(data), r.tools)
-    return "approved" not in state.values() or any(st in ("new", "changed", "unservable") for st in state.values())
+    if any(s.state in ("new", "changed", "unservable") for s in state.values()):
+        return True
+    last = next((e["data"].get("session") for e in reversed(entries) if e["kind"] == "session.started"), None)
+    return any(last in s.stuck for s in state.values())
 
 
 LISTER = None  # tests replace this; None runs the real `polarizer serve` with its input closed
 
 
-def listing_pass(r: Route) -> Session | None:
-    """Before a run with nothing of Field's approved, or a definition waiting: serve with its input
-    closed lists the server's tools and exits, so the task stops for your approval before Field
-    spends anything. Returns the session read afterwards, or None when there was nothing to do."""
-    if not needs_listing(r):
+def listing_pass(r: Route, lock_wait: float = 10.0) -> Session | None:
+    """Before every run, before Field spends anything. A ledger serve won't start on stops the task
+    here: otherwise Field's session would run with no browser tools. Then, with nothing of Field's
+    approved, a definition waiting, or a tool the latest serve couldn't serve: serve with its input
+    closed lists the server's tools and exits, so the task stops for your approval. Returns the
+    session read afterwards, or None when there was nothing to do."""
+    path = r.ledger / "ledger.jsonl"
+    entries: list[dict] = []
+    if path.exists():
+        try:  # under Polarizer's lock, as its verify reads: a line being written isn't a torn tail
+            verdict, data = chainverify.read(path, r.ledger / "ledger.head", lock_wait=lock_wait)
+        except TimeoutError as err:
+            return Session(f"couldn't read Polarizer's ledger for Field: {err}")
+        problem = _ledger_stop(verdict, r.ledger)
+        if problem:
+            return Session(problem, chain_id=verdict.chain_id)
+        entries = chainverify.entries(data)
+    if not needs_listing(entries, r.tools):
         return None
     run = LISTER or _list
     run(r)

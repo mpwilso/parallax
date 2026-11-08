@@ -118,6 +118,39 @@ def test_a_read_under_polarizers_lock_waits_and_then_gives_up(tmp_path):
     assert chainverify.read(chain.path, lock_wait=0.2)[0].ok
 
 
+def test_a_folder_checks_the_head_you_name_and_a_missing_one_is_an_error(tmp_path, capsys):
+    chain = V1Ledger(tmp_path / "pz")
+    chain.head()
+    assert main(["verify", str(tmp_path / "pz"), "--head", str(tmp_path / "missing.head")]) == 1
+    assert capsys.readouterr().err == f"parallax: no head file at {tmp_path / 'missing.head'}\n"
+    ahead = tmp_path / "ahead.head"
+    ahead.write_bytes(chainverify.canonical({"chain_id": chain.entries()[0]["data"]["chain_id"], "hash": "e" * 64, "seq": 5})
+                      + b"\n")
+    assert main(["verify", str(tmp_path / "pz"), "--head", str(ahead)]) == 1
+    assert capsys.readouterr().out == "truncated: ledger ends at seq 0 but ledger.head records seq 5\n"
+
+
+def test_a_line_nested_past_pythons_recursion_limit_gets_a_verdict(tmp_path, capsys):
+    """The spec sets no depth limit, so a deep line inside the subset is judged by its rules like any
+    other, and one outside it names the place."""
+    depth = sys.getrecursionlimit() + 100
+    deep = 0
+    for _ in range(depth):
+        deep = {"a": deep}
+    chain = V1Ledger(tmp_path / "pz")
+    chain.add("note.deep", x=deep)
+    verdict, _ = chainverify.read(chain.path)
+    assert (verdict.status, verdict.entries) == ("intact", 2)
+    bad = 1.5
+    for _ in range(5000):
+        bad = [bad]
+    chain.add("note.deep", x=bad)
+    verdict, _ = chainverify.read(chain.path)
+    assert (verdict.status, verdict.check, verdict.line) == ("invalid", "structure", 3)
+    assert verdict.reason == "float at /data/x" + "/0" * 5000
+    assert main(["verify", str(tmp_path / "pz")]) == 1 and capsys.readouterr().out.startswith("invalid: line 3 (seq 2): float")
+
+
 def test_messages_name_the_rule_and_the_place():
     assert chainverify.verify_bytes(b"").text() == "empty: the ledger has no entries"
     assert chainverify.verify_bytes(b"[]\n").text() == "invalid: line 1 (seq ?): not a JSON object"

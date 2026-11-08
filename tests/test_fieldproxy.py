@@ -140,15 +140,102 @@ def test_before_anything_is_approved_the_task_stops_for_you_before_field_spends(
 def test_where_each_tool_stands_follows_its_latest_decision(tmp_path):
     ledger = Ledger(tmp_path / "pz")
     r = fieldproxy.Route({}, tmp_path / "polarizer.toml", "0" * 64, tmp_path / "pz", "run1", frozenset({"browser_click", "browser_type"}))
-    assert fieldproxy.needs_listing(r)  # nothing approved yet
+    assert fieldproxy.needs_listing(ledger.entries(), r.tools)  # nothing approved yet
     for tool in ("browser_click", "browser_type", "browser_run_code"):
         ledger.add("tool.seen", session="s1", upstream="playwright", tool=tool, def_hash="b" * 64)
     assert fieldproxy.decisions(ledger.entries(), r.tools) == {"browser_click": "new", "browser_type": "new"}
     for tool in ("browser_click", "browser_type"):
         ledger.add("tool.approved", upstream="playwright", tool=tool, def_hash="b" * 64, actor="you", group="g1")
-    assert not fieldproxy.needs_listing(r)  # browser_run_code, which Field never gets, waits without blocking
+    assert not fieldproxy.needs_listing(ledger.entries(), r.tools)  # browser_run_code, which Field never gets, waits
     ledger.add("tool.drift", session="s2", upstream="playwright", tool="browser_type", approved_hash="b" * 64, live_hash="c" * 64)
-    assert fieldproxy.decisions(ledger.entries(), r.tools)["browser_type"] == "changed" and fieldproxy.needs_listing(r)
+    assert fieldproxy.decisions(ledger.entries(), r.tools)["browser_type"] == "changed"
+    assert fieldproxy.needs_listing(ledger.entries(), r.tools)
+
+
+RUN_SHA = "0" * 64  # the config hash of the run a_route stands for
+
+
+def a_route(tmp_path, tools=("browser_click", "browser_navigate")) -> fieldproxy.Route:
+    return fieldproxy.Route({}, tmp_path / "polarizer.toml", RUN_SHA, tmp_path / "pz", "run1", frozenset(tools))
+
+
+def serve(ledger: Ledger, s: str, sha: str = RUN_SHA) -> str:
+    """One serve process, for the run whose config hashes to sha, connected to the browser server."""
+    ledger.add("session.started", session=s, polarizer_version="0.6.0", config_sha256=sha)
+    ledger.add("upstream.connected", prefix="playwright", protocol_version="2025-11-25", tools=21, skipped_tools=[])
+    return s
+
+
+def approve(ledger: Ledger, *tools: str, h: str = "a" * 64) -> None:
+    for tool in tools:
+        ledger.add("tool.approved", upstream="playwright", tool=tool, def_hash=h, actor="person", group=None)
+
+
+def test_a_stored_copy_that_passes_again_stops_no_later_run(tmp_path):
+    """serve records tool.unservable once per process, and a copy that passes again serves with no new
+    entry (PIN-SPEC.md, section 5): an earlier run's record says nothing about this one."""
+    r = a_route(tmp_path)
+    ledger = Ledger(r.ledger)
+    approve(ledger, "browser_click", "browser_navigate")
+    old = serve(ledger, "s1", sha="9" * 64)  # an earlier run, whose stored copy of browser_click had gone
+    rec = ledger.add("tool.unservable", session=old, upstream="playwright", tool="browser_click", def_hash="a" * 64,
+                     problem="stored copy missing")
+    serve(ledger, "s2")  # this run's listing pass: serve wrote the copy again and served it, recording nothing
+    assert fieldproxy.read_session(r, listing=True).problem == ""
+    call(ledger, serve(ledger, "s3"))
+    assert fieldproxy.read_session(r).problem == ""
+    entries = ledger.entries()
+    assert not fieldproxy.needs_listing(entries, r.tools)
+    assert fieldproxy.needs_listing(entries[:rec["seq"] + 1], r.tools)  # while s1's serve was the latest: list, and see
+
+
+@pytest.mark.parametrize("problem, says", [
+    ("cannot be hashed: integer outside the safe range", "playwright__browser_click cannot be hashed: integer outside the "
+     "safe range, so it can never be approved and Field can't use it through Polarizer. to run Field, turn polarizer off"),
+    ("definition larger than 262144 bytes", "so it can never be approved"),
+    ("stored copy does not match its hash", "Polarizer keeps a bad copy until a person deletes it"),
+    ("stored copy missing", "serve writes it again when it next lists that definition, so retry"),
+    ("more than 16 definitions since the last decision", "approve one by name"),
+])
+def test_a_tool_serve_couldnt_serve_in_this_run_stops_with_the_step_that_applies(tmp_path, problem, says):
+    r = a_route(tmp_path)
+    ledger = Ledger(r.ledger)
+    never = problem.startswith(("cannot be hashed", "definition larger"))  # PIN-SPEC.md, section 2
+    approve(ledger, *(["browser_navigate"] if never else ["browser_navigate", "browser_click"]))
+    s = serve(ledger, "s2")
+    ledger.add("tool.unservable", session=s, upstream="playwright", tool="browser_click",
+               def_hash=None if "hashed" in problem else "a" * 64, problem=problem)
+    seen = fieldproxy.read_session(r, listing=True)
+    assert "Polarizer couldn't serve 1 of Field's browser tools in this run: playwright__browser_click" in seen.problem
+    assert says in seen.problem and "--group" not in seen.problem and seen.pending == ("browser_click",)
+    if "stored copy" in problem:
+        assert str(r.ledger / "defs" / f"{'a' * 64}.json") in seen.problem
+
+
+def test_a_tool_with_a_decision_is_approved_by_name_and_the_card_says_how(tmp_path):
+    r = a_route(tmp_path, ("browser_click", "browser_navigate", "browser_type"))
+    folder = r.ledger
+    ledger = Ledger(folder)
+    ledger.add("tool.rejected", upstream="playwright", tool="browser_click", def_hash="b" * 64, actor="person", reason="no")
+    approve(ledger, "browser_type")
+    s = serve(ledger, "s2")
+    ledger.add("tool.seen", session=s, upstream="playwright", tool="browser_click", def_hash="c" * 64)
+    ledger.add("tool.seen", session=s, upstream="playwright", tool="browser_navigate", def_hash="d" * 64)
+    ledger.add("tool.drift", session=s, upstream="playwright", tool="browser_type", approved_hash="a" * 64, live_hash="e" * 64)
+    why = fieldproxy.read_session(r, listing=True).problem
+    assert why == (
+        "Polarizer hid Field's browser tools that changed since you approved them (browser_type), and is keeping 2 more "
+        f"back until you approve them: read them with polarizer pending --ledger-dir {folder}, "
+        f"approve browser_navigate with polarizer approve --ledger-dir {folder} --group <the group id it prints> "
+        "(and any it flags, by name), "
+        "approve browser_click by name (it has a decision, so no group covers it): "
+        f"polarizer approve --ledger-dir {folder} playwright browser_click {'c' * 64}, "
+        "approve browser_type by name (it has a decision, so no group covers it): "
+        f"polarizer approve --ledger-dir {folder} playwright browser_type {'e' * 64}, then retry")
+    ledger.add("tool.seen", session=s, upstream="playwright", tool="browser_navigate", def_hash="f" * 64)
+    assert ("approve browser_navigate by name (2 definitions wait for it): "
+            f"polarizer approve --ledger-dir {folder} playwright browser_navigate <the hash you pick>") in \
+        fieldproxy.read_session(r, listing=True).problem
 
 
 def test_a_listing_pass_whose_server_never_connected_says_so(routed, monkeypatch):
@@ -194,6 +281,29 @@ def test_a_polarizer_ledger_that_doesnt_verify_stops_the_task(routed, monkeypatc
     assert "Polarizer's ledger for Field doesn't verify: tampered: line" in kinds(routed, "disagreement.raised", tid)[-1]["reason"]
 
 
+@pytest.mark.parametrize("damage, says", [
+    ("torn", "ends in a torn tail (13 bytes after line 2), and Polarizer won't serve on it until it's repaired. "
+             "run polarizer repair --ledger-dir "),
+    ("tampered", "doesn't verify: tampered: line 2 (seq 1): hash does not match the entry. Polarizer won't serve on it, "
+                 "and polarizer repair only fixes a torn tail, so this needs a person. see polarizer verify --ledger-dir "),
+])
+def test_a_ledger_polarizer_wont_serve_on_stops_the_task_before_field_spends(routed, monkeypatch, damage, says):
+    """serve refuses any ledger that isn't intact, a torn tail included: Field would run with no tools."""
+    ledger = approved()
+    lines = ledger.path.read_bytes().splitlines(True)
+    if damage == "torn":
+        ledger.path.write_bytes(b"".join(lines) + b'{"v":1,"seq":')
+    else:
+        ledger.path.write_bytes(lines[0] + lines[1].replace(b"browser_navigate", b"browser_click"))
+    monkeypatch.setattr(fieldproxy, "LISTER", lambda r: pytest.fail("serve was started on a ledger it refuses"))
+    monkeypatch.setattr(uitest, "TESTER", lambda *a: pytest.fail("Field ran on a ledger Polarizer won't serve on"))
+    tid, status = pilot(routed, None, None)
+    assert status == "disputed" and not kinds(routed, "uitest.started", tid)
+    why = kinds(routed, "disagreement.raised", tid)[-1]["reason"]
+    assert says + str(fieldproxy.ledger_dir().resolve()) in why
+    assert kinds(routed, "uitest.polarizer", tid)[-1]["reason"] == why
+
+
 def test_a_run_polarizer_never_recorded_stops_the_task(routed, monkeypatch):
     approved()
     monkeypatch.setattr(uitest, "TESTER", Behind(lambda ledger, server: None))
@@ -220,6 +330,17 @@ def test_the_ledger_is_never_inside_parallaxs_folders(monkeypatch, tmp_path):
         with pytest.raises(fieldproxy.RouteError):
             fieldproxy.check_dir(bad / "polarizer-field")
     assert fieldproxy.check_dir(tmp_path / "polarizer-field") == (tmp_path / "polarizer-field").resolve()
+
+
+@pytest.mark.parametrize("value", ["${HOME}", "/srv/a${b}c"])
+def test_an_env_value_polarizer_would_expand_or_refuse_stops_before_the_config_is_written(tmp_path, value):
+    """PROXY-SPEC.md: a value that is exactly "${NAME}" is expanded, any other with "${" is refused, and
+    there is no escape. Command and args are passed as written, so "${" there is kept."""
+    server = {"command": "/usr/bin/python3", "args": ["${KEPT}"], "env": {"HOME": "/h", "APP_URL": value}}
+    with pytest.raises(fieldproxy.RouteError, match=r"its browser server's APP_URL is .*Its config has no escape for it"):
+        fieldproxy.config_text(server, tmp_path, {"browser_click"}, "run1")
+    text = fieldproxy.config_text({**server, "env": {"HOME": "/h"}}, tmp_path, {"browser_click"}, "run1")
+    assert tomllib.loads(text)["upstream"]["playwright"]["args"] == ["${KEPT}"]
 
 
 def test_the_config_reads_back_exactly_whatever_the_values_hold(tmp_path):
@@ -263,3 +384,8 @@ def test_the_pinned_polarizer_accepts_the_config_and_refuses_a_ledger_in_paralla
     out = subprocess.run([str(exe), "serve", "--config", str(cfg)], capture_output=True, text=True, env=home,
                          stdin=subprocess.DEVNULL, timeout=60)
     assert out.returncode == 2 and "which Polarizer must not write to" in out.stderr and not inside.exists()
+    # why config_text refuses "${" in an env value: Polarizer's parser refuses it too, with no escape
+    text = fieldproxy.config_text(server, tmp_path / "pz", uitest.BROWSER_TOOLS, "run3")
+    cfg.write_text(text.replace('/work"', '/w${x}rk"', 1))
+    out = subprocess.run([str(exe), "verify", "--config", str(cfg)], capture_output=True, text=True, env=home, timeout=60)
+    assert out.returncode == 2 and 'env HOME: only a whole "${NAME}" value is expanded' in out.stderr, out.stderr

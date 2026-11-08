@@ -11,7 +11,8 @@ Rules:
   exist yet), and minus the shared .git directory, which Claude Code would otherwise open for
   linked worktrees;
 - reads: $HOME and /mnt are denied, except the worktree, the task's venv, the shared .git
-  directory (read-only, so git works) and the plan's outside reads;
+  directory (read-only, so git works) and the plan's outside reads. The approval key's folder and
+  Polarizer's ledger for Field are denied by name too, wherever XDG settings put them;
 - network: denied, except the plan's domains. No prompts: strictAllowlist;
 - no escape hatch: allowUnsandboxedCommands is false, and failIfUnavailable refuses to run
   without a sandbox.
@@ -193,8 +194,10 @@ class Rules:
 
 
 def never_read() -> tuple[Path, ...]:
-    """Folders no plan can open for reading: the approval key's, and Claude's own (its login)."""
-    return (key_path().parent, Path.home() / ".claude")
+    """Folders no plan can open for reading: the approval key's, Claude's own (its login), and
+    Polarizer's ledger for Field (parallax/fieldproxy.py), which records what you approved."""
+    from .fieldproxy import ledger_dir
+    return (key_path().parent, Path.home() / ".claude", ledger_dir())
 
 
 def refused_reads(reads: list[str]) -> list[str]:
@@ -211,8 +214,11 @@ def rules(worktree: Path, targets: list[Path], *, git_dir: Path | None, venv: Pa
     if transcripts().exists():
         deny_write.append(str(transcripts()))
     allow_read = [wt] + ([str(git_dir)] if git_dir else []) + ([str(venv)] if venv else []) + list(reads)
-    # the approval key's folder is denied by name too, wherever XDG_CONFIG_HOME puts it
-    deny_read = list(dict.fromkeys([str(Path.home()), "/mnt", str(key_path().parent)]))
+    # the approval key's folder and Polarizer's ledger for Field are denied by name too, wherever
+    # XDG_CONFIG_HOME and XDG_DATA_HOME put them: outside $HOME, nothing else would cover them
+    from .fieldproxy import ledger_dir
+    deny_read = list(dict.fromkeys([str(Path.home()), "/mnt", str(key_path().parent), str(ledger_dir()),
+                                    os.path.realpath(ledger_dir())]))
     return Rules(allow_write=[wt], deny_write=deny_write, deny_read=deny_read,
                  allow_read=list(dict.fromkeys(allow_read)), domains=list(domains))
 
