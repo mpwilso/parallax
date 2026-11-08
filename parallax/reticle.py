@@ -14,6 +14,11 @@ Once per attempt, after the plan is approved and before Maker starts:
 At every check Parallax runs them on the reviewed tree. A failure goes back to Maker as a rework
 finding naming the outcome and the assertion message, never the test's code.
 
+The next check runs the stored file on the base again, and judges it again, when the first judging
+there doesn't stand (rejudge): none of its tests could run (python didn't start, exit 127, on
+field-demo task 70d1f6) and the task was launched again since, a retry say; or the venv was made
+again since. The same file: Reticle isn't asked again and nothing new is charged.
+
 On by default ([reticle] in the policy), testing only what you asked: the seeded eval's results
 are in docs/evals.md.
 """
@@ -334,19 +339,74 @@ def write(project: Project, task_id: str, p, writer=None, runner=None) -> str:
         project.ledger.append("reticle.failed", "reticle", lint.one_sentence(res.summary or res.status), **common)
         return "failed"
     text = code_of(res.summary).encode()
-    results = _run(project, p, p.task["base"], text, where, "reticle-base", runner)
-    keep, weak = judge(results.cases, lint.outcomes_of(intent), targets(intent), crashes(typed), hangs(typed), where)
-    if not results.cases:
-        weak.append({"name": where, "why": f"its tests couldn't run on the base (exit {results.exit}): "
-                                          f"{(results.tail.splitlines() or ['no output'])[-1][:200]}"})
+    keep, weak, extra = _on_base(project, p, text, where, intent, typed, runner)
     path = stored(project, task_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(text)
     rel = drafts.logical(project.root, path)
     project.ledger.append("reticle.recorded", "reticle",
                           lint.one_sentence(f"{len(keep)} tests kept, {len(weak)} weak ones dropped"),
-                          file=rel, sha=hashlib.sha256(text).hexdigest(), kept=keep, weak=weak, placed=where, **common)
+                          file=rel, sha=hashlib.sha256(text).hexdigest(), kept=keep, weak=weak, placed=where, **extra, **common)
     return "kept" if keep else "none"
+
+
+UNRUN = "its tests couldn't run on the base"  # how the weak line starts when none of the file's tests ran there
+
+
+def _on_base(project: Project, p, text: bytes, where: str, intent: str, typed: str, runner=None) -> tuple[list, list, dict]:
+    """(kept, weak, extra) from a run of the file on the base commit. extra is {"unrun": exit} when
+    none of its tests ran there: a reason outside the file, like a python that didn't start."""
+    results = _run(project, p, p.task["base"], text, where, "reticle-base", runner)
+    keep, weak = judge(results.cases, lint.outcomes_of(intent), targets(intent), crashes(typed), hangs(typed), where)
+    if results.cases:
+        return keep, weak, {}
+    weak.append({"name": where, "why": f"{UNRUN} (exit {results.exit}): "
+                                      f"{(results.tail.splitlines() or ['no output'])[-1][:200]}"})
+    return keep, weak, {"unrun": results.exit}
+
+
+def unrun(rec: dict) -> bool:
+    """None of the file's tests ran on the base. Records before 0.7.3 say so only in their weak line."""
+    d = rec["data"]
+    return d.get("unrun") is not None or any(str(w.get("why", "")).startswith(UNRUN) for w in d.get("weak") or [])
+
+
+def stale(project: Project, task_id: str) -> str:
+    """Why this attempt's judging on the base no longer stands, or "" when it does: none of its tests
+    could run there and the task was launched again since (a retry, once the cause is fixed: field-demo
+    task 70d1f6's retry rebuilt the venv and never ran them again), or the venv was made again since."""
+    mine = status.attempt(project.ledger.entries(), task_id)
+    at = [i for i, e in enumerate(mine) if e["kind"] in ("reticle.recorded", "reticle.failed")]
+    if not at or mine[at[-1]]["kind"] != "reticle.recorded":  # no file, or Reticle wrote none: nothing to judge again
+        return ""
+    rec, later = mine[at[-1]], mine[at[-1] + 1:]
+    if any(e["kind"] == "setup.ran" and e["data"].get("replaced") and e["data"].get("exit") == 0 for e in later):
+        return "the venv was made again"
+    if unrun(rec) and any(e["kind"] == "build.started" for e in later):
+        return "none of its tests could run there before"
+    return ""
+
+
+def rejudge(project: Project, task_id: str, p, runner=None) -> str:
+    """Judge Reticle's stored file on the base again when its judging there no longer stands (stale),
+    with the setup as it is now, as the plan's tests run. The same file, by the same hash: Reticle isn't
+    asked again, nothing new is charged, and the new record is what counts from here. A changed file
+    is left for the check to stop on. Returns why it ran, or ""."""
+    why = stale(project, task_id)
+    if not why or tampered(project, task_id):
+        return ""
+    rec = recorded(project, task_id)
+    where = placed(project, task_id)
+    from .conductor import typed as as_typed
+    intent = lifecycle._read(project, task_id, "intent")
+    keep, weak, extra = _on_base(project, p, stored(project, task_id).read_bytes(), where, intent,
+                                 as_typed(project, task_id), runner)
+    project.ledger.append("reticle.recorded", "parallax",
+                          lint.one_sentence(f"judged again on the base, since {why}: {len(keep)} tests kept, "
+                                            f"{len(weak)} weak ones dropped"),
+                          task=task_id, file=rec["data"]["file"], sha=rec["data"]["sha"], kept=keep, weak=weak,
+                          placed=where, rejudged=why, model=rec["data"].get("model"), **extra)
+    return why
 
 
 def tampered(project: Project, task_id: str) -> bool:

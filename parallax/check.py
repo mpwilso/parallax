@@ -188,6 +188,7 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
     # Reticle's tests of the outcomes, on this tree. A failure goes back to Maker as a finding; Second
     # Eye still judges the tree, so the eval can tell the two apart
     reticle_fix, reticle_failed = [], []
+    reticle.rejudge(project, task_id, p, test_runner)  # its base run didn't stand (70d1f6): again, on the setup as it is now
     try:
         ran = reticle.check(project, task_id, p, s.tree, test_runner)
     except reticle.Unrun as err:  # never a finding for Maker: nothing it did made them not run

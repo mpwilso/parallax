@@ -152,3 +152,12 @@ def unreadable(venv: Path) -> str:
     return (f"the task's venv runs {real}, which the sandbox can't read, so the plan's tests couldn't start Python. "
             f"Parallax builds the venv on the system Python and never widens the sandbox for it: make [build] setup "
             f"create it with {VENV_LINE}, then retry")
+
+
+def replaced(old: Path, rebuilt: bool) -> str:
+    """What Parallax did with a finished venv on a Python the sandbox can't read: it carries on when
+    setup made the venv again, so this says what happened, not what to do."""
+    said = f"it ran {old}, which the tests' sandbox can't read"
+    if rebuilt:
+        return f"replaced the venv: {said}; rebuilt it on the system Python"
+    return f"removed the venv: {said}; making it again failed"

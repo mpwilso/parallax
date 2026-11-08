@@ -136,7 +136,8 @@ def _the_work(project: Project, task_id: str, staged: dict | None) -> list[str]:
 
 def _outcomes(project: Project, task_id: str, tests: dict | None) -> list[str]:
     """One line per outcome in the intent: the test files that ran for it, through the plan's covers,
-    or that no test exercises it. Code only: the covers map against the recorded JUnit counts."""
+    and Field's flows for it that passed, or that no test exercises it. Code only: the covers map against
+    the recorded JUnit counts, and Field's own outcome number for each flow it kept."""
     intent = lifecycle._read(project, task_id, "intent")
     plan = lifecycle.plan_data(project, task_id) or {}
     ran = {f for f, (passed, counted, _) in (tests["data"]["per_file"].items() if tests else []) if counted}
@@ -144,14 +145,32 @@ def _outcomes(project: Project, task_id: str, tests: dict | None) -> list[str]:
     cite = f"(ledger {tests['id']})" if tests else f"(docs/tasks/{task_id}/plan.md:1)"
     out = []
     said = _reticle(project, task_id)
+    walked = _flows(project, task_id)
     kinds = lint.outcome_kinds(intent)
     for n in lint.outcomes_of(intent):
-        files = sorted({c.split("::", 1)[0] for c in covers.get(n, []) if c.split("::", 1)[0] in ran})
+        files = sorted({c.split("::", 1)[0] for c in covers.get(n, []) if c.split("::", 1)[0] in ran}) + walked.get(n, [])
         whose = {"asked": ", which you asked for", "inferred": ", which Focus added"}.get(kinds.get(n) or "", "")
         line = f"Outcome {n}{whose}: tested by {', '.join(files)}" if files else f"Outcome {n}{whose}: no test covers it"
         extra = said(n)  # Reticle's words, with its own ledger id last
         text, own = (extra.rsplit(" (ledger ", 1) + [""])[:2] if " (ledger " in extra else (extra, "")
         out.append(f"{line}{text}." + (f" (ledger {own}" if own else "") + f" {cite}")
+    return out
+
+
+def _flows(project: Project, task_id: str) -> dict[str, list[str]]:
+    """outcome -> "Field's flow <name>" for this attempt: each flow Field walked for that outcome whose
+    test it kept (flows/<name>.spec.js) and that passed at the last run of the flow tests."""
+    entries = _attempt([e for e in project.ledger.entries() if e["data"].get("task") == task_id], task_id)
+    rec, ran = _last(entries, "uitest.recorded"), _last(entries, "flows.recorded")
+    if not rec or not ran or not ran["data"].get("ran") or ran["data"].get("app_failed"):
+        return {}
+    kept = {f.rsplit("/", 1)[-1] for f in rec["data"].get("files") or {}}
+    failed = {str(c.get("file", "")).rsplit("/", 1)[-1] for c in ran["data"].get("failed") or []}
+    out: dict[str, list[str]] = {}
+    for f in rec["data"].get("flows") or []:
+        spec = f"{f.get('name')}.spec.js" if isinstance(f, dict) else ""
+        if spec in kept and spec not in failed:
+            out.setdefault(str(f.get("outcome")), []).append(f"Field's flow {f['name']}")
     return out
 
 

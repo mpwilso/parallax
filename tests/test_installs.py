@@ -224,7 +224,8 @@ def test_a_finished_venv_on_a_python_the_sandbox_cant_read_is_made_again(repo):
     assert installs.ready(venv) and "which the sandbox can't read" in syspython.unreadable(venv)
     p = build.prepare(proj, tid)
     ran = kinds(proj, "setup.ran")
-    assert len(ran) == 1 and ran[0]["data"]["replaced"].startswith(f"the task's venv runs {UV_MANAGED}, which the sandbox")
+    assert len(ran) == 1 and ran[0]["data"]["replaced"] == (  # what Parallax did, since it carried on: no instruction
+        f"replaced the venv: it ran {UV_MANAGED}, which the tests' sandbox can't read; rebuilt it on the system Python")
     assert syspython.unreadable(p.venv) == "" and installs.ready(p.venv)
     build.prepare(proj, tid)
     assert len(kinds(proj, "setup.ran")) == 1  # once made right, it's kept

@@ -2,6 +2,14 @@
 
 What changed in each release. The full notes for each are on the [releases page](https://github.com/mpwilso/parallax/releases).
 
+## Unreleased
+
+Fixed:
+- Reticle's tests counted for nothing on field-demo task 70d1f6. Its file ran on the base once, in the first build, on the old venv, where python couldn't start (exit 127), so no test was kept. The owner's retry rebuilt the venv on `/usr/bin/python3`, but Reticle had already run that attempt, so its file never ran again, and the Ready card said "no Reticle test: its tests couldn't run on the base (exit 127)" for every outcome. Now, when none of Reticle's tests could run on the base and the task has been launched again since (a retry, say), or when the venv was made again since they ran there, the next check runs the same stored file on the base again, on the setup as it is now, as the plan's tests run, and judges it again. Its new `reticle.recorded` entry, marked `rejudged`, is what counts from there: the kept tests run on the reviewed tree and reach the card. The file and its hash are unchanged, Reticle isn't asked again, and nothing new is charged, so the cap and what it keeps are as before. A changed file still stops the check. New records note `unrun` with the exit code when none of the file's tests ran. Tests: `test_a_retry_after_reticles_tests_couldnt_start_judges_them_again_and_they_count`, which failed before the fix (one `reticle.recorded`, nothing kept), and `test_reticles_base_run_is_done_again_when_the_venv_was_made_again_and_only_then`.
+- The `setup.ran` entry read like a stop. When 0.7.2 made a finished venv again because it ran a Python the sandbox can't read, its `replaced` text said to change `[build] setup` and retry, though Parallax had already rebuilt the venv on the system Python and gone on. It now says what happened: `replaced the venv: it ran <path>, which the tests' sandbox can't read; rebuilt it on the system Python`. If making it again fails, it says that, and the stop that follows gives the instruction, as before. Test: `test_a_finished_venv_on_a_python_the_sandbox_cant_read_is_made_again`.
+- The Ready card's outcome lines now name Field's flows. 70d1f6's card said "no test covers it" for outcome 2 (Reset sets the count to 0), though Field's flow had walked it and its kept test passed. A flow now counts for the outcome Field said it walked, as `tested by Field's flow <name>`, once its kept test passed at the last run of the flow tests. Test: `test_the_card_names_fields_flow_for_the_outcome_it_walked`.
+- docs/using.md still said the first real run through Polarizer hadn't been done, and that the 20 s start wasn't run with a real task. It records the run of 2026-11-08 (task 70d1f6): Field started within 2 s, and all 14 of Field's calls went through Polarizer.
+
 ## 0.7.2 (2026-11-08)
 
 Fixed:

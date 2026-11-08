@@ -28,8 +28,8 @@ SPEC = "const { test, expect } = require('@playwright/test');\ntest('opens', asy
 class FakeTester:
     """Writes one flow test and a screenshot, like the real one; remembers everything it was given."""
 
-    def __init__(self, write=True, works=True, cost=0.3):
-        self.write, self.works, self.cost = write, works, cost
+    def __init__(self, write=True, works=True, cost=0.3, outcome=1):
+        self.write, self.works, self.cost, self.outcome = write, works, cost, outcome
         self.calls = []
 
     def __call__(self, limit, model):
@@ -43,7 +43,7 @@ class FakeTester:
             (Path(cwd) / "flows").mkdir()
             (Path(cwd) / "flows" / "opens.spec.js").write_text(SPEC)
             (Path(cwd) / "opens.png").write_bytes(b"\x89PNG fake")
-        reply = {"flows": [{"outcome": 1, "name": "opens", "works": self.works, "saw": "the page opens"}],
+        reply = {"flows": [{"outcome": self.outcome, "name": "opens", "works": self.works, "saw": "the page opens"}],
                  "not_looked_at": "the page on a phone"}
         return AgentResult("done", "walked it.\n" + json.dumps(reply), self.cost)
 
@@ -168,6 +168,29 @@ def test_the_tester_is_blind_sandboxed_and_its_tests_are_hashed_and_run(proj, mo
     assert views.shot(proj, tid, "opens.png") == b"\x89PNG fake"
     with pytest.raises(ValueError):
         views.shot(proj, tid, "../../key")
+
+
+def test_the_card_names_fields_flow_for_the_outcome_it_walked(proj, monkeypatch):
+    """Field-demo task 70d1f6's card said "no test covers it" for outcome 2 (Reset sets the count to 0),
+    which Field's flow had walked and its kept test passed. A flow counts for the outcome Field said it
+    walked, once its test passed at the check."""
+    d = flows_docs()
+    d["intent"] = d["intent"].replace("1. asked: A new user on WSL can follow them.",
+                                      "1. asked: A new user on WSL can follow them.\n2. asked: The page opens.")
+    d["plan"] = d["plan"].replace('user_flows = ["1"]', 'user_flows = ["2"]').replace(
+        '"1" = ["tests/test_readme.py"]', '"1" = ["tests/test_readme.py"], "2" = ["Field walks it"]')
+    monkeypatch.setattr(uitest, "TESTER", FakeTester(outcome=2))
+    monkeypatch.setattr(uitest, "FLOW_RUNNER", flow_runner([[("opens", True)]]))
+    from parallax import pilot as p
+    tid = p.intake(proj, "fix the README")["task"]
+    maker = ScriptedAgent(steps=[("write", "README.md", "ok\n")])
+    status = build.run_mode(proj, tid, "pilot", FakeDrafter(d), lambda left, s: maker, FakeChecker(),
+                            test_runner=junit_runner(), preflight_runner=good_probe)
+    assert status == "ready"
+    text = show.report(proj, tid)
+    assert "Outcome 2, which you asked for: tested by Field's flow opens. (ledger " in text
+    assert "Outcome 1, which you asked for: tested by tests/test_readme.py. (ledger " in text  # its own flow, none
+    assert "no test covers it" not in text
 
 
 def test_a_failing_flow_is_reworked_and_the_tester_runs_once(proj, monkeypatch):

@@ -95,7 +95,7 @@ def _setup_venv(project: Project, task_id: str, worktree: Path, home: Path) -> P
     stale = syspython.unreadable(venv) if installs.ready(venv) else ""
     if installs.ready(venv) and not stale:
         return venv
-    replaced = {"replaced": stale} if stale else {}
+    old = syspython.interpreter(venv) if stale else None  # what it ran, for the record of what Parallax did
     trust.check(project, task_id, "the [build] setup command")  # a command from the policy file: never before you've seen it
     shutil.rmtree(venv, ignore_errors=True)  # half built, or not there: setup makes it from nothing
     lacking = tools.for_command(command, WHY_SETUP)
@@ -107,10 +107,11 @@ def _setup_venv(project: Project, task_id: str, worktree: Path, home: Path) -> P
     except syspython.Unusable as err:  # no venv the sandbox can run: it comes to you, saying what to do
         if err.ran is not None:
             project.ledger.append("setup.ran", "parallax", command, task=task_id, exit=err.ran.returncode,
-                                  seconds=round(time.monotonic() - started, 1), unusable=str(err), **replaced)
+                                  seconds=round(time.monotonic() - started, 1), unusable=str(err), **_replaced(old, False))
         raise ParallaxError(str(err)) from None
     project.ledger.append("setup.ran", "parallax", command, task=task_id, exit=out.returncode,
-                          seconds=round(time.monotonic() - started, 1), **found, **replaced)
+                          seconds=round(time.monotonic() - started, 1), **found,
+                          **_replaced(old, out.returncode == 0))
     if out.returncode != 0:
         lacking = tools.not_found(out.stderr + out.stdout, WHY_SETUP)  # a program a script inside setup runs
         if lacking:
@@ -118,6 +119,12 @@ def _setup_venv(project: Project, task_id: str, worktree: Path, home: Path) -> P
         tail = (out.stderr or out.stdout).strip().splitlines()[-1:] or ["no output"]
         raise ParallaxError(f"the [build] setup command failed: {tail[0]}")
     return venv
+
+
+def _replaced(old: Path | None, rebuilt: bool) -> dict:
+    """setup.ran's "replaced", when the finished venv ran a Python the sandbox can't read: what Parallax
+    did, never an instruction. When making it again fails, the stop that follows says what to do."""
+    return {"replaced": syspython.replaced(old, rebuilt)} if old else {}
 
 
 def prepare(project: Project, task_id: str, setup: bool = True, launching: bool = True) -> Prepared:

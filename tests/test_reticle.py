@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from fakes import FakeChecker, FakeDrafter, ScriptedAgent, good_probe
-from parallax import build, check, costs, evals, lifecycle, pilot, reticle, show
+from parallax import build, check, costs, decide, evals, lifecycle, pilot, reticle, show, syspython
 from parallax.agents.base import AgentResult
 from parallax.core import POLICY_FILE, Project
 from test_evals import BUGGY, FIXED, INTENT, PLAN, WRONG, case_for, maker, plain_runner, result, scripted, upstream  # noqa: F401
@@ -551,3 +551,59 @@ def test_in_rework_maker_hears_the_hidden_tests_steps_and_its_failure(proj):
     assert ("- blocker: a test of outcome 1 that you can't see fails. It adds -1 and 1 and expects 0. It got: "
             in goals[1]) and "assert 2 == 0" in goals[1]
     assert "def test_" not in goals[1] and "add(-1, 1)" not in goals[1]  # the steps, never the code
+
+
+# a base run that didn't stand is done again: field-demo task 70d1f6 -----------------------------------------
+
+def unstartable(config, cwd, cmd, env):
+    """The tests' sandbox as 70d1f6's first build had it: the venv's python can't start, so nothing reports."""
+    return 127, "bash: line 1: python: command not found\n"
+
+
+def test_a_retry_after_reticles_tests_couldnt_start_judges_them_again_and_they_count(proj):
+    """Field-demo task 70d1f6: Reticle's file ran once, in the first build, where python couldn't start
+    (exit 127), so none of its tests counted. The owner's retry, once the venv was fixed, never ran them
+    again, and the Ready card said "no Reticle test" for every outcome. The retry's check now runs the
+    same stored file on the base again, on the fixed setup, and its tests count: Reticle isn't asked
+    again and nothing new is charged."""
+    writer = FakeReticle(KEPT, cost=0.2)
+    reticle.WRITER = writer
+    tid = pilot.intake(proj, "add subtracts")["task"]
+    status = build.run_mode(proj, tid, "pilot", FakeDrafter({"intent": INTENT, "plan": PLAN}),
+                            lambda left, settings: maker(FIXED), FakeChecker(), test_runner=unstartable,
+                            preflight_runner=good_probe)
+    assert status == "disputed"  # the plan's tests couldn't run either: the same exit 127
+    [first] = kinds(proj, "reticle.recorded")
+    assert first["data"]["kept"] == [] and first["data"]["weak"][-1]["why"].startswith(
+        "its tests couldn't run on the base (exit 127): bash: line 1: python: command not found")
+    assert decide.apply(proj, tid, "retry").startswith("checking")  # the builder's spawn is a stand-in (proj)
+    status = build.run_mode(proj, tid, "check", None, lambda left, settings: maker(FIXED), FakeChecker(),
+                            test_runner=plain_runner, preflight_runner=good_probe)
+    assert status == "ready"
+    first, again = kinds(proj, "reticle.recorded")
+    assert first["data"]["unrun"] == 127 and [t["name"] for t in again["data"]["kept"]] == ["test_outcome_1_sums_negatives"]
+    assert again["data"]["rejudged"] == "none of its tests could run there before" and "unrun" not in again["data"]
+    assert (again["data"]["file"], again["data"]["sha"]) == (first["data"]["file"], first["data"]["sha"])  # the same file
+    assert len(writer.goals) == 1 and "cost_usd" not in again["data"]  # Reticle wasn't asked again, nor paid
+    [ran] = kinds(proj, "reticle.ran")
+    assert (ran["data"]["passed"], ran["data"]["total"], ran["data"]["failed"]) == (1, 1, [])
+    card = show.report(proj, tid)
+    assert "Outcome 1, which you asked for: tested by tests/test_mine.py; Reticle's test passed. (ledger " in card
+    assert "no Reticle tests counted" not in card
+
+
+def test_reticles_base_run_is_done_again_when_the_venv_was_made_again_and_only_then(proj):
+    """A venv on a Python the sandbox can't read is made again on the next run (0.7.2): the judging on
+    the old one doesn't stand. A check with nothing new runs nothing again."""
+    tid, status = go(proj, FakeReticle(KEPT))
+    assert status == "ready"
+    ready = lambda: check.check_once(proj, tid, lambda left, model: FakeChecker(), plain_runner)[0]  # noqa: E731
+    assert ready() == "ready" and len(kinds(proj, "reticle.recorded")) == 1  # nothing new: judged once
+    proj.ledger.append("build.started", "parallax", "", task=tid, pid=9, mode="check")
+    assert ready() == "ready" and len(kinds(proj, "reticle.recorded")) == 1  # a launch alone, after a run that stood
+    proj.ledger.append("setup.ran", "parallax", "make the venv", task=tid, exit=0,
+                       replaced=syspython.replaced("/home/u/.local/share/uv/python/bin/python3", True))
+    assert ready() == "ready"
+    first, again = kinds(proj, "reticle.recorded")
+    assert again["data"]["rejudged"] == "the venv was made again" and again["data"]["kept"] == first["data"]["kept"]
+    assert ready() == "ready" and len(kinds(proj, "reticle.recorded")) == 2  # once
