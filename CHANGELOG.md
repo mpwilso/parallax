@@ -2,7 +2,7 @@
 
 What changed in each release. The full notes for each are on the [releases page](https://github.com/mpwilso/parallax/releases).
 
-## Unreleased
+## 0.7.1 (2026-11-08)
 
 Fixed:
 - Field through Polarizer couldn't find a `polarizer` installed the documented way. `uv tool install` puts it in `~/.local/bin`, which your shells and `parallax ui` find, but the builder runs with a plain PATH (the task's venv, the system folders and the sandbox tools' folders), so field-demo task 70d1f6 stopped at check with "polarizer isn't on PATH". Launch now looks it up where you run Parallax, on your PATH and then in `~/.local/bin` as `parallax doctor` does, and hands the builder its absolute path. The builder's PATH is unchanged, a relative PATH entry never counts, and no policy can name the program. `parallax doctor` and `parallax ui` now name a missing polarizer, with its install line, when `[ui_tester]` turns the route on, and docs/using.md's check says so instead of `command -v polarizer`. Test: `test_the_builder_finds_the_polarizer_you_installed_though_its_path_is_plain`.
