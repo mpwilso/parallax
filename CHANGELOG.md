@@ -2,7 +2,7 @@
 
 What changed in each release. The full notes for each are on the [releases page](https://github.com/mpwilso/parallax/releases).
 
-## Unreleased
+## 0.7.3 (2026-11-08)
 
 Fixed:
 - Reticle's tests counted for nothing on field-demo task 70d1f6. Its file ran on the base once, in the first build, on the old venv, where python couldn't start (exit 127), so no test was kept. The owner's retry rebuilt the venv on `/usr/bin/python3`, but Reticle had already run that attempt, so its file never ran again, and the Ready card said "no Reticle test: its tests couldn't run on the base (exit 127)" for every outcome. Now, when none of Reticle's tests could run on the base and the task has been launched again since (a retry, say), or when the venv was made again since they ran there, the next check runs the same stored file on the base again, on the setup as it is now, as the plan's tests run, and judges it again. Its new `reticle.recorded` entry, marked `rejudged`, is what counts from there: the kept tests run on the reviewed tree and reach the card. The file and its hash are unchanged, Reticle isn't asked again, and nothing new is charged, so the cap and what it keeps are as before. A changed file still stops the check. New records note `unrun` with the exit code when none of the file's tests ran. Tests: `test_a_retry_after_reticles_tests_couldnt_start_judges_them_again_and_they_count`, which failed before the fix (one `reticle.recorded`, nothing kept), and `test_reticles_base_run_is_done_again_when_the_venv_was_made_again_and_only_then`.
