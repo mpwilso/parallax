@@ -5,14 +5,17 @@ here do what installers do, offline: a .pth pointing into the checkout (setuptoo
 editable installs), an editable finder mapping a package to its folder (setuptools' strict mode),
 and a _version.py written from `git describe --tags` (setuptools_scm, hatch-vcs). No per-repo rule
 in Parallax knows about any of them."""
+import json
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
-from parallax import build, installs, lifecycle, testrun, tree, trust
-from parallax.core import POLICY_FILE, Project
+from parallax import build, installs, lifecycle, sandbox, syspython, testrun, tools, tree, trust
+from parallax.core import POLICY_FILE, ParallaxError, Project
 from test_evals import plain_runner
 from test_lifecycle_gates import docs, make_key
 from test_sandbox_and_preflight import kinds
@@ -160,3 +163,124 @@ def test_a_venv_left_without_its_install_record_is_made_again(repo):
     assert (p.venv / installs.RECORD).is_file() and not (p.venv / "left-over").exists()
     build.prepare(proj, tid)
     assert len(kinds(proj, "setup.ran")) == 1  # with its record, it's ready
+
+
+# the venv is built on the system Python, which the sandbox can read (syspython.py) -----------------------
+
+def _uv_pythons() -> str:
+    """Where uv keeps the Pythons it downloads, as setup sees them outside the tests. Read at import,
+    before conftest points XDG_DATA_HOME at a temporary folder, which would hide them from uv."""
+    if os.environ.get("UV_PYTHON_INSTALL_DIR"):
+        return os.environ["UV_PYTHON_INSTALL_DIR"]
+    return str(Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "uv" / "python")
+
+
+UV_PYTHONS = _uv_pythons()
+UV_MANAGED = os.path.join(os.path.realpath(Path.home()), ".local/share/uv/python/cpython-3.13.0-linux-x86_64-gnu-test/bin/python3.13")
+# shaped like 70d1f6's venv's python, and not there: where a link points is what counts
+
+
+@pytest.mark.skipif(tools.which("uv") is None, reason="needs uv, which runs [build] setup here")
+def test_the_venvs_python_resolves_inside_what_the_tests_sandbox_can_read(repo, monkeypatch, tmp_path):
+    """Field-demo task 70d1f6: its setup's uv venv took uv's own Python, under ~/.local/share/uv/python,
+    so the venv's python linked where the tests' sandbox can't read, and every test run said "python:
+    command not found". The same setup, with uv's real Pythons in view: the python the tests' PATH
+    finds must resolve inside what that run's tests-srt.json lets them read. CI installs a Python
+    with uv first, so it has one to prefer."""
+    monkeypatch.setenv("UV_PYTHON_INSTALL_DIR", UV_PYTHONS)
+    monkeypatch.setenv("UV_CACHE_DIR", str(tmp_path / "uv-cache"))
+    proj, tid = task_with(repo, SRC, 'uv venv -q "$PARALLAX_VENV"')  # 70d1f6's setup, without its download
+    p = build.prepare(proj, tid)
+    seen = {}
+
+    def runner(cfg, cwd, cmd, env):
+        seen.update(rules=json.loads(Path(cfg).read_text()), path=env["PATH"])
+        return 0, ""
+    plan = {"tests": ["tests/test_pkg.py"], "outside_reads": [], "domains": []}
+    testrun.run(p.worktree, p.task["base"], p.task["base"], plan, p.home, p.venv, build.scrubbed_env(p.venv),
+                "python -m pytest {tests}", runner)
+    python = shutil.which("python", path=seen["path"])
+    assert python == str(p.venv / "bin" / "python")
+    fs = seen["rules"]["filesystem"]
+    rules = sandbox.Rules(fs["allowWrite"], fs["denyWrite"], fs["denyRead"], fs["allowRead"], [])
+    real = os.path.realpath(python)
+    assert rules.can_read(real), f"the venv's python is {real}, which the tests' sandbox can't read"
+
+
+def test_setup_runs_with_uv_held_to_the_system_python(repo):
+    proj, tid = task_with(repo, SRC, VENV + ' && echo "$UV_PYTHON_PREFERENCE $UV_PYTHON_DOWNLOADS" > "$PARALLAX_VENV/uv-env"')
+    p = build.prepare(proj, tid)
+    assert (p.venv / "uv-env").read_text().split() == ["only-system", "never"]
+
+
+def test_a_finished_venv_on_a_python_the_sandbox_cant_read_is_made_again(repo):
+    """70d1f6's venv: finished, its record written, on uv's own Python. The next run, a retry
+    included, makes it again with the same setup, and says why in the ledger."""
+    proj, tid = task_with(repo, SRC, VENV)
+    venv = build.sandbox.task_home(proj.root, tid) / "venv"
+    (venv / "bin").mkdir(parents=True)
+    (venv / "bin" / "python").symlink_to(UV_MANAGED)  # it needn't exist: where it points is what counts
+    (venv / installs.RECORD).write_text('{"roots": [], "generated": []}\n')
+    assert installs.ready(venv) and "which the sandbox can't read" in syspython.unreadable(venv)
+    p = build.prepare(proj, tid)
+    ran = kinds(proj, "setup.ran")
+    assert len(ran) == 1 and ran[0]["data"]["replaced"].startswith(f"the task's venv runs {UV_MANAGED}, which the sandbox")
+    assert syspython.unreadable(p.venv) == "" and installs.ready(p.venv)
+    build.prepare(proj, tid)
+    assert len(kinds(proj, "setup.ran")) == 1  # once made right, it's kept
+
+
+def test_a_setup_that_leaves_the_venv_on_a_python_the_sandbox_cant_read_is_refused(repo):
+    proj, tid = task_with(repo, SRC, f'mkdir -p "$PARALLAX_VENV/bin" && ln -s "{UV_MANAGED}" "$PARALLAX_VENV/bin/python"')
+    for _ in range(2):  # never kept, so the retry runs setup again rather than taking it for done
+        with pytest.raises(ParallaxError, match=r"the task's venv runs .*, which the sandbox can't read, so the plan's tests "
+                                                r"couldn't start Python\. Parallax builds the venv on the system Python and never "
+                                                r'widens the sandbox for it: make \[build\] setup create it with uv venv --python '
+                                                r'/usr/bin/python3 "\$PARALLAX_VENV", then retry'):
+            build.prepare(proj, tid)
+    assert not (build.sandbox.task_home(proj.root, tid) / "venv").exists()
+    ran = kinds(proj, "setup.ran")
+    assert [e["data"]["exit"] for e in ran] == [0, 0] and all("can't read" in e["data"]["unusable"] for e in ran)
+
+
+PYPROJECT = '[project]\nname = "pkg"\nversion = "0"\nrequires-python = ">=3.99"\n'
+
+
+def test_a_system_python_missing_or_too_old_stops_before_setup_runs(repo, monkeypatch, tmp_path):
+    proj, tid = task_with(repo, {**SRC, "pyproject.toml": PYPROJECT}, 'python3 -m venv "$PARALLAX_VENV"')
+    have = ".".join(map(str, syspython.version()))
+    with pytest.raises(ParallaxError) as err:
+        build.prepare(proj, tid)
+    assert str(err.value) == (f"the project needs Python >=3.99 (requires-python in pyproject.toml), and the system Python, "
+                              f"/usr/bin/python3, is {have}. the task's venv is built on it, since the sandbox can read it: "
+                              "install Python 3.99 or newer as /usr/bin/python3, then retry")
+    monkeypatch.setattr(syspython, "PYTHON", str(tmp_path / "no" / "python3"))
+    monkeypatch.setattr(syspython.sys, "platform", "linux")
+    with pytest.raises(ParallaxError) as err:
+        build.prepare(proj, tid)
+    assert str(err.value) == (f"the task's venv is built on the system Python, {tmp_path / 'no' / 'python3'}, which the sandbox "
+                              "can read, and there is none. install it with sudo apt-get install -y python3 python3-venv, then retry")
+    assert not kinds(proj, "setup.ran")  # nothing ran
+
+
+def test_a_setup_that_isnt_pythons_needs_no_system_python(repo, monkeypatch, tmp_path):
+    monkeypatch.setattr(syspython, "PYTHON", str(tmp_path / "no" / "python3"))
+    proj, tid = task_with(repo, {**SRC, "pyproject.toml": PYPROJECT}, 'mkdir -p "$PARALLAX_VENV"')
+    assert build.prepare(proj, tid).venv.is_dir()
+
+
+@pytest.mark.parametrize("spec, have, fits", [
+    (">=3.11", (3, 12, 3), True), (">=3.13", (3, 12, 3), False), (">= 3.12", (3, 12), True),
+    (">=3.8,<3.12", (3, 12, 3), False), ("<4,>=3.10", (3, 12, 3), True), ("~=3.10", (3, 12, 3), True),
+    ("~=3.10.1", (3, 11, 0), False), ("==3.12.*", (3, 12, 3), True), ("!=3.12.*", (3, 12, 3), False),
+    ("==3.12", (3, 12, 3), False), (">3.12", (3, 12, 3), True), ("", (3, 12, 3), True),
+    (">=3.11; python_version", (3, 12, 3), None), ("~=3", (3, 12, 3), None), (">=3.*", (3, 12, 3), None),
+])
+def test_requires_python_is_read_as_pep_440_reads_it(spec, have, fits):
+    assert syspython.allows(spec, have) is fits
+
+
+def test_the_sandbox_reads_outside_home_and_inside_only_what_it_lets_back_in(tmp_path):
+    r = sandbox.Rules([], [], sandbox.denied_reads(), [str(Path.home() / "venv")], [])
+    assert r.can_read("/usr/bin/python3") and r.can_read(Path.home() / "venv" / "bin" / "python")
+    assert not r.can_read(UV_MANAGED) and not r.can_read(Path.home() / "venv2" / "python") and not r.can_read("/mnt/c/x")

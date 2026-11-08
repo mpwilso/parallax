@@ -9,7 +9,7 @@ PLAYWRIGHT="playwright==1.63.0"   # the one version, here and in CI, so the brow
 RUFF="ruff==0.17.0"               # pinned like the rules in pyproject.toml, so a new ruff can't fail CI on its own
 # the release Field's route through Polarizer is written against (parallax/fieldproxy.py), for the one test
 # that runs the real program. parallax/ never imports Polarizer; this only puts its command beside the tests
-POLARIZER="https://github.com/mpwilso/polarizer/releases/download/v0.6.1/polarizer-0.6.1-py3-none-any.whl"
+POLARIZER="https://github.com/mpwilso/polarizer/releases/download/v0.6.2/polarizer-0.6.2-py3-none-any.whl"
 PY="uv run --no-project --python 3.12"
 
 if [ "${1:-}" = "browser" ]; then

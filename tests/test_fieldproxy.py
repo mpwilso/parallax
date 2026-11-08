@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from parallax import fieldproxy, memcap, uitest
+from parallax import decide, fieldproxy, lint, memcap, show, uitest
 from parallax.core import POLICY_FILE, Project
 from parallax.policy import DEFAULT_UI_TESTER, Policy
 from polarizer_fake import Ledger, call, config_of, session
@@ -107,7 +107,8 @@ def test_on_polarizer_fronts_the_same_sandboxed_server_and_the_run_is_recorded(r
     assert allowed("mcp__playwright__playwright__browser_click", {})
     assert not allowed("mcp__playwright__browser_click", {}) and not allowed("mcp__playwright__playwright__browser_install", {})
     rec = kinds(routed, "uitest.polarizer", tid)[-1]
-    assert rec["reason"] == "" and rec["data"]["calls"] == 2 and rec["data"]["holds"] == 0
+    assert rec["reason"] == "Polarizer: 2 calls, 0 refused, 0 holds"  # its line in parallax log
+    assert rec["data"]["calls"] == 2 and rec["data"]["holds"] == 0 and rec["data"]["problem"] == ""
     assert rec["data"]["chain_id"] == ledger.entries()[0]["data"]["chain_id"] and rec["data"]["polarizer_version"] == "0.6.0"
     assert rec["data"]["ledger_dir"] == str(fieldproxy.ledger_dir().resolve()) and rec["data"]["sessions"] == ["8c1d4f7a2b5e9036"]
     assert rec["data"]["last_seq"] == ledger.entries()[-1]["seq"]  # the session's calls, findable later
@@ -125,17 +126,47 @@ def test_before_anything_is_approved_the_task_stops_for_you_before_field_spends(
         listed.append(route)
         ledger = Ledger(route.ledger)
         s = session(ledger, route.server)
-        for tool in sorted(uitest.BROWSER_TOOLS):
+        for tool in sorted(uitest.BROWSER_TOOLS | {"browser_file_upload", "browser_run_code"}):  # all 21 it offers
             ledger.add("tool.seen", session=s, upstream="playwright", tool=tool, def_hash="b" * 64)
     monkeypatch.setattr(fieldproxy, "LISTER", lister)
     tester = FakeTester()
     monkeypatch.setattr(uitest, "TESTER", tester)
     tid, status = pilot(routed, tester, None)
     assert status == "disputed" and listed and not tester.calls
-    why = kinds(routed, "disagreement.raised", tid)[-1]["reason"]
-    assert "Polarizer is keeping 19 of Field's browser tools back until you approve them" in why
-    assert f"polarizer pending --ledger-dir {fieldproxy.ledger_dir().resolve()}" in why
+    item = kinds(routed, "disagreement.raised", tid)[-1]
+    why, folder = item["reason"], fieldproxy.ledger_dir().resolve()
+    # counted as polarizer pending and its group count them: 70d1f6's card said 19 where the group held 21
+    assert why.startswith("Polarizer is keeping 21 of the browser server's tools back until you approve them: the 19 Field "
+                          "may use (browser_click, browser_close, browser_console_messages, browser_drag, browser_evaluate, ...) "
+                          "and 2 it never gets, which Parallax refuses before they reach Polarizer: read them with polarizer "
+                          f"pending --ledger-dir {folder}, ")
     assert not kinds(routed, "uitest.started", tid)
+    # its own question, not "the plan's tests couldn't run", and the next step: a person's polarizer approve, then retry
+    assert item["data"]["polarizer"] == "approve" and item["data"]["ledger_dir"] == str(folder)
+    dec = decide.decision(routed, tid)
+    assert (dec.kind, dec.recommend) == ("polarizer", "retry") and "approve them in your own terminal" in dec.question
+    card = show.report(routed, tid)
+    assert f"Next: you run parallax decide {tid} retry." in card
+    assert f"Next step: in a terminal of your own, run the polarizer approve command above, then parallax decide {tid} retry." in card
+    assert card.splitlines()[1] == ("Bottom line: Needs you: Polarizer is keeping 21 of the browser server's tools back until you "
+                                    "approve them.")
+    ids = {e["id"] for e in routed.ledger.entries()}
+    problems = [f"{n}: {m}" for n, m in lint.lint_report(card, root=routed.root, ledger_ids=ids)]
+    assert not problems, " || ".join(problems)
+
+
+def test_only_a_stop_for_approval_gets_the_approval_card(routed, monkeypatch):
+    """A Polarizer stop that isn't for approval keeps the card it had: a held call is no approval."""
+    approved()
+
+    def holds(ledger, server):
+        s = session(ledger, server)
+        ledger.add("hold.created", session=s, hold="h1", tool="playwright__browser_click", args_commit="3" * 64)
+    monkeypatch.setattr(uitest, "TESTER", Behind(holds))
+    tid, status = pilot(routed, None, None)
+    item = kinds(routed, "disagreement.raised", tid)[-1]
+    assert status == "disputed" and "Polarizer held 1 of Field's browser calls" in item["reason"]
+    assert "polarizer" not in item["data"] and decide.decision(routed, tid).kind != "polarizer"
 
 
 def test_where_each_tool_stands_follows_its_latest_decision(tmp_path):

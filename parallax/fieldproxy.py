@@ -34,7 +34,8 @@ author's MCP proxy; it's called as a program, like srt and git, never imported.
   allow` or `deny` until Polarizer's own timeout, then is refused; either way the task stops for you
   afterwards.
 - The record: one `uitest.polarizer` ledger entry per run, naming Polarizer's ledger folder, its chain,
-  this run's session and seqs, and its calls, so what Field touched can be found and checked later.
+  this run's session and seqs, and its calls, so what Field touched can be found and checked later. Its
+  line in `parallax log` is the problem, or the counts when there was none.
 """
 from __future__ import annotations
 
@@ -52,7 +53,7 @@ from . import chainverify, tools
 from .core import ParallaxError
 
 SETTING = "polarizer"
-VERSION = "0.6.1"  # the Polarizer release this route was written against; the integration test pins its wheel
+VERSION = "0.6.2"  # the Polarizer release this route was written against; the integration test pins its wheel
 WHEEL = f"https://github.com/mpwilso/polarizer/releases/download/v{VERSION}/polarizer-{VERSION}-py3-none-any.whl"
 INSTALL = f"uv tool install {WHEEL}"
 ENV = "PARALLAX_POLARIZER"  # the polarizer launch found, handed to the builder, whose own PATH stays plain
@@ -193,13 +194,21 @@ class Session:
     holds: int = 0
     pending: tuple[str, ...] = ()
     version: str | None = None
+    approve: tuple[str, ...] = ()  # Field's tools that wait for a person's polarizer approve: the card says so
 
     def record(self, r: Route) -> dict:
         """The uitest.polarizer entry's data."""
         return {"ledger_dir": str(r.ledger), "config_sha256": r.sha, "run": r.run_id, "chain_id": self.chain_id,
                 "sessions": list(self.sessions), "first_seq": self.first_seq, "last_seq": self.last_seq,
                 "head": self.head, "calls": self.calls, "refused": self.refused, "holds": self.holds,
-                "pending": list(self.pending), "polarizer_version": self.version, "problem": self.problem}
+                "pending": list(self.pending), "approve": list(self.approve), "polarizer_version": self.version,
+                "problem": self.problem}
+
+    def summary(self) -> str:
+        """The entry's line when nothing stopped the run, such as "Polarizer: 14 calls, 0 refused, 0 holds"."""
+        def n(count: int, word: str) -> str:
+            return f"{count} {word}{'' if count == 1 else 's'}"
+        return f"Polarizer: {n(self.calls, 'call')}, {self.refused} refused, {n(self.holds, 'hold')}"
 
 
 def _few(names: list[str]) -> str:
@@ -221,6 +230,26 @@ def _ledger_stop(verdict: chainverify.Verdict, folder: Path) -> str:
                 "beside the ledger, then retry")
     return (f"Polarizer's ledger for Field doesn't verify: {verdict.text()}. Polarizer won't serve on it, and polarizer "
             f"repair only fixes a torn tail, so this needs a person. see polarizer verify --ledger-dir {folder}")
+
+
+def _all_waiting(entries: list[dict]) -> list[str]:
+    """Every tool of the browser server's that waits for a person, Field's or not: what polarizer
+    pending lists, and what its group may approve."""
+    names = {e["data"].get("tool") for e in entries
+             if e["kind"] in ("tool.seen", "tool.drift") and e["data"].get("upstream") == PREFIX}
+    return sorted(t for t, s in standings(entries, names).items() if s.state in ("new", "changed"))
+
+
+def _keeping(waiting: list[str], everyone: list[str]) -> str:
+    """How many tools wait, counted as polarizer pending counts them: every one the server offers,
+    though Field gets only its own. Field-demo task 70d1f6's card said 19, where the group held 21."""
+    others = len(set(everyone) - set(waiting))
+    if not others:
+        return (f"Polarizer is keeping {len(waiting)} of the browser server's tools back until you approve them: "
+                f"all {len(waiting)} are tools Field may use ({_few(waiting)})")
+    return (f"Polarizer is keeping {len(waiting) + others} of the browser server's tools back until you approve them: "
+            f"the {len(waiting)} Field may use ({_few(waiting)}) and {others} it never gets, which Parallax refuses "
+            "before they reach Polarizer")
 
 
 def _approve_steps(folder: Path, asks: dict) -> str:
@@ -305,13 +334,13 @@ def read_session(r: Route, lock_wait: float = 10.0, listing: bool = False) -> Se
     stuck = {t: next(v for k, v in s.stuck.items() if k in ids) for t, s in sorted(state.items()) if ids & set(s.stuck)}
     base.pending = tuple(waiting + changed + [t for t in stuck if t not in waiting + changed])
     asks = {t: state[t] for t in waiting + changed}
+    base.approve = tuple(waiting + changed)
     if changed:
         base.problem = (f"Polarizer hid Field's browser tools that changed since you approved them ({_few(changed)})"
                         + (f", and is keeping {len(waiting)} more back until you approve them" if waiting else "")
                         + ": " + _approve_steps(folder, asks))
     elif waiting:
-        base.problem = (f"Polarizer is keeping {len(waiting)} of Field's browser tools back until you approve them "
-                        f"({_few(waiting)}): " + _approve_steps(folder, asks))
+        base.problem = _keeping(waiting, _all_waiting(entries)) + ": " + _approve_steps(folder, asks)
     elif stuck:
         base.problem = (f"Polarizer couldn't serve {len(stuck)} of Field's browser tools in this run: "
                         + "; ".join(_unservable_step(folder, t, h, why) for t, (h, why) in stuck.items()))

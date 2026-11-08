@@ -6,6 +6,9 @@ works), which is deleted afterwards. But the code runs elsewhere: the maker work
 the check tests a copy of the reviewed tree, Field runs the app from another copy. An install that
 depends on where it ran would then point at the deleted checkout.
 
+The venv is built on the system Python, which the sandbox can read (syspython.py): setup runs with
+uv held to it, and a venv whose Python the sandbox can't read is never kept.
+
 So after setup Parallax reads the install's own records, with no per-repo rules:
 - import roots: every path into the checkout that a .pth file or an editable finder names
   (src/ for a src layout, the root for a flat one). Where code runs, those roots under that tree go
@@ -24,7 +27,7 @@ import shutil
 import subprocess
 from pathlib import Path, PurePosixPath
 
-from . import tools
+from . import syspython, tools
 
 RECORD = "parallax-install.json"
 GENERATED = "parallax-generated"
@@ -45,15 +48,25 @@ def checkout(repo: Path, commit: str, dest: Path) -> None:
 
 def make(command: str, repo: Path, commit: str, venv: Path, where: Path) -> tuple[subprocess.CompletedProcess, dict]:
     """Run setup as you in a fresh checkout of commit at where, record what it installed, and
-    delete the checkout. Returns (the run, the record)."""
+    delete the checkout. Returns (the run, the record). Raises syspython.Unusable, before setup runs,
+    when the system Python can't take a Python setup, and after, removing the venv, when the venv's
+    Python is one the sandbox can't read."""
+    why = syspython.before(command, repo, commit)
+    if why:
+        raise syspython.Unusable(why)
     checkout(repo, commit, where)
-    env = {**tools.env(), "PARALLAX_VENV": str(venv), "PARALLAX_WORKTREE": str(where)}  # uv found in ~/.local/bin too
+    env = {**tools.env(), **syspython.UV_ENV,  # uv found in ~/.local/bin too, and held to the system Python
+           "PARALLAX_VENV": str(venv), "PARALLAX_WORKTREE": str(where)}
     existed = venv.exists()
     try:
         out = _run(command, where, env)
-        found = record(venv, where) if out.returncode == 0 and venv.is_dir() else {}
+        why = syspython.unreadable(venv) if out.returncode == 0 and venv.is_dir() else ""
+        found = record(venv, where) if out.returncode == 0 and venv.is_dir() and not why else {}
     finally:
         shutil.rmtree(where, ignore_errors=True)
+    if why:  # never kept: a venv the tests can't start would be taken for done
+        shutil.rmtree(venv, ignore_errors=True)
+        raise syspython.Unusable(why, out)
     if out.returncode != 0 and not existed:  # half built: a retry would take it for done and skip setup
         shutil.rmtree(venv, ignore_errors=True)
     return out, found

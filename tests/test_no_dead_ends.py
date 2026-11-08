@@ -148,6 +148,9 @@ STOPS = [  # (ledger kind, data, reason): one per kind of stop the card, the inb
     ("disagreement.raised", {"stage": "check"}, "Second Eye error: garbled reply"),
     ("disagreement.raised", {"stage": "check", "loop": True}, "the same check failed the same way twice in a row: failing tests in test_x"),
     ("disagreement.raised", {"stage": "check"}, "the plan's tests couldn't run (exit 4): no module"),
+    ("disagreement.raised", {"stage": "check", "polarizer": "approve", "ledger_dir": "/h/.local/share/polarizer-field"},
+     "Polarizer is keeping 21 of the browser server's tools back until you approve them: read them with polarizer pending "
+     "--ledger-dir /h/.local/share/polarizer-field, then retry"),
     ("disagreement.raised", {"stage": "guard"}, "diff touches protected files: CLAUDE.md"),
     ("disagreement.raised", {"stage": "conflict"}, "the plan says X, the intent says Y"),
     ("disagreement.raised", {"stage": "conflict", "missing": ["tests/test_x.py"]}, "the plan's test file is missing"),

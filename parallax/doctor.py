@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from . import tools
+from . import syspython, tools
 from .approvals import key_path
 
 OK, WARN, FAIL, INFO = "ok", "warn", "fail", "info"
@@ -197,8 +197,8 @@ def check_repo(m: Machine) -> Check:
     return Check("repo", f"{name} on {branch}", OK)
 
 
-TEST_RUNNER_FIX = ('set [build] setup to make a venv with pytest at $PARALLAX_VENV, like '
-                   'uv venv "$PARALLAX_VENV" && uv pip install --python "$PARALLAX_VENV" pytest')
+TEST_RUNNER_FIX = ('set [build] setup to make a venv with pytest at $PARALLAX_VENV, on the system Python, like '
+                   f'{syspython.VENV_LINE} && uv pip install --python "$PARALLAX_VENV" pytest')
 HAS_PYTEST = "import importlib.util; print(importlib.util.find_spec('pytest') is not None)"
 
 

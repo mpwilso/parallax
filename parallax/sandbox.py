@@ -168,6 +168,16 @@ class Rules:
     allow_read: list[str]
     domains: list[str]
 
+    def can_read(self, path) -> bool:
+        """Whether a sandboxed command may read path, links followed: anywhere outside the denied
+        folders, and inside them only under a folder allowRead lets back in."""
+        p = os.path.realpath(path)
+
+        def under(root: str) -> bool:
+            r = os.path.realpath(root)
+            return p == r or p.startswith(r.rstrip("/") + "/")
+        return not any(under(d) for d in self.deny_read) or any(under(a) for a in self.allow_read)
+
     def srt(self) -> dict:
         return {
             "network": {"allowedDomains": self.domains, "deniedDomains": [], "allowLocalBinding": False},
@@ -206,6 +216,15 @@ def refused_reads(reads: list[str]) -> list[str]:
     return [r for r in reads if any(_inside(Path(r), root) is not None for root in never_read())]
 
 
+def denied_reads() -> list[str]:
+    """What every sandbox denies reading: $HOME and /mnt, and by name the approval key's folder and
+    Polarizer's ledger for Field, wherever XDG_CONFIG_HOME and XDG_DATA_HOME put them: outside $HOME,
+    nothing else would cover them."""
+    from .fieldproxy import ledger_dir
+    return list(dict.fromkeys([str(Path.home()), "/mnt", str(key_path().parent), str(ledger_dir()),
+                               os.path.realpath(ledger_dir())]))
+
+
 def rules(worktree: Path, targets: list[Path], *, git_dir: Path | None, venv: Path | None,
           reads: list[str], domains: list[str]) -> Rules:
     wt = str(Path(worktree))
@@ -214,11 +233,7 @@ def rules(worktree: Path, targets: list[Path], *, git_dir: Path | None, venv: Pa
     if transcripts().exists():
         deny_write.append(str(transcripts()))
     allow_read = [wt] + ([str(git_dir)] if git_dir else []) + ([str(venv)] if venv else []) + list(reads)
-    # the approval key's folder and Polarizer's ledger for Field are denied by name too, wherever
-    # XDG_CONFIG_HOME and XDG_DATA_HOME put them: outside $HOME, nothing else would cover them
-    from .fieldproxy import ledger_dir
-    deny_read = list(dict.fromkeys([str(Path.home()), "/mnt", str(key_path().parent), str(ledger_dir()),
-                                    os.path.realpath(ledger_dir())]))
+    deny_read = denied_reads()  # the key's folder and Polarizer's ledger by name too, wherever XDG puts them
     return Rules(allow_write=[wt], deny_write=deny_write, deny_read=deny_read,
                  allow_read=list(dict.fromkeys(allow_read)), domains=list(domains))
 

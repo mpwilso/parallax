@@ -60,6 +60,7 @@ WHY_HUMAN = {  # one short sentence per kind: why code stopped instead of decidi
     "rework": "three reworks didn't satisfy the check, so the plan or the work needs your judgment",
     "checker": "Second Eye failed twice, so nothing has reviewed this change",
     "tests": "the tests couldn't run, which is a setup problem, not Maker's work",
+    "polarizer": "a person approves each tool Field gets through Polarizer, in a terminal, and no code may",
     "guard": "a protected path was touched, and no rule lets code accept that",
     "drafting": "Focus couldn't produce a plan that fits, and only you can restate the work",
     "error": "it stopped on an error nobody planned for",
@@ -208,6 +209,10 @@ def decision(project: Project, task_id: str) -> Decision | None:
         return Decision("checker", "Second Eye failed to answer, twice: try it again?",
                         [RETRY, Option("accept", "accepts it unreviewed, as a risk", True), DROP],
                         "retry", "Ready", item)
+    if stage == "check" and d.get("polarizer") == "approve":  # Field through Polarizer: a person approves its tools
+        return Decision("polarizer", "Polarizer is keeping Field's browser tools back until you approve them: "
+                                     "approve them in your own terminal, then retry?",
+                        [RETRY, REJECT, DROP], "retry", "Ready", item, {"ledger_dir": d.get("ledger_dir") or ""})
     if stage == "check":  # the plan's tests couldn't run
         return Decision("tests", "The plan's tests couldn't run: try again once the cause is fixed?",
                         [RETRY, REJECT, DROP], "retry", "Ready", item)

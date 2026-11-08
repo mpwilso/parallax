@@ -131,7 +131,7 @@ def check_once(project: Project, task_id: str, checker_for: CheckerFor, test_run
             project.ledger.append("check.found", "parallax", why, task=task_id, tree=s.tree, findings=[f"blocker: {why}"])
             return "rework", [f"blocker: {why}"]
         if outcome == "you":
-            return _to_you(project, task_id, "check", why, tree=s.tree), []
+            return _to_you(project, task_id, "check", why, tree=s.tree, **uitest.approval(project, task_id, why)), []
     if reticle.tampered(project, task_id):
         return _to_you(project, task_id, "guard", "Reticle's tests changed after they were recorded", tree=s.tree), []
     changed = uitest.tampered(project, task_id)

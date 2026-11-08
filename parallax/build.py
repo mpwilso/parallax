@@ -22,7 +22,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
-from . import costs, fieldproxy, guard, installs, lifecycle, lint, memcap, outputs, preflight, sandbox, sandboxfail, tools, trust
+from . import costs, fieldproxy, guard, installs, lifecycle, lint, memcap, outputs, preflight, sandbox, sandboxfail, syspython, tools, trust
 from .agents.base import Agent, AgentResult
 from .core import ROOT_ENV, TASK_ENV, ParallaxError, Project, inside_task, refuse_inside_task
 from .gate import Scope, make_permission_fn
@@ -84,22 +84,33 @@ def _setup_venv(project: Project, task_id: str, worktree: Path, home: Path) -> P
     setup may run repo code (a build backend, say), and nothing the maker wrote may ever run as
     you. Running it on the base commit makes that true whatever state the worktree is in, so a
     lost venv can always be made again. The checkout is a real git one, so a version read from git
-    tags works; installs.py makes what setup installed work where the code runs, once it's gone."""
+    tags works; installs.py makes what setup installed work where the code runs, once it's gone.
+
+    A finished venv whose Python the sandbox can't read (one made before 0.7.2, on uv's own Python,
+    like field-demo task 70d1f6's) is made again, on the system Python (syspython.py)."""
     command = project.policy.build["setup"].strip()
     if not command:
         return None
     venv = home / "venv"
-    if installs.ready(venv):
+    stale = syspython.unreadable(venv) if installs.ready(venv) else ""
+    if installs.ready(venv) and not stale:
         return venv
+    replaced = {"replaced": stale} if stale else {}
     trust.check(project, task_id, "the [build] setup command")  # a command from the policy file: never before you've seen it
     shutil.rmtree(venv, ignore_errors=True)  # half built, or not there: setup makes it from nothing
     lacking = tools.for_command(command, WHY_SETUP)
     if lacking:  # named before anything runs, with its fix, never a shell's raw "not found"
         raise tools.MissingTool(lacking)
     started = time.monotonic()
-    out, found = installs.make(command, worktree, project.task(task_id)["base"], venv, home / "setup-base")
+    try:
+        out, found = installs.make(command, worktree, project.task(task_id)["base"], venv, home / "setup-base")
+    except syspython.Unusable as err:  # no venv the sandbox can run: it comes to you, saying what to do
+        if err.ran is not None:
+            project.ledger.append("setup.ran", "parallax", command, task=task_id, exit=err.ran.returncode,
+                                  seconds=round(time.monotonic() - started, 1), unusable=str(err), **replaced)
+        raise ParallaxError(str(err)) from None
     project.ledger.append("setup.ran", "parallax", command, task=task_id, exit=out.returncode,
-                          seconds=round(time.monotonic() - started, 1), **found)
+                          seconds=round(time.monotonic() - started, 1), **found, **replaced)
     if out.returncode != 0:
         lacking = tools.not_found(out.stderr + out.stdout, WHY_SETUP)  # a program a script inside setup runs
         if lacking:

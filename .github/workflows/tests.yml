@@ -47,6 +47,9 @@ jobs:
       - name: The agent SDK, from the claude extra's pinned range, has every name the adapter uses. No model call.
         if: matrix.where == 'the checkout'
         run: uv run --no-project --python 3.12 --with-editable ".[claude]" python scripts/sdk_names.py
+      - name: A Python uv downloaded, which a plain uv venv would prefer, so the venv test has one to avoid
+        # field-demo task 70d1f6: a venv on uv's own Python, under $HOME, which the tests' sandbox can't read
+        run: uv python install --no-bin 3.13   # into uv's own folder only, not onto PATH, as on the machine 70d1f6 ran on
       - name: Chromium for the browser tests, the version scripts/test.sh pins
         run: scripts/test.sh browser
       - name: Lint and the full suite, browser tests included, as scripts/test.sh runs them. No test calls a model.

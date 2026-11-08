@@ -401,6 +401,16 @@ def _reply(text: str) -> dict:
     return data if isinstance(data, dict) else {}
 
 
+def approval(project: Project, task_id: str, why: str) -> dict:
+    """When Field stopped because Polarizer waits for a person to approve its tools: what the card
+    needs, from this attempt's latest uitest.polarizer entry, for exactly this stop. {} otherwise."""
+    runs = [e for e in status.attempt(project.ledger.entries(), task_id) if e["kind"] == "uitest.polarizer"]
+    d = runs[-1]["data"] if runs else {}
+    if not d.get("approve") or d.get("problem") != why:
+        return {}
+    return {"polarizer": "approve", "ledger_dir": d.get("ledger_dir") or ""}
+
+
 def test(project: Project, task_id: str, p, tester_for) -> tuple[str, str]:
     """Run the tester for this attempt. Returns (outcome, why): ok, app (the maker's to fix), or you."""
     cfg = settings(project)
@@ -449,7 +459,7 @@ def test(project: Project, task_id: str, p, tester_for) -> tuple[str, str]:
     common = dict(task=task_id, tree=s.tree, cost_usd=result.cost_usd, model=cfg["model"])
     if routed:  # what Polarizer recorded comes first: it explains anything else that went wrong
         seen = fieldproxy.read_session(route)
-        project.ledger.append("uitest.polarizer", "parallax", seen.problem, task=task_id, tree=s.tree,
+        project.ledger.append("uitest.polarizer", "parallax", seen.problem or seen.summary(), task=task_id, tree=s.tree,
                               **seen.record(route))
         if seen.problem:
             project.ledger.append("uitest.failed", "ui tester", text[-600:] or result.status, app_log=log[-600:], **common)

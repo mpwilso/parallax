@@ -2,6 +2,16 @@
 
 What changed in each release. The full notes for each are on the [releases page](https://github.com/mpwilso/parallax/releases).
 
+## Unreleased
+
+Fixed:
+- Task venvs are built on the system Python. Field-demo task 70d1f6's tests stopped with exit 127, `python: command not found`: its setup's `uv venv` took uv's own Python, so the venv's `bin/python` linked into `~/.local/share/uv/python`, under your home folder, which the tests' sandbox can't read (it lets in only the check copy, the venv, the tests' temp folder and Field's tools). Maker had worked around the same thing with `/usr/bin/python3`. `[build] setup` now runs with uv held to a system Python (`UV_PYTHON_PREFERENCE=only-system`, no downloads), so the same `uv venv "$PARALLAX_VENV"` makes the venv on `/usr/bin/python3`, and Parallax's own setup lines say `uv venv --python /usr/bin/python3`. What the sandbox may read is unchanged. Before a Python setup runs, a missing `/usr/bin/python3`, or one older than the project's `requires-python`, stops the task with what to install. After it, a venv whose Python the sandbox can't read is removed and the task stops saying so, never falling back to uv's Python. A finished venv like 70d1f6's is made again on the next run, so a retry picks up the new one. CI installs a uv-managed Python first, so the new test has one to avoid. Tests: `test_the_venvs_python_resolves_inside_what_the_tests_sandbox_can_read`, which failed before the fix in WSL with the venv on uv's Python 3.13, and `test_a_finished_venv_on_a_python_the_sandbox_cant_read_is_made_again`.
+- When the task stopped for Polarizer's approval, the card asked the generic "The plan's tests couldn't run: try again once the cause is fixed?". It now asks its own question, recommends retry, and gives the next step: run the `polarizer approve` command it shows in a terminal of your own, then `parallax decide <task> retry`. Test: `test_before_anything_is_approved_the_task_stops_for_you_before_field_spends`.
+- That card said Polarizer was keeping "19 of Field's browser tools" back, where `polarizer pending` and its group held 21. It now counts what Polarizer lists, and says which are Field's: "the 19 Field may use (...) and 2 it never gets, which Parallax refuses before they reach Polarizer".
+- The `uitest.polarizer` entry's line in `parallax log` was empty when nothing stopped the run. It now gives the counts, such as `Polarizer: 14 calls, 0 refused, 0 holds`, and still names the problem when there is one.
+- docs/using.md says `polarizer approve` must be run by a person in a real terminal, since it refuses without one, and gives the exact command the card shows.
+- Field's route is pinned to Polarizer 0.6.2, released today (its card wraps long lines; nothing Parallax reads changed): the install line in its error and in docs/using.md, and `scripts/test.sh`, whose real-Polarizer test runs against 0.6.2.
+
 ## 0.7.1 (2026-11-08)
 
 Fixed:

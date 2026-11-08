@@ -226,6 +226,9 @@ def _decision(project: Project, task_id: str, dec, found: list[str], gaps: list[
         hint = sandboxfail.hint(failed, sandboxfail.on_wsl()) if failed else []  # a sandbox that didn't start: the next action
         if dec.kind == "tool":
             hint = [f"Fix: {dec.extra['fix'].rstrip('.')}, then retry."]
+        if dec.kind == "polarizer":  # yours, at a terminal: polarizer approve refuses to run without one
+            hint = [f"Next step: in a terminal of your own, run the polarizer approve command above, then parallax decide "
+                    f"{task_id} retry."]
         found = [f"{why} {cite}"] + [f"{h} {cite}" for h in hint] + list(found)
     elif dec.kind == "stopped":  # your Stop: what it was doing, what it had spent, and that its work is kept
         bottom = "Needs you: you stopped it."

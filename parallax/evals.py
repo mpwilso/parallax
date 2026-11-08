@@ -31,7 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from . import build, fingerprint, installs, lifecycle, lint, pilot, sandbox, status, testrun, tree
+from . import build, fingerprint, installs, lifecycle, lint, pilot, sandbox, status, syspython, testrun, tree
 from .core import POLICY_FILE, ParallaxError, Project
 from .git import out as _git
 
@@ -40,7 +40,7 @@ RESULTS_DIR = Path("evals") / "results"
 MARGIN = 0.10          # of a case's ceiling, kept back for a turn in flight past its cap
 DRAFT_SHARE = 6        # a drafting call may spend at most the ceiling over this: 3 tries of intent and plan
 CASE_TIMEOUT = 2 * 3600
-PYTHON = "/usr/bin/python3"  # the sandbox can read it; a uv-managed Python lives under $HOME, which it can't
+PYTHON = syspython.PYTHON  # the sandbox can read it; a uv-managed Python lives under $HOME, which it can't
 DECISIONS = ("stuck.raised", "disagreement.raised", "review.requested")
 
 Pipeline = Callable[[Project, str], str]  # (the case's scratch project, the work as typed) -> task id

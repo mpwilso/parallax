@@ -4,7 +4,7 @@
 
 const KINDS = {
   ready: "Ready", scope: "Outside the plan", guard: "Protected file", conflict: "Intent vs plan",
-  cap: "Cap reached", rework: "Kept failing", checker: "Second Eye failed", tests: "Tests couldn't run", turns: "Out of turns",
+  cap: "Cap reached", rework: "Kept failing", checker: "Second Eye failed", tests: "Tests couldn't run", polarizer: "Polarizer approval", turns: "Out of turns",
   error: "Error", stuck: "Stopped", flows: "UI test or app?", drafting: "Drafting failed", launch: "Over your launch limit", review: "Plan review",
   split: "Split failed", waiting: "Part on hold",
 };
