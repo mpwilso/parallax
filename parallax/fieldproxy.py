@@ -5,6 +5,10 @@ Playwright MCP server becomes the one upstream of `polarizer serve`, so Polarize
 definitions Field gets and records every call in its own hash-chained ledger. Polarizer is the same
 author's MCP proxy; it's called as a program, like srt and git, never imported.
 
+- Which polarizer: the one on your PATH, then in ~/.local/bin, where `uv tool install` puts it, as
+  `parallax doctor` looks (tools.py). The builder's PATH stays plain (build.scrubbed_env), so launch
+  finds it first, where your PATH is known, and hands the builder its absolute path. A relative PATH
+  entry never counts, and no policy file can name the program.
 - Where it runs: outside the sandbox, as you, started by Field's Claude Code session in place of the
   MCP server. The app, the browser and the MCP server stay inside srt exactly as before: Polarizer's
   upstream is the same memory-capped srt command. Nothing in the sandbox can reach Polarizer's files.
@@ -44,12 +48,14 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import chainverify
+from . import chainverify, tools
 from .core import ParallaxError
 
 SETTING = "polarizer"
-VERSION = "0.6.0"  # the Polarizer release this route was written against; the integration test pins its wheel
+VERSION = "0.6.1"  # the Polarizer release this route was written against; the integration test pins its wheel
 WHEEL = f"https://github.com/mpwilso/polarizer/releases/download/v{VERSION}/polarizer-{VERSION}-py3-none-any.whl"
+INSTALL = f"uv tool install {WHEEL}"
+ENV = "PARALLAX_POLARIZER"  # the polarizer launch found, handed to the builder, whose own PATH stays plain
 PREFIX = "playwright"  # the upstream's prefix: Field's tools arrive as playwright__<tool>
 CLASS = "open-world"
 CONNECT_SECONDS = 20  # Polarizer's longest wait for an upstream: the app must answer within it
@@ -86,10 +92,23 @@ def check_dir(folder: Path) -> Path:
     return real
 
 
+def find(environ: dict | None = None) -> str | None:
+    """Polarizer's absolute path, or None. The builder's PATH (build.scrubbed_env) leaves out
+    ~/.local/bin, where uv tool install puts polarizer, so launch looks it up from your PATH and hands
+    the builder the path in ENV. Without one: your PATH, then the installers' folders, the lookup
+    parallax doctor uses. Only absolute folders count: a "." on PATH never runs a cloned repo's file."""
+    environ = os.environ if environ is None else environ
+    given = environ.get(ENV, "")
+    if os.path.isabs(given) and os.path.isfile(given) and os.access(given, os.X_OK):
+        return given
+    folders = [d for d in tools.path(environ).split(os.pathsep) if os.path.isabs(d)]
+    return shutil.which("polarizer", path=os.pathsep.join(folders))
+
+
 def program() -> str:
-    found = shutil.which("polarizer")
+    found = find()
     if not found:
-        raise RouteError(f"[ui_tester] polarizer is on, but polarizer isn't on PATH. install it: uv tool install {WHEEL}")
+        raise RouteError(f"[ui_tester] polarizer is on, but polarizer isn't on your PATH or in ~/.local/bin. install it: {INSTALL}")
     return found
 
 

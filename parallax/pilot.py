@@ -80,8 +80,9 @@ def draft_until_fit(project: Project, task_id: str, drafter_for) -> str:
             return draft_until_fit(project, task_id, drafter_for)
         plan = _room_for_rework(project, task_id, lifecycle.plan_data(project, task_id))
         from .conductor import scope_problems
-        fit = planfit.problems(lifecycle._read(project, task_id, "intent"), plan,
-                               costs.spent(project, task_id), budgets.policy(project, task_id), _reserve(project, plan))
+        kept = _kept(project, plan)
+        fit = planfit.problems(lifecycle._read(project, task_id, "intent"), plan, costs.spent(project, task_id),
+                               budgets.policy(project, task_id), float(sum(kept.values())), _named(kept))
         fit += scope_problems(project, task_id, plan)  # a part of a split request stays inside its part
         if not fit:
             return "fit"
@@ -109,11 +110,29 @@ def _drafted_before_stop(project: Project, task_id: str) -> set[str]:
     return out
 
 
-def _reserve(project: Project, plan: dict) -> float:
-    """What the cap keeps for Field and Reticle when they'll run: each one's limit."""
+def _kept(project: Project, plan: dict) -> dict[str, float]:
+    """What the cap keeps for Field and Reticle when they'll run, by name: each one's limit, since both
+    spend from the plan's cap."""
     from . import uitest
-    field = float(uitest.settings(project)["max_usd"]) if uitest.applies(project, plan) else 0.0
-    return field + (float(project.policy.reticle["max_usd"]) if project.policy.reticle["enabled"] else 0.0)
+    out = {}
+    if uitest.applies(project, plan):
+        out["Field"] = float(uitest.settings(project)["max_usd"])
+    if project.policy.reticle["enabled"]:
+        out["Reticle"] = float(project.policy.reticle["max_usd"])
+    return out
+
+
+def _reserve(project: Project, plan: dict) -> float:
+    return float(sum(_kept(project, plan).values()))
+
+
+def _listed(items: list[str]) -> str:
+    return ", ".join(items[:-1]) + " and " + items[-1] if len(items) > 1 else "".join(items)
+
+
+def _named(kept: dict[str, float]) -> str:
+    """Each share by name, the way the card says it: Field's $0.50 and Reticle's $0.50."""
+    return _listed([f"{who}'s ${usd:.2f}" for who, usd in kept.items()])
 
 
 def _room_for_rework(project: Project, task_id: str, plan: dict) -> dict:
@@ -128,7 +147,8 @@ def _room_for_rework(project: Project, task_id: str, plan: dict) -> dict:
     intent = lifecycle._read(project, task_id, "intent")
     if lint.budget_of(intent) is not None:
         return plan
-    spent, reserve = costs.spent(project, task_id), _reserve(project, plan)
+    spent, kept = costs.spent(project, task_id), _kept(project, plan)
+    reserve = float(sum(kept.values()))
     rework = planfit.rework_floor(float(plan["estimated_cost_usd"]), spent, reserve)
     size = lint.intent_fields(intent).get("size", "small")
     limit = budgets.limit(project, task_id, size)
@@ -151,11 +171,11 @@ def _room_for_rework(project: Project, task_id: str, plan: dict) -> dict:
     if approved >= max(rework, history):
         why = f"raised the cap from ${cap:.2f} to ${new:.2f}: you approved ${approved:.2f} before this redraft, and a redraft never lowers it"
     elif history > rework:
-        why = (f"raised the cap from ${cap:.2f} to ${new:.2f}: {source} is ${maker:.2f}, plus drafting so far "
-               f"${spent:.2f}" + (f" and Field's ${reserve:.2f}" if reserve else "") + f", needs ${history:.2f}")
+        shares = [f"drafting so far ${spent:.2f}"] + [f"{who}'s ${usd:.2f}" for who, usd in kept.items()]
+        why = f"raised the cap from ${cap:.2f} to ${new:.2f}: {source} is ${maker:.2f}, plus {_listed(shares)}, needs ${history:.2f}"
     else:
-        why = (f"raised the cap from ${cap:.2f} to ${new:.2f}: drafting spent ${spent:.2f}, and the work twice "
-               f"plus any UI tester share needs ${rework:.2f}")
+        why = (f"raised the cap from ${cap:.2f} to ${new:.2f}: drafting spent ${spent:.2f}, and the work twice"
+               + (f" plus {_named(kept)}" if kept else "") + f" needs ${rework:.2f}")
     project.ledger.append("draft.recorded", "parallax", why, task=task_id, doc="plan", sha=lifecycle.file_hash(path),
                           floor="approved" if approved >= max(rework, history) else "history" if history > rework else "rework",
                           maker_floor=maker, floor_from=where)

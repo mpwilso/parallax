@@ -147,6 +147,24 @@ def test_doctor_says_when_it_finds_uv_off_your_path(tmp_path):
     assert c.status == "ok" and c.detail == "git, uv (uv at ~/.local/bin/uv, not on your PATH; parallax finds it there)"
 
 
+def test_doctor_and_parallax_ui_name_polarizer_when_the_route_is_on(tmp_path):
+    """Before any task runs, with its install line, instead of a check that stops on it."""
+    from parallax import fieldproxy
+    from parallax.policy import Policy
+    from test_doctor import machine
+    ui = {"enabled": True, "start": "python3 app.py", "url": "http://127.0.0.1:8765/"}
+    assert "polarizer" not in dict(tools.needed(Policy(ui_tester=ui), "linux"))
+    want = dict(tools.needed(Policy(ui_tester={**ui, "polarizer": True}), "linux"))
+    assert want["polarizer"] == "the [ui_tester] polarizer setting"
+    m = machine(tmp_path, tools=("bwrap", "socat", "srt", "claude", "git", "uv", "python3"))
+    m.needed = tools.needed(Policy(ui_tester={**ui, "polarizer": True}), "linux")
+    c = doctor.check_tools(m)
+    assert c.status == "fail" and c.detail == "missing polarizer"
+    assert c.hint.startswith(f"install it with uv tool install {fieldproxy.WHEEL}. if it's installed already")
+    m.which = lambda b: str(Path.home() / ".local/bin/polarizer") if b == "polarizer" else f"/usr/bin/{b}"
+    assert "polarizer at ~/.local/bin/polarizer, not on your PATH; parallax finds it there" in doctor.check_tools(m).detail
+
+
 # parallax ui -----------------------------------------------------------------------------------------------
 
 def test_parallax_ui_prints_what_is_missing_at_startup_and_the_page_shows_it(repo, monkeypatch, capsys):

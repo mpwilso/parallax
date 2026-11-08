@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tomllib
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -319,7 +320,60 @@ def test_without_polarizer_on_path_field_doesnt_run_and_you_hear_why(routed, mon
     monkeypatch.setattr(uitest, "TESTER", lambda *a: pytest.fail("Field ran without its Polarizer"))
     tid, status = pilot(routed, None, None)
     assert status == "disputed"
-    assert "polarizer isn't on PATH" in kinds(routed, "disagreement.raised", tid)[-1]["reason"]
+    reason = kinds(routed, "disagreement.raised", tid)[-1]["reason"]
+    assert "polarizer isn't on your PATH or in ~/.local/bin" in reason and f"uv tool install {fieldproxy.WHEEL}" in reason
+
+
+# where polarizer is found ------------------------------------------------------------------------------------
+
+def _installed(folder: Path) -> Path:
+    exe = folder / "polarizer"
+    exe.parent.mkdir(parents=True, exist_ok=True)
+    exe.write_text("#!/bin/sh\nexit 0\n")
+    exe.chmod(0o755)
+    return exe
+
+
+def _launched(project, tmp_path) -> dict:
+    """The environment launch starts the builder with."""
+    seen: dict = {}
+    p = SimpleNamespace(venv=None, task={"task": "t1"}, home=tmp_path, left=1.0, settings=tmp_path / "settings.json")
+    build.launch(project, p, spawn=lambda argv, env, cwd, log: seen.update(env) or 9)
+    return seen
+
+
+@pytest.mark.parametrize("where", ["~/.local/bin, on your PATH", "~/.local/bin, not on your PATH", "another folder on your PATH"])
+def test_the_builder_finds_the_polarizer_you_installed_though_its_path_is_plain(routed, tmp_path, monkeypatch, where):
+    """70d1f6 (field-demo, 2026-11-08): uv tool install put polarizer in ~/.local/bin, which your shells and
+    parallax ui find. But the builder starts with build.scrubbed_env's plain PATH (the venv, the system
+    folders, the sandbox tools' folders), so its lookup found nothing and the check stopped with "polarizer
+    isn't on PATH". Here the lookup runs in a real process with the environment launch gives the builder."""
+    home = tmp_path / "you"
+    monkeypatch.setenv("HOME", str(home))
+    folder = tmp_path / "opt" / "bin" if where.startswith("another") else home / ".local" / "bin"
+    exe = _installed(folder)
+    monkeypatch.setenv("PATH", ("" if "not on" in where else f"{folder}:") + "/usr/bin:/bin")
+    env = _launched(routed, tmp_path)
+    out = subprocess.run([sys.executable, "-P", "-c", "from parallax import fieldproxy; print(fieldproxy.program())"],
+                         env=env, cwd=routed.root, capture_output=True, text=True, timeout=60)
+    assert (out.returncode, out.stdout.strip()) == (0, str(exe)), out.stderr
+    assert env["PATH"] == build.scrubbed_env(None)["PATH"]  # found without widening the builder's PATH
+
+
+def test_with_the_route_off_launch_never_looks_and_no_relative_path_entry_counts(repo, tmp_path, monkeypatch):
+    """A cloned repo can turn the route on, but never chooses the program: a polarizer inside it, found
+    through a relative PATH entry such as ".", is never the one that runs as you."""
+    (repo / POLICY_FILE).write_text(UI_POLICY)
+    make_key()
+    project = Project.init(repo)
+    monkeypatch.setenv("HOME", str(tmp_path / "you"))
+    _installed(repo)
+    monkeypatch.chdir(repo)
+    monkeypatch.setenv("PATH", ".:/usr/bin:/bin")
+    assert fieldproxy.ENV not in _launched(project, tmp_path)
+    assert fieldproxy.find() is None
+    monkeypatch.setenv(fieldproxy.ENV, "polarizer")  # only an absolute path to a program is taken from it
+    assert fieldproxy.find() is None
 
 
 def test_the_ledger_is_never_inside_parallaxs_folders(monkeypatch, tmp_path):

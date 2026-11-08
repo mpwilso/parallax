@@ -22,7 +22,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
-from . import costs, guard, installs, lifecycle, lint, memcap, outputs, preflight, sandbox, sandboxfail, tools, trust
+from . import costs, fieldproxy, guard, installs, lifecycle, lint, memcap, outputs, preflight, sandbox, sandboxfail, tools, trust
 from .agents.base import Agent, AgentResult
 from .core import ROOT_ENV, TASK_ENV, ParallaxError, Project, inside_task, refuse_inside_task
 from .gate import Scope, make_permission_fn
@@ -187,9 +187,14 @@ def _spawn(argv: list[str], env: dict, cwd: Path, log: Path) -> int:
 def launch(project: Project, p: Prepared, spawn: Callable | None = None, mode: str = "build") -> int:
     """Start the builder in the background with a scrubbed environment. Returns its pid.
 
-    mode: "build" builds, then checks; "check" only checks what's already built."""
+    mode: "build" builds, then checks; "check" only checks what's already built. With Field's route on,
+    the polarizer found here, on your PATH or in ~/.local/bin, goes to the builder by its path: the
+    builder's PATH stays plain (fieldproxy.find)."""
     argv = [sys.executable, "-P", "-u", "-m", "parallax.build", str(project.root), p.task["task"], mode]
-    pid = (spawn or _spawn)(argv, scrubbed_env(p.venv), project.root, p.home / "build.log")
+    env = scrubbed_env(p.venv)
+    if fieldproxy.on(project.policy.ui_tester) and (exe := fieldproxy.find()):
+        env[fieldproxy.ENV] = exe
+    pid = (spawn or _spawn)(argv, env, project.root, p.home / "build.log")
     project.ledger.append("build.started", "parallax", "", task=p.task["task"], pid=pid,
                           budget_usd=None if p.left == float("inf") else p.left,  # None: budget mode none
                           settings=str(p.settings), mode=mode)

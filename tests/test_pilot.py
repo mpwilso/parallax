@@ -356,6 +356,33 @@ def test_a_low_estimate_is_raised_to_what_maker_has_really_spent(proj, monkeypat
     assert raised["data"]["sha"] == lifecycle.file_hash(lifecycle.doc_path(proj, tid, "plan"))  # the approved file holds it
 
 
+def test_the_raised_cap_names_each_share_it_keeps(repo, monkeypatch):
+    """field-demo, 2026-11-08: the card said "Field's $1.00" where [ui_tester] max_usd is $0.50. The
+    $1.00 was right, each one's limit: Field's $0.50 and Reticle's $0.50, both spent from this cap.
+    Only the name was wrong, and with Field not running at all the card still said Field's."""
+    (repo / POLICY_FILE).write_text("[reticle]\nenabled = true\nmax_usd = 0.5\n")
+    make_key()
+    proj = Project.init(repo)
+    monkeypatch.setattr(build, "_spawn", lambda *a: 9)
+    past_tasks(proj, [0.4, 0.9, 1.2, 1.6, 2.4, 0.5])
+    tid = pilot.intake(proj, WANT)["task"]
+    assert pilot.draft_until_fit(proj, tid, FakeDrafter({**docs(), "plan": LOW})) == "fit"
+    [raised] = [e for e in kinds(proj, "draft.recorded") if e["actor"] == "parallax"]
+    assert raised["reason"] == ("raised the cap from $0.70 to $3.10: Maker's 90th-percentile spend over this repo's "
+                                "6 small tasks is $2.40, plus drafting so far $0.20 and Reticle's $0.50, needs $3.10")
+    from test_ui_tester import UI_POLICY
+    (repo / POLICY_FILE).write_text(UI_POLICY + "max_usd = 0.5\n[reticle]\nenabled = true\nmax_usd = 0.5\n")
+    proj.reload_policy()
+    kept = pilot._kept(proj, {"user_flows": [1]})
+    assert kept == {"Field": 0.5, "Reticle": 0.5} and pilot._reserve(proj, {"user_flows": [1]}) == 1.0
+    assert pilot._named(kept) == "Field's $0.50 and Reticle's $0.50"
+    assert pilot._listed(["drafting so far $0.10", "Field's $0.50", "Reticle's $0.50"]) == \
+        "drafting so far $0.10, Field's $0.50 and Reticle's $0.50"
+    assert planfit.problems(docs()["intent"], {**lint.plan_block(docs()["plan"])[0], "estimated_cost_usd": 0.55,
+                                               "budget_cap_usd": 1.32}, 0.22, proj.policy.budget, reserve=1.0,
+                            reserved=pilot._named(kept))[0].endswith("plus Field's $0.50 and Reticle's $0.50)")
+
+
 def test_a_repo_with_no_history_uses_the_policy_default(repo, monkeypatch):
     (repo / POLICY_FILE).write_text("[budget]\nsmall_floor_usd = 1.5\n")
     make_key()

@@ -35,7 +35,8 @@ def rework_floor(estimate: float, spent: float, reserve: float = 0.0) -> float:
     return round(spent + 2 * estimate + reserve, 2)
 
 
-def problems(intent: str, plan: dict, spent: float, budget_policy: dict, reserve: float = 0.0) -> list[str]:
+def problems(intent: str, plan: dict, spent: float, budget_policy: dict, reserve: float = 0.0,
+             reserved: str = "") -> list[str]:
     out = []
     scope = lint.scope_of(intent)
     for path in [*plan["files"], *plan["tests"]]:
@@ -68,7 +69,8 @@ def problems(intent: str, plan: dict, spent: float, budget_policy: dict, reserve
                    f"${limit:.2f}. estimate at most ${most:.2f}, or plan less work")
     elif spent < cap < floor:
         out.append(f"the cap (${cap:.2f}) leaves no room for a rework round: make it at least ${floor:.2f} "
-                   f"(drafting so far, plus twice the estimate" + (", plus Field's share)" if reserve else ")"))
+                   f"(drafting so far, plus twice the estimate"
+                   + (f", plus {reserved or 'what the cap keeps for Field and Reticle'})" if reserve else ")"))
     if cap > limit:
         out.append(f"the cap (${cap:.2f}) is over the policy's ${limit:.2f} for a {size} task")
     return out

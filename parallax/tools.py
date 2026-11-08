@@ -6,7 +6,8 @@ a task. So Parallax also looks where the installers put their programs: ~/.local
 Code and Parallax itself all install there) and ~/.cargo/bin (where older uv installers went).
 Those folders go after your PATH, never before, so they never shadow a program your PATH finds.
 Only commands that already run as you get that PATH; Maker's stays the scrubbed one in build.py,
-and the sandbox lets Maker write only its worktree, never these folders.
+and the sandbox lets Maker write only its worktree, never these folders. Polarizer, which Field's
+route runs as you, is found the same way and handed to the builder by its path (fieldproxy.find).
 
 Whatever is still missing is named, with its fix, before any task runs: by `parallax doctor`, and by
 `parallax ui` at startup and on its page. A build that hits one anyway stops with the same words.
@@ -47,12 +48,20 @@ class Missing:
     def fix(self) -> str:
         if self.tool in SANDBOX:
             return f"install the sandbox tools as in README.md's Setup step 1. if {self.tool} is installed already, {RESTART}"
-        how = f"install it with {INSTALL[self.tool]}" if self.tool in INSTALL else f"install {self.tool}"
+        line = _install(self.tool)
+        how = f"install it with {line}" if line else f"install {self.tool}"
         return f"{how}. if it's installed already, {RESTART}"
 
     @property
     def message(self) -> str:
         return f"{self.text}. fix: {self.fix}."
+
+
+def _install(tool: str) -> str | None:
+    if tool == "polarizer":  # the release Field's route is written against
+        from .fieldproxy import INSTALL as POLARIZER
+        return POLARIZER
+    return INSTALL.get(tool)
 
 
 class MissingTool(Exception):
@@ -126,6 +135,8 @@ def needed(policy=None, platform: str | None = None) -> list[tuple[str, str]]:
         out += [(t, "the [build] setup command") for t in commands(policy.build["setup"])]
         if policy.ui_tester["enabled"]:
             out += [(t, "the [ui_tester] start command") for t in commands(policy.ui_tester["start"])]
+            if policy.ui_tester.get("polarizer") is True:  # Field's route (fieldproxy.py)
+                out.append(("polarizer", "the [ui_tester] polarizer setting"))
         out += [(t, "the [merge] test_command") for t in commands(policy.merge["test_command"])]
     first: dict[str, str] = {}
     for tool, why in out:  # the policy's reason is the more useful one: it names what you set
