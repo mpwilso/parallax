@@ -60,6 +60,11 @@ def write(project: Project, task_id: str, files: list[str], plan: dict) -> str:
         f"(find it with git log --grep 'Parallax-Task: {task_id}').",
     ]
     details += [f"Known risks (agent-written, from Second Eye): {f}" for f in findings]
+    routed = [e for e in entries if e["kind"] == "uitest.polarizer" and not e["data"].get("problem")]
+    if routed:  # Field's browser calls went through Polarizer: where its own record of them is
+        r = routed[-1]["data"]
+        details.append(f"Field's browser calls: {r['calls']} through Polarizer, recorded in its ledger at {r['ledger_dir']} "
+                       f"(chain {r['chain_id']}, seq {r['first_seq']} to {r['last_seq']}; ledger {routed[-1]['id']}).")
 
     title = lint.intent_fields(lifecycle.doc_path(project, task_id, "intent").read_text(encoding="utf-8")).get("title", "")
     bottom = lint.one_sentence(f"Task {task_id}, {title}, was accepted as the exact tree Second Eye reviewed")

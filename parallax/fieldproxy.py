@@ -1,0 +1,291 @@
+"""Field's browser calls through Polarizer, when you turn it on: `polarizer = true` in [ui_tester].
+
+Off by default; without the setting nothing here runs and Field is exactly as before. On, Field's
+Playwright MCP server becomes the one upstream of `polarizer serve`, so Polarizer pins the tool
+definitions Field gets and records every call in its own hash-chained ledger. Polarizer is the same
+author's MCP proxy; it's called as a program, like srt and git, never imported.
+
+- Where it runs: outside the sandbox, as you, started by Field's Claude Code session in place of the
+  MCP server. The app, the browser and the MCP server stay inside srt exactly as before: Polarizer's
+  upstream is the same memory-capped srt command. Nothing in the sandbox can reach Polarizer's files.
+- Its ledger: one folder for every Field run on this machine, `polarizer-field` beside Parallax's
+  data folder (~/.local/share/polarizer-field), so the tool definitions you approve once stay
+  approved. Never inside ~/.local/share/parallax or ~/.config/parallax, which Polarizer refuses, and
+  never somewhere a policy file names: a cloned repo can turn the route on, but can't point it.
+- The config: written by Parallax for each run, in the task's data folder, with a run id in a comment
+  so this run's session is the one whose config hash matches. Every browser tool Field may use is
+  classed open-world (its answers are page text from the app, outside input), so no call of Field's
+  is held by Polarizer's rules; the tools Field may not use stay unclassified and are refused before
+  they reach Polarizer.
+- The stops: nothing is retried and `--no-holds` is never passed. When nothing of Field's is
+  approved yet, or a definition waits, Polarizer first lists the server's tools with its input
+  closed, and the task stops for you with the commands to approve them, before Field spends
+  anything. After a run, Parallax
+  verifies Polarizer's ledger (parallax/chainverify.py) and reads this run's session: a definition
+  waiting for approval or changed since, a held call, a refused call, or no call at all stops the task
+  for you, naming it. A held call waits in Polarizer for `polarizer allow` or `deny` until Polarizer's
+  own timeout, then is refused; either way the task stops for you afterwards.
+- The record: one `uitest.polarizer` ledger entry per run, naming Polarizer's ledger folder, its chain,
+  this run's session and seqs, and its calls, so what Field touched can be found and checked later.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import tomllib
+import uuid
+from dataclasses import dataclass
+from pathlib import Path
+
+from . import chainverify
+from .core import ParallaxError
+
+SETTING = "polarizer"
+VERSION = "0.6.0"  # the Polarizer release this route was written against; the integration test pins its wheel
+WHEEL = f"https://github.com/mpwilso/polarizer/releases/download/v{VERSION}/polarizer-{VERSION}-py3-none-any.whl"
+PREFIX = "playwright"  # the upstream's prefix: Field's tools arrive as playwright__<tool>
+CLASS = "open-world"
+CONNECT_SECONDS = 20  # Polarizer's longest wait for an upstream: the app must answer within it
+LIST_SECONDS = 150  # the listing pass: the app's start, the connect, and Polarizer's own shutdown
+
+
+class RouteError(ParallaxError):
+    """Polarizer can't take Field's calls here. Not the maker's to fix: it comes to you."""
+
+
+def on(settings: dict) -> bool:
+    return settings.get(SETTING) is True
+
+
+def ledger_dir() -> Path:
+    return Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "polarizer-field"
+
+
+def forbidden() -> list[Path]:
+    """Where Polarizer's ledger must never be: Parallax's runtime and config folders, both where
+    Polarizer looks for them and where this machine's XDG settings put them."""
+    from .approvals import config_home
+    from .sandbox import data_home
+    home = Path.home()
+    return [home / ".local" / "share" / "parallax", home / ".config" / "parallax", data_home(), config_home() / "parallax"]
+
+
+def check_dir(folder: Path) -> Path:
+    real = Path(os.path.realpath(folder))
+    for bad in forbidden():
+        b = Path(os.path.realpath(bad))
+        if real == b or real.is_relative_to(b):
+            raise RouteError(f"Polarizer's ledger for Field would be inside {b}, where Polarizer must not write")
+    return real
+
+
+def program() -> str:
+    found = shutil.which("polarizer")
+    if not found:
+        raise RouteError(f"[ui_tester] polarizer is on, but polarizer isn't on PATH. install it: uv tool install {WHEEL}")
+    return found
+
+
+def tool_prefix(routed: bool) -> str:
+    """How Field's browser tools are named to its Claude Code session."""
+    return f"mcp__playwright__{PREFIX}__" if routed else "mcp__playwright__"
+
+
+def _toml(value) -> str:
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=False).replace("\x7f", "\\u007f")  # a JSON string is a TOML basic string
+    if isinstance(value, list):
+        return "[" + ", ".join(_toml(v) for v in value) + "]"
+    if isinstance(value, dict):
+        return "{ " + ", ".join(f"{_toml(str(k))} = {_toml(v)}" for k, v in value.items()) + " }"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(int(value))
+
+
+def config_text(server: dict, folder: Path, tools, run_id: str) -> str:
+    """polarizer.toml for one run: the ledger folder, and the MCP server as its one upstream."""
+    lines = [f"# Written by Parallax for one Field run ({run_id}). Field's browser server is the one upstream.",
+             f"ledger_dir = {_toml(str(folder))}", "",
+             f"[upstream.{PREFIX}]",
+             f"command = {_toml(server['command'])}",
+             f"args = {_toml(list(server['args']))}",
+             f"env = {_toml(dict(server.get('env') or {}))}",
+             f"connect_timeout_seconds = {CONNECT_SECONDS}", "",
+             f"[upstream.{PREFIX}.tools]"]
+    lines += [f"{tool} = {{ class = {_toml(CLASS)} }}" for tool in sorted(tools)]
+    text = "\n".join(lines) + "\n"
+    parsed = tomllib.loads(text)  # written by hand, so read back before Polarizer sees it
+    up = parsed["upstream"][PREFIX]
+    if (up["command"], up["args"], up["env"]) != (server["command"], list(server["args"]), dict(server.get("env") or {})):
+        raise RouteError("couldn't write Polarizer's config for Field: it didn't read back the same")
+    return text
+
+
+@dataclass
+class Route:
+    server: dict  # what Field's session starts in place of the MCP server
+    config: Path
+    sha: str  # the config file's sha256, which Polarizer records in session.started
+    ledger: Path
+    run_id: str
+    tools: frozenset = frozenset()  # the browser tools Field may use: the ones whose approval matters
+
+
+def route(server: dict, home: Path, tools) -> Route:
+    """Put the MCP server behind `polarizer serve`. Raises RouteError when it can't run here."""
+    exe = program()
+    folder = check_dir(ledger_dir())
+    run_id = uuid.uuid4().hex[:12]
+    cfg = home / "polarizer.toml"
+    data = config_text(server, folder, tools, run_id).encode()
+    cfg.write_bytes(data)
+    # HOME is yours: Polarizer finds the folders it must refuse from it
+    routed = {"command": exe, "args": ["serve", "--config", str(cfg)], "env": {"HOME": str(Path.home())}}
+    return Route(routed, cfg, hashlib.sha256(data).hexdigest(), folder, run_id, frozenset(tools))
+
+
+# reading Polarizer's ledger --------------------------------------------------------------------------
+
+@dataclass
+class Session:
+    problem: str  # empty: nothing for you
+    chain_id: str | None = None
+    sessions: tuple[str, ...] = ()
+    first_seq: int | None = None
+    last_seq: int | None = None
+    head: str | None = None
+    calls: int = 0
+    refused: int = 0
+    holds: int = 0
+    pending: tuple[str, ...] = ()
+    version: str | None = None
+
+    def record(self, r: Route) -> dict:
+        """The uitest.polarizer entry's data."""
+        return {"ledger_dir": str(r.ledger), "config_sha256": r.sha, "run": r.run_id, "chain_id": self.chain_id,
+                "sessions": list(self.sessions), "first_seq": self.first_seq, "last_seq": self.last_seq,
+                "head": self.head, "calls": self.calls, "refused": self.refused, "holds": self.holds,
+                "pending": list(self.pending), "polarizer_version": self.version, "problem": self.problem}
+
+
+def _approve_steps(folder: Path) -> str:
+    return (f"read them with polarizer pending --ledger-dir {folder}, approve them with polarizer approve "
+            f"--ledger-dir {folder} --group <the group id it prints> (and any it flags, by name), then retry")
+
+
+def read_session(r: Route, lock_wait: float = 10.0, listing: bool = False) -> Session:
+    """This run's sessions in Polarizer's ledger, once the whole chain verifies. listing: the pass
+    that only lists the tools, where no call is expected."""
+    folder = r.ledger
+    if not (folder / "ledger.jsonl").exists():
+        return Session(f"Polarizer never started for Field: there is no ledger at {folder}. "
+                       f"run polarizer serve --config {r.config} < /dev/null to see why")
+    try:
+        verdict, data = chainverify.read(folder / "ledger.jsonl", folder / "ledger.head", lock_wait=lock_wait)
+    except TimeoutError as err:
+        return Session(f"couldn't read Polarizer's ledger for Field: {err}")
+    if verdict.status == "empty":
+        return Session(f"Polarizer never started for Field: its ledger at {folder} is empty")
+    if not verdict.ok:
+        return Session(f"Polarizer's ledger for Field doesn't verify: {verdict.text()}. "
+                       f"run polarizer verify --ledger-dir {folder}", chain_id=verdict.chain_id)
+    entries = chainverify.entries(data)
+    starts = [e for e in entries if e["kind"] == "session.started" and e["data"].get("config_sha256") == r.sha]
+    base = Session("", chain_id=verdict.chain_id, head=verdict.head)
+    if not starts:
+        base.problem = (f"Polarizer didn't start Field's session: its ledger has no session for this run's config. "
+                        f"run polarizer serve --config {r.config} < /dev/null to see why")
+        return base
+    ids = {e["data"]["session"] for e in starts}
+    mine = [e for e in entries if e["seq"] >= starts[0]["seq"] and e["data"].get("session") in ids]
+    sent = {e["seq"] for e in mine if e["kind"] == "call.sent"}
+    returned = [e for e in entries if e["kind"] == "call.returned" and e["data"].get("call_seq") in sent]
+    seqs = [e["seq"] for e in mine + returned]
+    base.sessions = tuple(sorted(ids))
+    base.first_seq, base.last_seq = min(seqs), max(seqs)
+    base.version = starts[-1]["data"].get("polarizer_version")
+    base.calls = len(sent)
+    refused = [e for e in mine if e["kind"] == "call.refused"]
+    held = [e for e in mine if e["kind"] == "hold.created"]
+    base.refused, base.holds = len(refused), len(held)
+    state = decisions(entries, r.tools)
+    waiting = sorted(t for t, st in state.items() if st in ("new", "unservable"))
+    changed = sorted(t for t, st in state.items() if st == "changed")
+    base.pending = tuple(waiting + changed)
+    if changed:
+        base.problem = (f"Polarizer hid Field's browser tools that changed since you approved them ({', '.join(changed)}): "
+                        + _approve_steps(folder))
+    elif waiting:
+        base.problem = (f"Polarizer is keeping {len(waiting)} of Field's browser tools back until you approve them "
+                        f"({', '.join(waiting[:5])}{', ...' if len(waiting) > 5 else ''}): " + _approve_steps(folder))
+    elif held:
+        tools = sorted({e["data"].get("tool", "") for e in held})
+        base.problem = (f"Polarizer held {len(held)} of Field's browser calls for a person ({', '.join(tools)}). "
+                        f"nothing was retried. see them with polarizer holds --ledger-dir {folder}, then retry")
+    elif refused:
+        why = refused[0]["data"].get("reason", "")
+        base.problem = f"Polarizer refused {len(refused)} of Field's browser calls (first: {why}). nothing was retried"
+    elif not sent and (not listing or not any(e["kind"] == "upstream.connected" and e["seq"] > starts[0]["seq"]
+                                              and e["data"].get("prefix") == PREFIX and not e["data"].get("error")
+                                              for e in entries)):
+        failed = [e["data"]["error"] for e in entries if e["kind"] == "upstream.connected" and e["seq"] > starts[0]["seq"]
+                  and e["data"].get("prefix") == PREFIX and e["data"].get("error")]
+        base.problem = (("Polarizer couldn't list Field's browser tools: " if listing else
+                         "none of Field's browser calls reached Polarizer: ")
+                        + (f"its browser server didn't connect ({failed[0]})" if failed else
+                           f"its browser server may not have connected within {CONNECT_SECONDS} s, Polarizer's longest wait")
+                        + f". see polarizer verify --ledger-dir {folder}")
+    return base
+
+
+def decisions(entries: list[dict], tools) -> dict[str, str]:
+    """Where each of Field's tools stands in Polarizer's ledger, from its latest decision and what serve
+    saw since (PIN-SPEC.md, section 3): approved, rejected, new (seen, no decision covers it), changed
+    (a new definition since the approval), or unservable. A tool serve never listed isn't here."""
+    state: dict[str, str] = {}
+    after = {"tool.approved": "approved", "tool.rejected": "rejected", "tool.seen": "new", "tool.drift": "changed",
+             "tool.unservable": "unservable"}
+    for e in entries:
+        d = e["data"]
+        if e["kind"] in after and d.get("upstream") == PREFIX and d.get("tool") in tools:
+            state[d["tool"]] = after[e["kind"]]
+    return state
+
+
+def needs_listing(r: Route) -> bool:
+    """Nothing of Field's approved yet, or something waiting: list first. Read with no lock, since a
+    wrong guess only decides whether the listing pass runs."""
+    path = r.ledger / "ledger.jsonl"
+    if not path.exists():
+        return True
+    verdict, data = chainverify.read(path)
+    if verdict.status not in ("intact", "torn tail"):
+        return False  # read_session, after the run, says what's wrong with it
+    state = decisions(chainverify.entries(data), r.tools)
+    return "approved" not in state.values() or any(st in ("new", "changed", "unservable") for st in state.values())
+
+
+LISTER = None  # tests replace this; None runs the real `polarizer serve` with its input closed
+
+
+def listing_pass(r: Route) -> Session | None:
+    """Before a run with nothing of Field's approved, or a definition waiting: serve with its input
+    closed lists the server's tools and exits, so the task stops for your approval before Field
+    spends anything. Returns the session read afterwards, or None when there was nothing to do."""
+    if not needs_listing(r):
+        return None
+    run = LISTER or _list
+    run(r)
+    return read_session(r, listing=True)
+
+
+def _list(r: Route) -> None:
+    try:
+        subprocess.run([r.server["command"], *r.server["args"]], stdin=subprocess.DEVNULL, capture_output=True,
+                       timeout=LIST_SECONDS, env={**os.environ, **r.server["env"]})
+    except subprocess.TimeoutExpired:
+        pass  # read_session says what the ledger shows

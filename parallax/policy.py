@@ -101,12 +101,17 @@ max_parallel = 2               # the most parts of one request that work at once
 LOCAL_URL = re.compile(r"^http://(127\.0\.0\.1|localhost):\d+(/|$)")
 
 
+UI_TESTER_OPTIONAL = ("polarizer",)  # off unless set; absent, the settings are exactly as before (parallax/fieldproxy.py)
+
+
 def _ui_tester(cfg: dict) -> dict:
-    if set(cfg) - set(DEFAULT_UI_TESTER):
-        raise ValueError(f"unknown [ui_tester] settings: {sorted(set(cfg) - set(DEFAULT_UI_TESTER))}")
+    if set(cfg) - set(DEFAULT_UI_TESTER) - set(UI_TESTER_OPTIONAL):
+        raise ValueError(f"unknown [ui_tester] settings: {sorted(set(cfg) - set(DEFAULT_UI_TESTER) - set(UI_TESTER_OPTIONAL))}")
     out = {**DEFAULT_UI_TESTER, **cfg}
     if not isinstance(out["enabled"], bool):
         raise ValueError("[ui_tester] enabled must be true or false")
+    if "polarizer" in out and not isinstance(out["polarizer"], bool):
+        raise ValueError("[ui_tester] polarizer must be true or false: true runs Field's browser server behind polarizer serve")
     for key in ("start", "url", "model"):
         if not isinstance(out[key], str):
             raise ValueError(f"[ui_tester] {key} must be text")

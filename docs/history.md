@@ -25,6 +25,8 @@ How Parallax got here, milestone by milestone. The design notes behind each step
 - **M15 (2026-11-06):** the light conductor. Focus may split a request into parts, checked by code; each part is a task of its own, up to two at a time, parts that touch the same files in turn on the earlier one's accepted commit, and one question only when their caps together pass `auto_launch_usd`. Its live run split and launched two parts together, then stopped at a question that was the owner's: [conductor-runs.md](conductor-runs.md).
 - **M16 (2026-11-07):** stats. `parallax stats` adds, from the ledger only, the first-pass rate, rework cycles per task with the tasks that hit the cap, and how long each task waited on you and worked without you, per task and per split request ([using.md](using.md#stats)). Eval results so far: [evals.md](evals.md).
 
+- **Polarizer adoption (2026-11-07):** `parallax verify <path>` checks a hash-chained ledger in Parallax's own format (v0) or Polarizer's (v1), with Polarizer's conformance fixtures in `conformance/`, copied unchanged, and every verdict they record matched. Field's browser server can run behind `polarizer serve`, off by default ([using.md](using.md#field-through-polarizer)). Tested without a model and, for the config, against the real Polarizer 0.6.0; the one real task through it hasn't been run.
+
 ## The first design (Milestones 1 to 6)
 
 Parallax started as a permission layer: a maker worked a task straight from its goal, every

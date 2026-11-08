@@ -105,7 +105,10 @@ def main(argv: list[str] | None = None) -> int:
 
     lg = sub.add_parser("log", help="show the ledger")
     lg.add_argument("-n", type=int, default=20)
-    sub.add_parser("verify", help="check the ledger hasn't been edited")
+    vf = sub.add_parser("verify", help="check the ledger hasn't been edited")
+    vf.add_argument("ledger", nargs="?", help="another hash-chained ledger to check instead: a file, v0 (Parallax's) or v1 "
+                    "(Polarizer's), or a Polarizer ledger folder. leave it out to check this repo's")
+    vf.add_argument("--head", help="with a ledger file: its ledger.head file, checked with it")
 
     args = p.parse_args(argv)
     sys.stdout.reconfigure(errors="replace")  # agent text can hold characters the console can't show
@@ -123,6 +126,11 @@ def _run(args) -> int:
 
     if args.cmd == "lint":
         return _lint(Path(args.file), cwd)
+
+    if args.cmd == "verify" and args.ledger:
+        return _verify_file(Path(args.ledger), Path(args.head) if args.head else None)
+    if args.cmd == "verify" and args.head:
+        raise ParallaxError("--head goes with a ledger file: parallax verify <file> --head <file>")
 
     if args.cmd == "init":
         already = (cwd / "parallax.policy.toml").exists() and (cwd / ".parallax").exists()
@@ -330,6 +338,22 @@ def _run(args) -> int:
         print(msg)
         return 0 if ok else 1
     return 1
+
+
+def _verify_file(path: Path, head: Path | None) -> int:
+    """Any ledger in either format, outside a project too (parallax/chainverify.py). Reads only."""
+    from . import chainverify
+    ledger, head = chainverify.target(path, head)
+    if not ledger.is_file():
+        raise ParallaxError(f"no ledger at {ledger}")
+    if head is not None and not head.exists() and not path.is_dir():
+        raise ParallaxError(f"no head file at {head}")
+    try:
+        verdict, _ = chainverify.read(ledger, head)
+    except OSError as err:
+        raise ParallaxError(f"couldn't read {ledger}: {err.strerror or err}") from err
+    print(verdict.text())
+    return 0 if verdict.ok else 1
 
 
 def _eval(proj: Project, args) -> int:

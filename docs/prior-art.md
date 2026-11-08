@@ -1,7 +1,7 @@
 # Prior art
 
 Open-source projects and published work Parallax learned from, and where it differs. Ideas only;
-no code, names or UI copied.
+no code, names or UI copied, apart from one folder of test data, `conformance/`, named in the table.
 
 | Source | The idea | Where Parallax differs |
 |---|---|---|
@@ -13,6 +13,7 @@ no code, names or UI copied.
 | SWE-bench | Scoring a fix by the tests from the merged pull request, hidden from the agent | Also measured the blind checker's catches, misses and false alarms |
 | The AI-native SDLC playbook | Files as the hand-off between stages; humans own the judgment calls | Drafting and launch run without you; you make one call per task |
 | impeccable | A design critique and audit method | Used to review Parallax's own UI. The product schema file written for that audit, docs/PRODUCT.md, was removed after it; git history keeps it |
+| Polarizer (the same author's MCP proxy) | A portable hash-chained ledger format (v1) with a conformance suite; pinning an MCP server's tool definitions and holding risky calls | Parallax's verifier is its own code, written from Polarizer's LEDGER-SPEC.md, and checks Parallax's v0 chain too. `conformance/` is Polarizer's fixtures, copied unchanged as test data at the owner's direction, the one copied folder in the repo; Parallax never runs its two scripts. Field can run its browser server behind Polarizer, called as a program |
 | Playwright, Playwright MCP | Driving a real browser from tests and from an agent | The UI tester runs the browser inside the sandbox, blind to the code |
 
 ## Sources
@@ -27,4 +28,5 @@ no code, names or UI copied.
 - SWE-bench: https://www.swebench.com
 - The AI-native SDLC playbook: https://claude.com/blog/the-ai-native-sdlc-playbook
 - impeccable: https://github.com/pbakaus/impeccable
+- Polarizer: https://github.com/mpwilso/polarizer (LEDGER-SPEC.md and conformance/ at 700498a)
 - Playwright: https://github.com/microsoft/playwright; Playwright MCP: https://github.com/microsoft/playwright-mcp

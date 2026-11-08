@@ -90,7 +90,7 @@ I designed Parallax and directed its build; Claude Code wrote most of the code u
 
 ## The other tools
 
-This is one of six tools. Three run in order: [Loupe](https://github.com/mpwilso/loupe) writes the story, Parallax builds it in a sandbox and keeps the record, and [ISR](https://github.com/mpwilso/isr) tells the person accepting it what is left to check. Three stand alone: [Polarizer](https://github.com/mpwilso/polarizer) holds an agent's risky tool calls until a person approves them, [Mordecai](https://github.com/mpwilso/mordecai) judges whether a Claude skill helps, and [Max Q](https://github.com/mpwilso/Project-Max-Q) ranks job postings against a profile. Each runs on its own. The three were run in order once, on one change: [ISR's run log](https://github.com/mpwilso/isr/blob/master/docs/run-log.md).
+This is one of six tools. Three run in order: [Loupe](https://github.com/mpwilso/loupe) writes the story, Parallax builds it in a sandbox and keeps the record, and [ISR](https://github.com/mpwilso/isr) tells the person accepting it what is left to check. Three stand alone: [Polarizer](https://github.com/mpwilso/polarizer) holds an agent's risky tool calls until a person approves them, [Mordecai](https://github.com/mpwilso/mordecai) judges whether a Claude skill helps, and [Max Q](https://github.com/mpwilso/Project-Max-Q) ranks job postings against a profile. Each runs on its own. Field's browser calls can go through Polarizer, off by default, and `parallax verify` checks Polarizer's ledger as well as its own ([docs/using.md](docs/using.md#field-through-polarizer)). The three were run in order once, on one change: [ISR's run log](https://github.com/mpwilso/isr/blob/master/docs/run-log.md).
 
 ## License
 

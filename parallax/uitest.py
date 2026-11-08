@@ -5,6 +5,7 @@ task whose plan names user_flows (outcomes a person goes through in the UI), at 
 
 1. Parallax starts the app from a copy of the built tree, in the sandbox, with network only on
    loopback, and a pinned Playwright MCP server whose browser runs inside the same sandbox.
+   With [ui_tester] polarizer on, that server runs behind `polarizer serve` (fieldproxy.py).
 2. The tester (a Claude model) gets those outcomes and the app's URL. Nothing
    else: not the diff, the plan, or the maker's notes, and no shell. It walks each outcome's flow
    and writes one Playwright test per flow, in its own empty folder.
@@ -30,7 +31,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import build, costs, drafts, installs, lifecycle, lint, memcap, review, sandbox, status, tree
+from . import build, costs, drafts, fieldproxy, installs, lifecycle, lint, memcap, review, sandbox, status, tree
 from .core import ParallaxError, Project
 
 # newer MCP versions put their browser behind a Unix socket, which the sandbox refuses (Part 3 spike)
@@ -375,10 +376,12 @@ def outcomes(project: Project, task_id: str) -> str:
     return "\n".join(picked) or "(the intent lists no outcome a browser can test)"
 
 
-def allowed(tool: str, tool_input: dict, work: Path) -> bool:
-    """The tester's tool rule: the browser tools, and files in its own folder. Nothing else."""
+def allowed(tool: str, tool_input: dict, work: Path, routed: bool = False) -> bool:
+    """The tester's tool rule: the browser tools, and files in its own folder. Nothing else. Routed
+    through Polarizer, the browser tools carry its upstream prefix, and only that form is allowed."""
     if tool.startswith("mcp__playwright__"):
-        return tool.removeprefix("mcp__playwright__") in BROWSER_TOOLS
+        prefix = fieldproxy.tool_prefix(routed)
+        return tool.startswith(prefix) and tool.removeprefix(prefix) in BROWSER_TOOLS
     if tool in FILE_TOOLS:
         target = tool_input.get("file_path") or tool_input.get("path") or str(work)
         try:
@@ -418,17 +421,39 @@ def test(project: Project, task_id: str, p, tester_for) -> tuple[str, str]:
     capped = memcap.program(["srt", "--settings", str(cfg_path), "-c", script])  # the app and browser, under the cap
     server = {"command": capped[0], "args": capped[1:],
               "env": {**_env(tools, p.venv, work, cfg["url"]), **installs.env(p.venv, copy)}}
+    routed = fieldproxy.on(cfg)
+    if routed:  # the same server, behind polarizer serve, which pins its tools and records every call
+        try:
+            route = fieldproxy.route(server, home, BROWSER_TOOLS)
+            first = fieldproxy.listing_pass(route)
+        except fieldproxy.RouteError as err:
+            raise UITestError(str(err)) from err
+        if first and first.problem:  # nothing of Field's approved yet: you, before Field spends anything
+            project.ledger.append("uitest.polarizer", "parallax", first.problem, task=task_id, tree=s.tree,
+                                  **first.record(route))
+            return "you", first.problem
+        if first:  # the listing pass started the app too: its mark mustn't count for Field's own run
+            for left in (work / APP_UP, work / "app.log"):
+                left.unlink(missing_ok=True)
+        server = route.server
     plan = p.plan
     left = costs.budget(project, task_id, plan)[1]
     limit = round(min(left, cfg["max_usd"]), 2)  # its limit is its reserve in the plan's cap, never more
     project.ledger.append("uitest.started", "parallax", "", task=task_id, tree=s.tree)
     result = tester_for(limit, cfg["model"]).run(PROMPT.format(url=cfg["url"], outcomes=outcomes(project, task_id)),
-                                                 work, server, lambda tool, inp: allowed(tool, inp, work))
+                                                 work, server, lambda tool, inp: allowed(tool, inp, work, routed))
     text = result.summary or ""
     reply = _reply(text)
     log = (work / "app.log").read_text(errors="replace")[-600:] if (work / "app.log").exists() else ""
     written = sorted(work.glob("flows/*.spec.js"))
     common = dict(task=task_id, tree=s.tree, cost_usd=result.cost_usd, model=cfg["model"])
+    if routed:  # what Polarizer recorded comes first: it explains anything else that went wrong
+        seen = fieldproxy.read_session(route)
+        project.ledger.append("uitest.polarizer", "parallax", seen.problem, task=task_id, tree=s.tree,
+                              **seen.record(route))
+        if seen.problem:
+            project.ledger.append("uitest.failed", "ui tester", text[-600:] or result.status, app_log=log[-600:], **common)
+            return "you", seen.problem
     if not (work / APP_UP).exists():  # fail closed: tests written without ever seeing the app don't count
         project.ledger.append("uitest.failed", "ui tester", text[-600:] or result.status, app_log=log[-600:], **common)
         if log.strip():
