@@ -2,7 +2,7 @@
 
 What changed in each release. The full notes for each are on the [releases page](https://github.com/mpwilso/parallax/releases).
 
-## Unreleased
+## 0.7.4 (2026-11-09)
 
 Changed:
 - Reticle's request has one more rule: use only the inputs and expected results the request shows, and where it shows expected output, compare against that output, whole or by its content, never a line number, count or position worked out from the words around it, Reticle's own or an outcome's. In eval run 229b6d two of Reticle's kept tests were wrong, not the fixes. pathspec-77's asserted that `a[^b]c` doesn't match `a^c`, an input the issue never names (it does match, under Git too). tabulate-231's asserted `lines[2]`, from the issue's "3rd line", where the issue's own output puts the separator on the 4th. Each also failed on the base for another reason, so the base run kept it. Measured on 2026-11-09 (docs/evals.md): in full run f1aecc Reticle raised no false alarm on those two cases, or on boltons-348 and humanize-174; four seeded runs of the two, alternating the request before and after the rule, had none either way, so they can't tell the two apart. One run per case is suggestive, not proof. Test: `test_reticle_is_asked_to_use_only_what_the_request_shows_and_to_compare_the_output_it_shows`.
