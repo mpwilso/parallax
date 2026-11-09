@@ -190,9 +190,12 @@ def _reticle(project: Project, task_id: str):
             why = lint.one_sentence(rec["reason"]).rstrip(".") if rec["actor"] == "parallax" else "it failed"
             return f"; Reticle wrote no test: {why}{cite}"
         if any(t["outcome"] == n for t in kept):
+            # by its own file: after "tested by tests/test_page.py", a bare "Reticle's test passed" read
+            # as though Reticle's test lived in test_page.py
+            own = f"Reticle's own test, in {rec['data'].get('file') or reticle.STORED},"
             if n in failed:
-                return f"; Reticle's test failed: {' '.join(failed[n].split())[:80]}{cite}"
-            return f"; Reticle's test passed{cite}" if ran else f"; Reticle's test hasn't run{cite}"
+                return f"; {own} failed: {' '.join(failed[n].split())[:80]}{cite}"
+            return f"; {own} passed{cite}" if ran else f"; {own} hasn't run{cite}"
         mine = [w["why"] for w in rec["data"].get("weak") or [] if w.get("name", "").startswith(f"test_outcome_{n}_")]
         whole = [w["why"] for w in rec["data"].get("weak") or [] if not reticle.NAME.match(w.get("name", ""))]
         why = (mine or ([] if kept else whole) or ["it wrote none for this outcome"])[0]

@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from fakes import FakeChecker, FakeDrafter, ScriptedAgent, good_probe
-from parallax import build, check, costs, decide, evals, lifecycle, pilot, reticle, show, syspython
+from parallax import build, check, costs, decide, evals, lifecycle, pilot, reticle, sandbox, show, syspython
 from parallax.agents.base import AgentResult
 from parallax.core import POLICY_FILE, Project
 from test_evals import BUGGY, FIXED, INTENT, PLAN, WRONG, case_for, maker, plain_runner, result, scripted, upstream  # noqa: F401
@@ -66,6 +66,11 @@ def go(proj, writer, make=None, checker=None):
 
 def kinds(proj, kind):
     return [e for e in proj.ledger.entries() if e["kind"] == kind]
+
+
+def own(proj, tid):
+    """How the card names Reticle's test: by its own file, never as one of the plan's."""
+    return f"Reticle's own test, in docs/tasks/{tid}/reticle/outcome_tests.py.txt,"
 
 
 def test_only_tests_that_fail_on_an_assertion_at_the_base_are_kept(proj):
@@ -206,9 +211,50 @@ def test_a_changed_hash_stops_the_check(proj):
 def test_the_card_says_per_outcome_what_reticle_found(proj):
     tid, _ = go(proj, FakeReticle(KEPT))
     card = show.report(proj, tid)
-    assert "Outcome 1, which you asked for: tested by tests/test_mine.py; Reticle's test passed. (ledger " in card
+    assert f"Outcome 1, which you asked for: tested by tests/test_mine.py; {own(proj, tid)} passed. (ledger " in card
     tid2, _ = go(proj, FakeReticle("", status="error"))
     assert "; Reticle wrote no test: it failed. (ledger " in show.report(proj, tid2)
+
+
+def test_the_card_names_reticles_own_file_so_its_test_isnt_read_as_the_plans(proj):
+    """A recheck's card read "tested by tests/test_page.py; Reticle's test passed", as though Reticle's
+    test lived in test_page.py. Its test is in a file of its own, and the line names that file."""
+    tid, _ = go(proj, FakeReticle(KEPT))
+    assert reticle.recorded(proj, tid)["data"]["file"] == f"docs/tasks/{tid}/reticle/outcome_tests.py.txt"
+    card = show.report(proj, tid)
+    assert ("Outcome 1, which you asked for: tested by tests/test_mine.py; Reticle's own test, in "
+            f"docs/tasks/{tid}/reticle/outcome_tests.py.txt, passed. (ledger ") in card
+    assert "; Reticle's test passed" not in card
+
+
+class LeavesPlaceholders(FakeReticle):
+    """Writes its file as FakeReticle does, after leaving what Claude Code's sandbox leaves in the
+    working folder: empty files at the placeholder names, and an empty node_modules."""
+    NAMES = ("bunfig.toml", "package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", ".npmrc")
+
+    def run(self, goal, cwd, permission_fn, stage="build", env=None):
+        for name in self.NAMES:
+            (cwd / name).touch()
+        (cwd / "node_modules").mkdir()
+        (cwd / "notes.txt").touch()  # an empty file at another name is no placeholder
+        return super().run(goal, cwd, permission_fn, stage, env)
+
+
+def test_reticles_copy_of_the_base_keeps_none_of_the_sandboxs_placeholders(proj):
+    """A recheck found the task's reticle/base folder holding the sandbox's empty bunfig.toml,
+    package.json, lockfiles and node_modules. They're removed once Reticle is done, and recorded, the
+    way the build cleans the worktree. A file at such a name that the base commit holds stays."""
+    (proj.root / "yarn.lock").write_text("")  # the base's own, empty but committed
+    subprocess.run(["git", "-C", str(proj.root), "add", "yarn.lock"], check=True)
+    subprocess.run(["git", "-C", str(proj.root), "commit", "-qm", "an empty lockfile"], check=True)
+    tid, status = go(proj, LeavesPlaceholders(KEPT))
+    assert status == "ready"
+    base = sandbox.task_home(proj.root, tid) / "reticle" / "base"
+    assert (base / "calc.py").is_file() and (base / "yarn.lock").is_file() and (base / "notes.txt").is_file()
+    gone = ["bunfig.toml", "package.json", "package-lock.json", "pnpm-lock.yaml", ".npmrc", "node_modules"]
+    assert not [n for n in gone if (base / n).exists()]
+    [e] = [e for e in kinds(proj, "sandbox.cleaned") if "Reticle" in e["reason"]]
+    assert sorted(e["data"]["files"]) == sorted(gone) and e["data"]["task"] == tid
 
 
 def test_it_costs_against_the_cap_and_can_be_turned_off(proj, repo):
@@ -252,7 +298,7 @@ def test_reticle_gets_the_request_and_only_the_outcomes_you_asked_for(proj):
     assert rec["data"]["weak"] == [{"name": "test_outcome_2_many",
                                     "why": "it tests an outcome Focus inferred, not one you asked for"}]
     card = show.report(proj, tid)
-    assert "Outcome 1, which you asked for: tested by tests/test_mine.py; Reticle's test passed" in card
+    assert f"Outcome 1, which you asked for: tested by tests/test_mine.py; {own(proj, tid)} passed" in card
     assert "Outcome 2, which Focus added: tested by tests/test_mine.py; no Reticle test: it tests an outcome Focus inferred" in card
 
 
@@ -598,7 +644,7 @@ def test_a_retry_after_reticles_tests_couldnt_start_judges_them_again_and_they_c
     [ran] = kinds(proj, "reticle.ran")
     assert (ran["data"]["passed"], ran["data"]["total"], ran["data"]["failed"]) == (1, 1, [])
     card = show.report(proj, tid)
-    assert "Outcome 1, which you asked for: tested by tests/test_mine.py; Reticle's test passed. (ledger " in card
+    assert f"Outcome 1, which you asked for: tested by tests/test_mine.py; {own(proj, tid)} passed. (ledger " in card
     assert "no Reticle tests counted" not in card
 
 

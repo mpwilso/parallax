@@ -30,7 +30,7 @@ import re
 import shutil
 from pathlib import Path, PurePosixPath
 
-from . import build, costs, drafts, installs, lifecycle, lint, review, status, testrun, tree
+from . import build, costs, drafts, installs, lifecycle, lint, review, sandbox, status, testrun, tree
 from .agents.base import AgentResult
 from .core import ROOT_ENV, TASK_ENV, Project
 from .gate import make_permission_fn
@@ -337,6 +337,11 @@ def write(project: Project, task_id: str, p, writer=None, runner=None) -> str:
                                                           env={TASK_ENV: task_id, ROOT_ENV: str(project.root)})
     except Exception as err:  # recorded, never retried silently; the build goes on without it
         res = AgentResult("error", f"{type(err).__name__}: {err}")
+    # the sandbox's empty placeholders in its working folder, as the build removes them from the worktree
+    removed = sandbox.remove_export_leftovers(base, set(tree.files_in(p.worktree, p.task["base"])) | set(installs.files(p.venv)))
+    if removed:
+        project.ledger.append("sandbox.cleaned", "parallax", "removed the sandbox's empty placeholder files from Reticle's copy "
+                              "of the base", task=task_id, files=removed)
     common = dict(task=task_id, cost_usd=res.cost_usd, model=cfg["model"])
     if res.status != "done" or not (res.summary or "").strip():
         project.ledger.append("reticle.failed", "reticle", lint.one_sentence(res.summary or res.status), **common)

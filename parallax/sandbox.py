@@ -148,6 +148,31 @@ def remove_leftovers(worktree: Path, before: set[str] = frozenset()) -> list[str
     return removed
 
 
+LEFTOVER_DIRS = {"node_modules"}  # left empty in the working folder by the same sandbox
+
+
+def remove_export_leftovers(folder: Path, kept: set[str]) -> list[str]:
+    """The same placeholders in a plain folder, not a worktree: Reticle's copy of the base, an export of
+    the commit, where no git says what's new. An empty file at a placeholder's name, or an empty
+    node_modules, that the export doesn't hold. kept: the files it holds. Returns what was removed."""
+    folder, removed = Path(folder), []
+    for dirpath, dirnames, filenames in os.walk(folder, topdown=False):
+        here = Path(dirpath)
+        for name in filenames:
+            path, rel = here / name, (here / name).relative_to(folder).as_posix()
+            if name in SANDBOX_LEFTOVERS and rel not in kept and path.is_file() and not path.is_symlink() \
+                    and path.stat().st_size == 0:
+                path.unlink()
+                removed.append(rel)
+        for name in dirnames:
+            path, rel = here / name, (here / name).relative_to(folder).as_posix()
+            if name in LEFTOVER_DIRS and path.is_dir() and not path.is_symlink() and not any(path.iterdir()) \
+                    and not any(k.startswith(rel + "/") for k in kept):
+                path.rmdir()
+                removed.append(rel)
+    return sorted(removed)
+
+
 def remove_files(worktree: Path, rels: list[str]) -> None:
     """Remove these worktree files and any intent-to-add entry for them."""
     for rel in rels:
