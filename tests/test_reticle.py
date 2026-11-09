@@ -534,6 +534,16 @@ def test_reticle_is_asked_for_the_steps_and_for_waits_the_page_allows():
     assert "never on a bare expression" in reticle.REQUEST
 
 
+def test_reticle_is_asked_to_use_only_what_the_request_shows_and_to_compare_the_output_it_shows():
+    # eval run 229b6d: pathspec-77's kept test used `a^c`, an input the issue never names, and
+    # tabulate-231's asserted lines[2] from the words "the 3rd line", where the issue's own output has
+    # the separator 4th. Both failed on the maintainers' fix
+    assert "- Use only the inputs and expected results the request shows." in reticle.REQUEST
+    assert ("compare\n  against that output, whole or by its content, never a line number, count or position"
+            in reticle.REQUEST)
+    assert "yours or an outcome's." in reticle.REQUEST
+
+
 STEPPED = KEPT.replace("def test_outcome_1_sums_negatives():\n",
                        'def test_outcome_1_sums_negatives():\n    """Adds -1 and 1 and expects 0."""\n')
 

@@ -118,6 +118,9 @@ Rules:
 - Test exactly what each outcome states, as the request shows it: its examples and expected results.
   No other formats, inputs, edge cases or options the request doesn't name, and nothing internal:
   only through the public interface, never private names, generated code or the text of a pattern.
+- Use only the inputs and expected results the request shows. Where it shows expected output, compare
+  against that output, whole or by its content, never a line number, count or position worked out
+  from the words around it, yours or an outcome's.
 - Each test must fail on the code as it is now, because the outcome isn't met yet, and pass once it
   is: on an assertion, or on the exception the request itself shows, for a crash.
 - Your file runs as {where}, beside the repository's own tests: import the code, fixtures and test
