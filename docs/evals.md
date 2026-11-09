@@ -62,6 +62,19 @@ By hand c98ad5 is 20 of 23 and 9a3432 is 21 of 23: see boltons-337 and humanize-
 
 **Why humanize-174 gets past every checker:** the rule the fix broke wasn't in the request. The issue asks that `naturaldelta(10799)` say "3 hours", not "2 hours". The maintainers went further and made every unit round to the nearest one, minutes and months too, and their hidden tests check that. Reticle tests what you asked, and Maker gets hours right, so its tests pass. Focus inferred the other units as an outcome, but Reticle doesn't test inferred outcomes, and the inferred-outcome test it wrote in 7eb145 was for hours, which passed. Second Eye sees only the diff, which looks right for hours. A checker can only hold a fix to a rule that someone wrote down.
 
+**What the three failing hidden tests need** (checked 2026-11-09 with no model): `naturaldelta` on the base, the maintainers' fix and f1aecc's Maker fix.
+
+| Input | Base | Maintainers | Maker (f1aecc) |
+|---|---|---|---|
+| 10799 s, 10800 s | 2 hours, 3 hours | 3 hours, 3 hours | 3 hours, 3 hours |
+| 2 h 30 min | 2 hours | 2 hours | 3 hours |
+| 364 days | 11 months | a year | 11 months |
+| 729 days | 1 year, 11 months | 2 years | 1 year, 11 months |
+
+- **2 h 30 min reads "2 hours" because Python's `round()` takes halves to even,** while the maintainers' own test comment says ties go away from zero, as Maker's do. A test expecting "2 hours" passes on the base too, so Reticle drops it as weak; one expecting "3 hours", as Focus's outcome 3 in f1aecc did, blocks the real fix.
+- **The month cases need inputs and units the request never shows:** 364 and 729 days, read as years. Testing them is what the 0.7.4 rule forbids, and the same kind of input was behind pathspec-77's false alarm in 229b6d.
+- **Decided 2026-11-09: it stays a known gap.** No change to Focus, Reticle or Second Eye can catch it without bringing back false alarms. Focus's guesses at the neighbouring values have each been wrong against the maintainers (outcome 3 in f1aecc and in 8e3074, and the "under an hour stays the same" constraint behind Second Eye's seeded false alarms), and Second Eye's finding on the other units in 7eb145 could only be a note, since it cited an inferred outcome.
+
 ## The full pipeline on the 11 cases
 
 ### What it measures
