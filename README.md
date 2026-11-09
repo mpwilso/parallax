@@ -11,7 +11,7 @@
 
 For developers who use AI coding agents. The agents build in a sandbox: a walled-off copy of your repo, where they can't reach your keys, your other files or the network beyond what the plan you approved lists. You make one decision per task: accept or send back.
 
-Status: a portfolio project, built to show how I design, test and judge an AI tool. In the eval of 2026-10-01, Parallax took on 11 real bugs from open-source projects, and all 11 reached Ready (every check passed, and the task waited on one decision from a person). 10 of the fixes passed the tests the projects' maintainers wrote for them, which no agent saw, so one Ready was wrong: the fix did what the issue asked, but not everything the maintainers' tests checked. Focus, Second Eye and Reticle ran on `claude-sonnet-5-5`, Maker on `claude-opus-5` ([docs/evals.md](docs/evals.md#results)).
+Status: a portfolio project, built to show how I design, test and judge an AI tool. In the eval of 2026-10-01, Parallax took on 11 real bugs from open-source projects, and all 11 reached Ready (every check passed, and the task waited on one decision from a person). 10 of the fixes passed the tests the projects' maintainers wrote for them, which no agent saw, so one Ready was wrong: the fix did what the issue asked, but not everything the maintainers' tests checked. Focus, Second Eye and Reticle ran on `claude-sonnet-5-5`, Maker on `claude-opus-5` ([docs/evals.md](docs/evals.md#previous-results-2026-10-01)).
 
 <p align="center"><img src="docs/brand/demo.gif" alt="The app: a task typed in, Focus, Reticle, Maker and Second Eye taking their turns, the card turning Ready, and the accept" width="800"></p>
 
@@ -71,7 +71,7 @@ Linux, or Windows through WSL2 ([docs/wsl.md](docs/wsl.md) makes the distro); ma
 
 ## What was measured
 
-- **Evals:** the 11 real fixes in the status line ran in one eval run, each reaching Ready with one decision, $9.68 in all; the one miss is a requirements gap, below ([the results](docs/evals.md#results)).
+- **Evals:** the 11 real fixes in the status line ran in one eval run, each reaching Ready with one decision, $9.68 in all; the one miss is a requirements gap, below ([the results](docs/evals.md#previous-results-2026-10-01)).
 - **Seeded breaks:** against 23 mechanically broken versions of those fixes, Reticle or Second Eye caught 20, with 2 false alarms on the 11 real fixes ([docs/evals.md](docs/evals.md#the-checkers-together)). Those are seeded edits, not the mistakes Maker actually makes.
 - **Real runs through the UI:** three tasks on this repo, one or two decisions each, $0.92 to $4.44; $27.71 spent across every attempt, the ones that found bugs included ([docs/ui-runs/](docs/ui-runs/README.md)).
 

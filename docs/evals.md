@@ -83,8 +83,9 @@ A rerun of all 11 cases was approved on 2026-11-07, for about $12, to measure th
 - **Why.** Since policy trust (2026-10-23), `[build] setup` runs as you only after you've trusted the policy's commands, and that answer is recorded in each repo's own ledger. Each case's scratch clone gets a new ledger and a policy with the case's own setup command, so no case is trusted. A check with no model, on each case's scratch policy made exactly as `parallax eval` makes it, found all 11 untrusted. This repo's own trust, recorded on 2026-11-07, covers this repo's commands only.
 - **What a run would have done.** Each case would draft with Focus, launch under the rule, then stop at Decision needed on the trust question when the build set up its venv. Nothing answers a decision in an eval, so each case would end there, paid for and with nothing built. The run was not started, so nothing was spent and no result was written.
 - **`parallax eval check` still passes**: it makes each case's venv itself, not through a task, so it never meets the question. On merged master (db7c795) on 2026-11-07 it found all 11 sound, and `parallax doctor` passed.
-- **What it needs** is a decision of yours: whether `parallax eval`, which you start with the cases' setup commands from `evals/cases.toml`, should record your trust for those commands in each scratch repo, or ask once for the run. Until then 8e3074 below stays the latest full run.
+- **What it needs** is a decision of yours: whether `parallax eval`, which you start with the cases' setup commands from `evals/cases.toml`, should record your trust for those commands in each scratch repo, or ask once for the run. Until then 8e3074 stayed the latest full run.
 - **Decided: ask once for the run.** `parallax eval` now shows one trust question before any case starts (`parallax/evaltrust.py`), described in [the trust question](#the-trust-question) below.
+- **It has now run.** You started it on 2026-11-09, on 0.7.3 (710dd6e), and answered the trust question once. Run [229b6d](../evals/results/2026-11-09-229b6d/summary.md) reached 9 of the 11 cases before the budget guard stopped it. Its results are [below](#results).
 
 ### The trust question
 
@@ -97,6 +98,38 @@ Before the first case, `parallax eval` prints every case's commands that would r
 No question is asked when no case has a command to run, or when the budget can't reach the first case.
 
 ### Results
+
+Run [229b6d](../evals/results/2026-11-09-229b6d/summary.md) (2026-11-09): 9 of the 11 cases in one run, on one commit (710dd6e, v0.7.3), with Reticle on, as it is by default. You started it with `parallax eval --budget 12 --per-case 2.5` and answered [the trust question](#the-trust-question) once. The models, as the run recorded them: Focus, Second Eye and Reticle on `claude-sonnet-5-5`, Maker on `claude-opus-5`. Raw results are in [evals/results/](../evals/results/).
+
+| Case | Hidden tests | Second Eye | Reticle | Cost | Time to Ready | Touches |
+|---|---|---|---|---|---|---|
+| pathspec-77 | pass | right | **false alarm** | $1.43 | 3.7 min | 1 |
+| tomlkit-430 | pass | right | right | $0.66 | 1.9 min | 1 |
+| tomlkit-512 | pass | right | right | $1.37 | 4.1 min | 1 |
+| cachetools-387 | pass | right | right | $1.17 | 3.1 min | 1 |
+| tabulate-180 | pass | right | right | $0.77 | 2.4 min | 1 |
+| tabulate-190 | pass | right | right | $0.92 | 2.6 min | 1 |
+| tabulate-231 | pass | right | **false alarm** | $2.16 | 6.7 min | 1 |
+| boltons-319 | pass | right | right | $0.53 | 1.7 min | 1 |
+| boltons-337 | pass | right | right | $0.74 | 2.2 min | 1 |
+
+- **Passed:** 9 of 9. All 9 reached Ready, as these 9 did in 8e3074.
+- **Second Eye:** right 9 times. It caught none, missed none and raised no false alarms, as on these 9 in 8e3074.
+- **Reticle:** right 7 times and raised 2 false alarms, where in 8e3074 it was right on all 9. On pathspec-77 and tabulate-231 one kept test failed on a fix that passes every hidden test. Maker got its one rework for Reticle alone, changed nothing and said why the test was wrong, and the task reached Ready with the disagreement on the card. Reticle cost $0.32, and the reworks its false alarms caused $0.96 ($0.41 on pathspec-77, $0.56 on tabulate-231). Why each test failed is [below](#reticles-two-false-alarms-in-229b6d).
+- **Cost:** $9.75 for the 9 cases, under a $12 budget. The same 9 cost $7.56 in 8e3074. The two reworks are $0.96 of the $2.19 more; without them the run is $8.79.
+- **Touches:** 1 per case. Reticle's reworks never spend the rework cap or raise a decision: each disagreement waits on its card at Ready, for the accept or reject you make anyway.
+- **Not reached:** boltons-348 and humanize-174. With $9.75 spent, the next case needed up to $2.75 (its $2.50 ceiling plus 10%) of the $12 budget, so the run stopped before boltons-348. Nothing was spent on either. In 8e3074 boltons-348 passed and humanize-174 failed 3 hidden tests; this run says nothing new about them.
+
+#### Reticle's two false alarms in 229b6d
+
+Both tests were wrong, not the fixes. Each failed the same way on Maker's fix and again on the same tree after the rework, so neither is flaky or the environment. Neither came from 0.7.3's rerun on the base (`reticle.rejudge`): in all 9 cases the setup ran once and succeeded, Reticle's file was judged on the base once, and nothing judged it again. The evidence is in each case's scratch repo and task folder under `~/.local/share/parallax/` (a result's `scratch` path is relative to `evals/` there).
+
+- **pathspec-77: an input the issue never names.** Outcome 2, asked, says a leading `^` is no longer escaped as a literal. Reticle tested it as "`a[^b]c` does not match `a^c`". But `[^b]` is any character except `b`, so `a^c` matches, and Git 2.43 ignores `a^c` under that line too. The test still passed the base-run gate, because its first assertion, that `azc` matches (outcome 1's), fails on the base; the wrong assertion only ran once the bug was fixed. Reticle's rules already say to use no input the request doesn't name. In 8e3074 its outcome 2 test checked only `abc` and `azc`.
+- **tabulate-231: a line count taken from the issue's words.** The issue says to "note the weird 3rd line", but in its own output the separator is the 4th line, after the top border. Focus wrote outcome 1 as "`|---------+-------|` as the third line", and Reticle asserted `lines[2]`, the data row `|    1000 | one K |` before and after any fix, so the test could never pass. It failed on the base with the same message as on the fix. In 8e3074 Focus's outcome said "between `1000 | one K` and `1000000 | one M`", and Reticle compared the whole table, as the maintainers' test does.
+
+Reticle's prompt and request are the same in both runs; Focus's drafting request and output shapes, and Second Eye's prompt, changed between them. One run of each can't say whether that, or variance, moved these two.
+
+### Previous results (2026-10-01)
 
 Run [8e3074](../evals/results/2026-10-01-8e3074/summary.md) (2026-10-01): all 11 cases in one run, on one commit (ba09b02), with Reticle on, as it is by default. The models, as the run recorded them: Focus, Second Eye and Reticle on `claude-sonnet-5-5`, Maker on `claude-opus-5`. Raw results are in [evals/results/](../evals/results/).
 
@@ -147,17 +180,17 @@ The last four cases first ran in 41250f and stopped at caps of $0.67 to $0.80, w
 
 ## What they show
 
-- On small bugs in small pure-Python projects, the hands-free pipeline mostly gets there. 10 of 11 fixes matched the maintainers' tests, each with one touch, in both full runs.
+- On small bugs in small pure-Python projects, the hands-free pipeline mostly gets there. 10 of 11 fixes matched the maintainers' tests, each with one touch, in both full runs, and 9 of 9 in 229b6d.
 - **Second Eye can pass a fix that looks right but isn't.** humanize-174's issue says `naturaldelta` always rounds down. Maker made hours round to the nearest hour, and its own tests passed. The maintainers made it round to the nearest unit for minutes, hours and months, and 23 of their tests catch the difference. Second Eye sees only the outcome, the review rules and the diff. The diff looked right for hours, and the other units weren't in it. Its own report said it hadn't seen the rest of the file or the other tests, and hadn't run anything. The same case was missed by the previous harness too. In 8e3074 Focus inferred rounding for every unit and Maker rounded minutes, hours and days too; 3 of the maintainers' tests still catch it (months that should carry into a year, and a half hour rounded up where Python's `round()` goes to even), and Second Eye passed it again.
 
 ## What they don't show
 
 - **How often Second Eye catches a bad fix Maker made.** Only one fix was bad, and it wasn't caught. One case can't give a rate. The seeded rates above are for mechanical edits.
-- **Its false-alarm rate on Maker's fixes.** None in 11 judgments, in either full run, is too few to say it's rare. On the maintainers' real fixes, seeded, it went from 6 of 11 to 1 of 11 as its rule changed, stayed at 1 of 11 in e1f0a0, was 3 of 11 in 9a3432 on intents drafted again, and 2 of 11 in c98ad5 with the cite-or-note rule (above).
+- **Its false-alarm rate on Maker's fixes.** None in 11 judgments in either full run, and none in 9 in 229b6d, is too few to say it's rare. On the maintainers' real fixes, seeded, it went from 6 of 11 to 1 of 11 as its rule changed, stayed at 1 of 11 in e1f0a0, was 3 of 11 in 9a3432 on intents drafted again, and 2 of 11 in c98ad5 with the cite-or-note rule (above).
 - **Variance.** Each seeded run is one run. Second Eye's catches on the same versions moved between runs (boltons-319's undone hunk was missed in f5ff69 and caught in cbcd0e; pathspec-77's was caught in cbcd0e and missed in e1f0a0; boltons-337's at dictutils.py:194 was caught in 9a3432 and missed in e1f0a0 and c98ad5), so a difference of one or two isn't a trend.
 - **Anything beyond small, pure-Python repos,** or any variance: each case ran once.
 - **That the fixes were new to the models.** Every case is a fix merged in public on a small, well-known library, so the fix, its tests or the talk around it may be in the models' training data. A model that remembers a fix would do better here than on work nobody has published.
 - **An independent test of the cap floor.** Its $2.00 default came from Maker's costs on these same cases, so the rerun succeeding is expected.
-- **One consistent version, before.** The previous results span three commits of Parallax. 8e3074 and 9a3432 are each one run on one commit (ba09b02).
+- **One consistent version, before.** The previous results span three commits of Parallax. 8e3074 and 9a3432 are each one run on one commit (ba09b02), and 229b6d is one run on 710dd6e.
 
 `parallax eval --budget <usd> [case ...]` reruns them, and `parallax stats` says when the results are older than a prompt, a model or the policy.

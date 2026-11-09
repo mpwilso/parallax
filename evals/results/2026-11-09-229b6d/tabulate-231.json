@@ -1,0 +1,45 @@
+{
+ "case": "tabulate-231",
+ "pr": "https://github.com/astanin/python-tabulate/pull/232",
+ "issue": "https://github.com/astanin/python-tabulate/issues/231",
+ "ceiling_usd": 2.5,
+ "task": "2a99ec",
+ "end": "ready",
+ "status": "ready",
+ "hidden": "pass",
+ "hidden_detail": "159 of 159 pass (exit 0)",
+ "second_eye": "right",
+ "verdicts": [
+  {
+   "tree": "7dc8c6a0dddf5aa1b90911f76b084b5de286262b",
+   "verdict": "no_finding",
+   "hidden": "pass",
+   "judgment": "right"
+  }
+ ],
+ "cost_usd": 2.1648,
+ "seconds_to_ready": 404.0,
+ "touches": 1,
+ "decisions": [],
+ "inferred": [
+  "2",
+  "3",
+  "4",
+  "5"
+ ],
+ "reticle": "false alarm",
+ "reticle_verdicts": [
+  {
+   "tree": "7dc8c6a0dddf5aa1b90911f76b084b5de286262b",
+   "verdict": "fail",
+   "hidden": "pass",
+   "judgment": "false alarm"
+  }
+ ],
+ "reticle_kept": 1,
+ "reticle_weak": [],
+ "reticle_cost_usd": 0.0265,
+ "reticle_false_alarm_rework_usd": 0.555,
+ "scratch": "runs/229b6d/tabulate-231/repo",
+ "seconds": 391.7
+}

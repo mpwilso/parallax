@@ -149,7 +149,7 @@ The tests never call a model. `scripts/test.sh` runs ruff and the whole suite ex
 ## Limits
 
 - **Second Eye reads the diff and can't run code.** It judges the outcome where the diff shows it, and says what it couldn't see. Reticle's tests do run: a test that passes on the code before the change is dropped, so every kept test was seen failing before the fix. Against 23 mechanically broken versions of real fixes, Reticle or Second Eye caught 20, with 2 false alarms on the 11 real fixes ([evals.md](evals.md#the-checkers-together)). Those are seeded edits, not the mistakes Maker actually makes.
-- **A requirements gap gets past every checker.** When Focus guesses wrong about what was wanted, every check passes the guess, because each one judges the work against that intent (humanize-174 in [evals.md](evals.md#results)).
+- **A requirements gap gets past every checker.** When Focus guesses wrong about what was wanted, every check passes the guess, because each one judges the work against that intent (humanize-174 in [evals.md](evals.md#previous-results-2026-10-01)).
 - **Linux or WSL2.** The sandbox doesn't run on native Windows, and macOS is untested ([macos.md](macos.md)).
 - **It needs Claude Code**, logged in, and the Claude Agent SDK. Costs are Claude Code's estimates at list prices; on a subscription your real limit is the plan's usage limits, which Parallax can't see.
 - **A cap can overshoot by one turn.** Every agent gets what's left of the cap as its own limit, but the SDK checks it between turns.
