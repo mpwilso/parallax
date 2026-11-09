@@ -1,0 +1,46 @@
+{
+ "case": "pathspec-77",
+ "pr": "https://github.com/cpburnz/python-pathspec/commit/9302492483b06ca1613aa8b11cf08cef93930b12",
+ "issue": "https://github.com/cpburnz/python-pathspec/issues/77",
+ "ceiling_usd": 2.5,
+ "task": "5449dc",
+ "end": "ready",
+ "status": "ready",
+ "hidden": "pass",
+ "hidden_detail": "45 of 45 pass (exit 0)",
+ "second_eye": "right",
+ "verdicts": [
+  {
+   "tree": "aeca7500fa609a6d6e4eb193f14b3059895a4dba",
+   "verdict": "pass",
+   "hidden": "pass",
+   "judgment": "right"
+  }
+ ],
+ "cost_usd": 0.9524,
+ "seconds_to_ready": 152.0,
+ "touches": 1,
+ "decisions": [],
+ "inferred": [
+  "3",
+  "4",
+  "5",
+  "6",
+  "7"
+ ],
+ "reticle": "right",
+ "reticle_verdicts": [
+  {
+   "tree": "aeca7500fa609a6d6e4eb193f14b3059895a4dba",
+   "verdict": "pass",
+   "hidden": "pass",
+   "judgment": "right"
+  }
+ ],
+ "reticle_kept": 2,
+ "reticle_weak": [],
+ "reticle_cost_usd": 0.0305,
+ "reticle_false_alarm_rework_usd": 0.0,
+ "scratch": "runs/f1aecc/pathspec-77/repo",
+ "seconds": 150.3
+}

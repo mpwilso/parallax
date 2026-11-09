@@ -1,0 +1,43 @@
+{
+ "case": "pathspec-77",
+ "mode": "seeded",
+ "pr": "https://github.com/cpburnz/python-pathspec/commit/9302492483b06ca1613aa8b11cf08cef93930b12",
+ "issue": "https://github.com/cpburnz/python-pathspec/issues/77",
+ "inferred": [
+  "3",
+  "4",
+  "5",
+  "6",
+  "7"
+ ],
+ "reticle_kept": {
+  "asked": 2
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "undo the hunk at pathspec/patterns/gitwildmatch.py:316",
+   "hidden": "43 of 45 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The only code change is a comment typo fix (Braket to Bracket). The leading `^` handling is untouched. The context line `elif pattern[i] == '^':` shows the old branch still exists, so `[^b]` is still not turned into a negated bracket expres"
+   ],
+   "not_counted": [
+    "major missing_test: No tests were added or updated. Nothing covers `[^b]`, `[^]a]`, a non-leading `^`, or `[!...]` staying the same, and any test expecting the old escaped-caret regex is not updated."
+   ],
+   "lowered": [],
+   "reticle": "catch"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "findings": [],
+  "not_counted": [
+   "major missing_test: The diff contains no test changes. Nothing checks that `a[^b]c` rejects `abc` and matches `azc`, that `[^...]` gives the same regex as `[!...]`, that `[^]a]` treats `]` as a literal, or that `[a^b]` still matches a literal `^`. Any existing"
+  ],
+  "lowered": [],
+  "reticle": "right"
+ },
+ "cost_usd": 0.117,
+ "seconds": 40.5
+}

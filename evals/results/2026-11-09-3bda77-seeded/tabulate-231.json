@@ -1,0 +1,65 @@
+{
+ "case": "tabulate-231",
+ "mode": "seeded",
+ "pr": "https://github.com/astanin/python-tabulate/pull/232",
+ "issue": "https://github.com/astanin/python-tabulate/issues/231",
+ "inferred": [
+  "2",
+  "3",
+  "4"
+ ],
+ "reticle_kept": {
+  "asked": 1
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "flip == to != at tabulate/__init__.py:105",
+   "hidden": "55 of 159 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The check is inverted. `type(value) != str` is False for the marker, which is the str \"\\001\", so a plain separating line is no longer detected. Every table with SEPARATING_LINE would regress, and the reproduction would not print the separat",
+    "major behavior: Only the detection helper changed. Nothing in the diff changes how padded cells are produced, so even with the check fixed it is unclear that the padded marker would render as `|---------+-------|`. The change does not show that the reprodu"
+   ],
+   "not_counted": [],
+   "lowered": [
+    "major, cites outcome 4: No regression tests were added for the psql reproduction or for another padded format. Outcome 4 is not met, and no test would catch the inverted check."
+   ],
+   "reticle": "catch"
+  },
+  {
+   "broken": "change 1 to 2 at tabulate/__init__.py:111",
+   "hidden": "155 of 159 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The first check now needs `len(row) >= 2`, where it used to need `len(row) >= 1`. SEPARATING_LINE is the one-character string \"\\001\", and it is passed as a bare row. Its length is 1, so the bare marker is no longer detected. Single-column r",
+    "major behavior: The strip-based match is the only change that could help the padded case. No change to the formatting or padding code is visible, so the `psql` separator line may still not render as `|---------+-------|`. A padded marker, if any reaches th"
+   ],
+   "not_counted": [],
+   "lowered": [],
+   "reticle": "catch"
+  },
+  {
+   "broken": "undo the hunk at tabulate/__init__.py:104",
+   "hidden": "5 of 159 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The diff calls `_is_separating_line_value`, but the diff never defines it. If it isn't already in the file, `_is_separating_line` raises NameError for every table. That breaks tables with no separating line, because the function runs on all"
+   ],
+   "not_counted": [
+    "major missing_test: No regression tests were added for the reproduction case (psql) or for another padded format."
+   ],
+   "lowered": [],
+   "reticle": "catch"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "findings": [],
+  "not_counted": [],
+  "lowered": [],
+  "reticle": "right"
+ },
+ "cost_usd": 0.1387,
+ "seconds": 65.5
+}

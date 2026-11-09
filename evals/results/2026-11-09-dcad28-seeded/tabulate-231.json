@@ -1,0 +1,66 @@
+{
+ "case": "tabulate-231",
+ "mode": "seeded",
+ "pr": "https://github.com/astanin/python-tabulate/pull/232",
+ "issue": "https://github.com/astanin/python-tabulate/issues/231",
+ "inferred": [
+  "2",
+  "3",
+  "4",
+  "5"
+ ],
+ "reticle_kept": {
+  "asked": 1
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "flip == to != at tabulate/__init__.py:105",
+   "hidden": "55 of 159 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The condition `type(value) != str and value.strip() == SEPARATING_LINE` is inverted. A plain str cell, including a bare SEPARATING_LINE, short-circuits to False, so the normal separator is no longer detected. This breaks the existing separa"
+   ],
+   "not_counted": [],
+   "lowered": [
+    "major, cites outcome 5: The change adds no regression test in test_output.py for the report's psql example or another padding format. It adds no unit test in test_internal.py for the changed detection logic. Any such test would have caught the inverted check."
+   ],
+   "reticle": "catch"
+  },
+  {
+   "broken": "change 1 to 2 at tabulate/__init__.py:111",
+   "hidden": "155 of 159 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The first check now needs len(row) >= 2. The usual way to add a separator is to put the bare SEPARATING_LINE string in the table as a row. That row is a str of length 1, so the old check `len(row) >= 1 and row[0] == SEPARATING_LINE` matched"
+   ],
+   "not_counted": [],
+   "lowered": [
+    "major, cites outcome 5: The diff adds no tests. There is no psql regression test for the report's example, no test of another padding format, and no unit test for the changed detection logic."
+   ],
+   "reticle": "catch"
+  },
+  {
+   "broken": "undo the hunk at tabulate/__init__.py:104",
+   "hidden": "5 of 159 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The change calls `_is_separating_line_value`, but the diff never defines it. If the file doesn't already have it, every `tabulate()` call with list or str rows raises NameError. That breaks the psql example and all existing tests. The chang"
+   ],
+   "not_counted": [],
+   "lowered": [],
+   "reticle": "catch"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "findings": [],
+  "not_counted": [],
+  "lowered": [
+   "major, cites outcome 5: No regression test was added. Outcome 5 asks for a test in test/test_output.py for the psql example and one more padding format. It also asks for a unit test in test/test_internal.py for the changed detection logic. The diff touches only ta"
+  ],
+  "reticle": "right"
+ },
+ "cost_usd": 0.167,
+ "seconds": 75.8
+}

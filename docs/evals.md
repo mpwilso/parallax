@@ -85,7 +85,7 @@ A rerun of all 11 cases was approved on 2026-11-07, for about $12, to measure th
 - **`parallax eval check` still passes**: it makes each case's venv itself, not through a task, so it never meets the question. On merged master (db7c795) on 2026-11-07 it found all 11 sound, and `parallax doctor` passed.
 - **What it needs** is a decision of yours: whether `parallax eval`, which you start with the cases' setup commands from `evals/cases.toml`, should record your trust for those commands in each scratch repo, or ask once for the run. Until then 8e3074 stayed the latest full run.
 - **Decided: ask once for the run.** `parallax eval` now shows one trust question before any case starts (`parallax/evaltrust.py`), described in [the trust question](#the-trust-question) below.
-- **It has now run.** You started it on 2026-11-09, on 0.7.3 (710dd6e), and answered the trust question once. Run [229b6d](../evals/results/2026-11-09-229b6d/summary.md) reached 9 of the 11 cases before the budget guard stopped it. Its results are [below](#results).
+- **It has now run.** You started it on 2026-11-09, on 0.7.3 (710dd6e), and answered the trust question once. Run [229b6d](../evals/results/2026-11-09-229b6d/summary.md) reached 9 of the 11 cases before the budget guard stopped it. Its results are [below](#results). Run [f1aecc](../evals/results/2026-11-09-f1aecc/summary.md) ran the other two the same day, with pathspec-77 and tabulate-231 again, after a new Reticle rule: [below](#after-the-rule-run-f1aecc-and-four-seeded-runs-2026-11-09).
 
 ### The trust question
 
@@ -118,7 +118,7 @@ Run [229b6d](../evals/results/2026-11-09-229b6d/summary.md) (2026-11-09): 9 of t
 - **Reticle:** right 7 times and raised 2 false alarms, where in 8e3074 it was right on all 9. On pathspec-77 and tabulate-231 one kept test failed on a fix that passes every hidden test. Maker got its one rework for Reticle alone, changed nothing and said why the test was wrong, and the task reached Ready with the disagreement on the card. Reticle cost $0.32, and the reworks its false alarms caused $0.96 ($0.41 on pathspec-77, $0.56 on tabulate-231). Why each test failed is [below](#reticles-two-false-alarms-in-229b6d).
 - **Cost:** $9.75 for the 9 cases, under a $12 budget. The same 9 cost $7.56 in 8e3074. The two reworks are $0.96 of the $2.19 more; without them the run is $8.79.
 - **Touches:** 1 per case. Reticle's reworks never spend the rework cap or raise a decision: each disagreement waits on its card at Ready, for the accept or reject you make anyway.
-- **Not reached:** boltons-348 and humanize-174. With $9.75 spent, the next case needed up to $2.75 (its $2.50 ceiling plus 10%) of the $12 budget, so the run stopped before boltons-348. Nothing was spent on either. In 8e3074 boltons-348 passed and humanize-174 failed 3 hidden tests; this run says nothing new about them.
+- **Not reached:** boltons-348 and humanize-174. With $9.75 spent, the next case needed up to $2.75 (its $2.50 ceiling plus 10%) of the $12 budget, so the run stopped before boltons-348. Nothing was spent on either. In 8e3074 boltons-348 passed and humanize-174 failed 3 hidden tests; this run says nothing new about them. Run f1aecc ran both, [below](#after-the-rule-run-f1aecc-and-four-seeded-runs-2026-11-09).
 
 #### Reticle's two false alarms in 229b6d
 
@@ -128,6 +128,28 @@ Both tests were wrong, not the fixes. Each failed the same way on Maker's fix an
 - **tabulate-231: a line count taken from the issue's words.** The issue says to "note the weird 3rd line", but in its own output the separator is the 4th line, after the top border. Focus wrote outcome 1 as "`|---------+-------|` as the third line", and Reticle asserted `lines[2]`, the data row `|    1000 | one K |` before and after any fix, so the test could never pass. It failed on the base with the same message as on the fix. In 8e3074 Focus's outcome said "between `1000 | one K` and `1000000 | one M`", and Reticle compared the whole table, as the maintainers' test does.
 
 Reticle's prompt and request are the same in both runs; Focus's drafting request and output shapes, and Second Eye's prompt, changed between them. One run of each can't say whether that, or variance, moved these two.
+
+#### After the rule: run f1aecc and four seeded runs (2026-11-09)
+
+Reticle's request has one more rule since 6aea602 (0.7.4): use only the inputs and expected results the request shows, and where it shows expected output, compare against that output, whole or by its content, never a line number, count or position worked out from the words around it, Reticle's own or an outcome's. You ran the runs below; they cost $6.55 of the $9.50 approved.
+
+**Seeded, before and after the rule: no difference to see.** Four seeded runs of pathspec-77 and tabulate-231, alternating the request before the rule (9c9ad04) and after it (6aea602): [81c1af](../evals/results/2026-11-09-81c1af-seeded/summary.md) before, [dcad28](../evals/results/2026-11-09-dcad28-seeded/summary.md) after, [3bda77](../evals/results/2026-11-09-3bda77-seeded/summary.md) before, [d86a04](../evals/results/2026-11-09-d86a04-seeded/summary.md) after, each with `--budget 1.30`. All four came out the same: on the 2 real fixes Reticle raised 0 false alarms, and its tests of asked outcomes caught 4 of 4 broken versions, as Second Eye did. Neither request false-alarmed, so these runs can't tell the two apart. They cost $1.09: $0.28, $0.30, $0.25 and $0.27.
+
+**The full pipeline, after the rule:** run [f1aecc](../evals/results/2026-11-09-f1aecc/summary.md) on 6aea602, started with `parallax eval --budget 8.40 --per-case 2.5 --reticle pathspec-77 tabulate-231 boltons-348 humanize-174`, the two false-alarm cases first. Models as in 229b6d.
+
+| Case | Hidden tests | Second Eye | Reticle | Cost | Time to Ready | Touches |
+|---|---|---|---|---|---|---|
+| pathspec-77 | pass | right | right | $0.95 | 2.5 min | 1 |
+| tabulate-231 | pass | right | right | $2.11 | 6.0 min | 1 |
+| boltons-348 | pass | right | right | $0.53 | 1.6 min | 1 |
+| humanize-174 | **fail** (376 of 379) | **miss** | **miss** | $1.86 | 4.8 min | 1 |
+
+- **Passed:** 3 of 4. All 4 reached Ready, for $5.46 of the $8.40 budget.
+- **Reticle raised 0 false alarms where 229b6d raised 2 on the same two cases,** and caused $0.00 of rework against $0.96. On tabulate-231 Focus's outcome 1 still says the separator is the output's "third line", and Reticle's two kept tests compare the whole expected table and check that the output holds the separator line, never `lines[2]`. On pathspec-77 its two tests use only `abc` and `azc`, the inputs the issue names.
+- **Suggestive, not proof.** One full run per case. Across every Reticle file kept from earlier runs, 7 of the 13 for these two cases had a kept test that fails on the maintainers' fix (4 of 7 for pathspec-77, 3 of 6 for tabulate-231), about half; at that rate two clean runs would come by chance about 2 times in 10. That rate spans older prompts, though: on the request just before the rule, the only false alarms were 229b6d's, and the two seeded runs before the rule had none.
+- **Every kept test, replayed with no model.** Each of these 5 runs' kept tests was run again on the base and on the maintainers' fix: 21 tests in 12 files, every one failing on the base and passing on the real fix. The same replay of the 59 files from the 9 earlier runs with Reticle on finds 28 of 163 kept tests failing on the real fix, in 14 files; on the request just before the rule (8e3074, 9a3432, 229b6d) it's 2 of 53, both 229b6d's. Most of the rest were tests of inferred or unmarked outcomes, which Reticle no longer writes.
+- **tabulate-231 cost $2.11 with no rework.** Maker's one build was $1.91 of it, where its first build was $1.34 in 229b6d, $1.09 in 8e3074 and $1.08 in 7dd776. Focus cost $0.13, Reticle $0.03 and Second Eye $0.04, so the rest is Maker's own session running longer: 5 minutes, and 50 tool calls granted in the case where 8e3074's and 7dd776's had 41 and 43.
+- **humanize-174 fails the same 3 hidden tests as in 8e3074.** Focus inferred rounding for minutes and hours only, and Maker rounded both half up, carrying 59 minutes 30 seconds into "an hour" and 23 hours 30 minutes into "a day". The failures: 2 hours 30 minutes reads "3 hours" where the maintainers' Python `round()` gives "2 hours", and two cases whose months should carry into a year ("11 months" for "a year", "1 year, 11 months" for "2 years"). In 8e3074 Maker rounded days too, and it made no difference to these three. Reticle tested the two values the issue asks about, 10799 and 10800 seconds reading "3 hours", and both pass; Second Eye passed the diff. The reason is the one [above](#each-checker-on-its-own): the rule the fix broke wasn't in the request.
 
 ### Previous results (2026-10-01)
 

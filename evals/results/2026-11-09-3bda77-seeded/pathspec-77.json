@@ -1,0 +1,43 @@
+{
+ "case": "pathspec-77",
+ "mode": "seeded",
+ "pr": "https://github.com/cpburnz/python-pathspec/commit/9302492483b06ca1613aa8b11cf08cef93930b12",
+ "issue": "https://github.com/cpburnz/python-pathspec/issues/77",
+ "inferred": [
+  "2",
+  "3",
+  "4",
+  "5"
+ ],
+ "reticle_kept": {
+  "asked": 2
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "undo the hunk at pathspec/patterns/gitwildmatch.py:316",
+   "hidden": "43 of 45 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The only code change is a comment typo fix (Braket to Bracket). The `elif pattern[i] == '^':` branch is still there as unchanged context, so `[^b]` is still not treated as negation. `a[^b]c` will still behave as before, so the outcome is no",
+    "major scope: The comment that justifies escaping the caret is not removed or updated. The `elif pattern[i] == '^':` branch, which the comment relates to, is still in place. The constraint requires the comment to match the new behavior."
+   ],
+   "not_counted": [],
+   "lowered": [
+    "major, cites outcome 4: No tests were added for `[^...]` negation, `[!...]` negation, or the literal `[b^]` case."
+   ],
+   "reticle": "catch"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "findings": [],
+  "not_counted": [
+   "major missing_test: The diff has no changes to tests/test_gitwildmatch.py. The fix for `[^...]` has no test, and nothing covers `[!...]` or the literal `[b^]` case, so a regression would not be caught."
+  ],
+  "lowered": [],
+  "reticle": "right"
+ },
+ "cost_usd": 0.1085,
+ "seconds": 34.7
+}

@@ -1,0 +1,43 @@
+{
+ "case": "pathspec-77",
+ "mode": "seeded",
+ "pr": "https://github.com/cpburnz/python-pathspec/commit/9302492483b06ca1613aa8b11cf08cef93930b12",
+ "issue": "https://github.com/cpburnz/python-pathspec/issues/77",
+ "inferred": [
+  "3",
+  "4",
+  "5",
+  "6",
+  "7"
+ ],
+ "reticle_kept": {
+  "asked": 4
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "undo the hunk at pathspec/patterns/gitwildmatch.py:316",
+   "hidden": "43 of 45 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The only code change is a comment typo fix ('Braket' to 'Bracket'). Nothing changes how `^` is translated. The context line `elif pattern[i] == '^':` shows a separate `^` branch already exists and the diff leaves it alone. So `a[^b]c` behav"
+   ],
+   "not_counted": [
+    "major missing_test: No tests were added. The diff has no cases for `a[^b]c` against `abc`, `azc` and `a-c`, for `a^c`, or for `a[b^]c`. Nothing would fail without the fix."
+   ],
+   "lowered": [],
+   "reticle": "catch"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "findings": [],
+  "not_counted": [],
+  "lowered": [
+   "major, cites outcome 7: The diff adds no tests. Nothing checks that `a[^b]c` rejects `abc` and matches `azc` and `a-c`. Nothing checks that `a^c` no longer matches. Nothing checks that `a[b^]c` keeps `^` literal. Without the change, a test for `a[^b]c` would fail,"
+  ],
+  "reticle": "right"
+ },
+ "cost_usd": 0.1351,
+ "seconds": 52.2
+}

@@ -1,0 +1,66 @@
+{
+ "case": "tabulate-231",
+ "mode": "seeded",
+ "pr": "https://github.com/astanin/python-tabulate/pull/232",
+ "issue": "https://github.com/astanin/python-tabulate/issues/231",
+ "inferred": [
+  "2",
+  "3",
+  "4"
+ ],
+ "reticle_kept": {
+  "asked": 1
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "flip == to != at tabulate/__init__.py:105",
+   "hidden": "55 of 159 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The check `type(value) != str and value.strip() == SEPARATING_LINE` is inverted. SEPARATING_LINE is a str, so every str value now returns False and existing separating lines (e.g. [SEPARATING_LINE] or [\"\", SEPARATING_LINE]) are no longer de",
+    "blocker behavior: For non-str values such as ints (e.g. the row [1000, \"one K\"]), `value.strip()` raises AttributeError. The reporter's table crashes, and any table with numeric first or second cells crashes. This also breaks tables with no separating lines.",
+    "blocker behavior: The change does not fix the reported problem: it doesn't touch the column padding or rendering that makes the `psql` separating line come out as `|---------+-------|`. Outcome 1 is not achieved."
+   ],
+   "not_counted": [],
+   "lowered": [
+    "major, cites outcome 4: No regression test with the reporter's table and psql was added."
+   ],
+   "reticle": "catch"
+  },
+  {
+   "broken": "change 1 to 2 at tabulate/__init__.py:111",
+   "hidden": "155 of 159 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The first check now needs len(row) >= 2. SEPARATING_LINE is normally passed as a bare row, which is a one-character str, and a one-element list [SEPARATING_LINE] has the same problem. Before, both counted as separating lines through the len"
+   ],
+   "not_counted": [],
+   "lowered": [],
+   "reticle": "catch"
+  },
+  {
+   "broken": "undo the hunk at tabulate/__init__.py:104",
+   "hidden": "5 of 159 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The diff calls `_is_separating_line_value`, but it adds no definition. If the helper isn't already in the file, every call to `_is_separating_line` raises NameError. That would break all tables, including ones with no separating line. I cou",
+    "major behavior: The change only touches the detection helper. Nothing in the diff changes how the `psql` output is built for a column that mixes strings and numbers, which is where the reporter's table goes wrong. The diff alone gives no sign that the thir"
+   ],
+   "not_counted": [],
+   "lowered": [
+    "major, cites outcome 4: No regression test was added for the reporter's table with `psql`. Outcome 4 asks for one that fails before the fix and passes after."
+   ],
+   "reticle": "catch"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "findings": [],
+  "not_counted": [],
+  "lowered": [],
+  "reticle": "right"
+ },
+ "cost_usd": 0.1484,
+ "seconds": 65.7
+}

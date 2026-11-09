@@ -47,5 +47,7 @@ blind checker was right 8 times, missed 1 bad fix and raised 1 false alarm. Repo
 These committed results came from an earlier harness that has since been removed, with the
 old path it ran on. The cases in [evals/cases.toml](../evals/cases.toml) are the case set for the
 harness on the current pipeline ("Evals" in [plan.md](plan.md)). Its run 8e3074 (2026-10-01)
-passed 10 of 11. The latest, 229b6d (2026-11-09, on 0.7.3), passed all 9 cases its $12
-budget reached; Reticle raised 2 false alarms, each costing a rework: [evals.md](evals.md#results).
+passed 10 of 11. 229b6d (2026-11-09, on 0.7.3) passed all 9 cases its $12 budget reached; Reticle raised 2
+false alarms, each costing a rework. The latest, f1aecc (2026-11-09, on 6aea602), ran the other
+two and those two again after a new Reticle rule: 3 of 4 passed, humanize-174 failed the same 3
+hidden tests as before, and Reticle raised no false alarm: [evals.md](evals.md#results).

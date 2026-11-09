@@ -1,0 +1,41 @@
+{
+ "case": "pathspec-77",
+ "mode": "seeded",
+ "pr": "https://github.com/cpburnz/python-pathspec/commit/9302492483b06ca1613aa8b11cf08cef93930b12",
+ "issue": "https://github.com/cpburnz/python-pathspec/issues/77",
+ "inferred": [
+  "2",
+  "3",
+  "4",
+  "5",
+  "6"
+ ],
+ "reticle_kept": {
+  "asked": 2
+ },
+ "reticle_weak": [],
+ "versions": [
+  {
+   "broken": "undo the hunk at pathspec/patterns/gitwildmatch.py:316",
+   "hidden": "43 of 45 pass",
+   "second_eye": "catch",
+   "findings": [
+    "blocker behavior: The only code change is a typo fix in a comment ('Braket' to 'Bracket'). The `elif pattern[i] == '^':` branch is untouched, so `[^...]` still behaves as before and `a[^b]c` is not made to match `azc` and reject `abc`. The asked behavior is "
+   ],
+   "not_counted": [
+    "major missing_test: No tests were added or changed for `[^...]`, `[!...]` parity, `[^]a]`, or `[a^]`."
+   ],
+   "lowered": [],
+   "reticle": "catch"
+  }
+ ],
+ "real_fix": {
+  "second_eye": "right",
+  "findings": [],
+  "not_counted": [],
+  "lowered": [],
+  "reticle": "right"
+ },
+ "cost_usd": 0.1311,
+ "seconds": 39.9
+}
